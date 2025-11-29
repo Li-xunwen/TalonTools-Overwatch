@@ -1,0 +1,146 @@
+/** mixins **/
+.join-play {
+  position: relative;
+  width: 100%;
+  height: 774px;
+  overflow: hidden;
+}
+.join-play .join-bg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background-image: url(https://ld5.res.netease.com/pc/zt/20241113163154/assets/join_sky_bg_97eaa72a.webp);
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+.join-play .play-tip-container {
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  -webkit-transform: translateX(-50%);
+          transform: translateX(-50%);
+  z-index: 3;
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-orient: vertical;
+  -webkit-box-direction: normal;
+  -webkit-flex-direction: column;
+      -ms-flex-direction: column;
+          flex-direction: column;
+  -webkit-box-align: center;
+  -webkit-align-items: center;
+      -ms-flex-align: center;
+          align-items: center;
+}
+.join-play .play-tip-container::before {
+  content: '';
+  display: inline-block;
+  width: 1119px;
+  height: 442px;
+  background: url(https://ld5.res.netease.com/pc/zt/20241113163154/assets/zhezhao_8d7bc392.png) center center;
+  background-size: cover;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  -webkit-transform: translate(-50%, -55%);
+          transform: translate(-50%, -55%);
+}
+.join-play .play-tip-container .tip-text {
+  position: relative;
+  text-align: center;
+  color: #ffffff;
+  font-size: 60px;
+  letter-spacing: 3px;
+  font-weight: 700;
+  width: 720px;
+  text-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  margin-bottom: 40px;
+}
+.join-play .play-tip-container .play-btn {
+  cursor: pointer;
+  padding: 20px 40px;
+  background-color: #f06414;
+  font-size: 24px;
+  opacity: 0.9;
+  position: relative;
+  z-index: 3;
+  font-weight: bold;
+  color: #ffffff;
+}
+.join-play .play-tip-container .play-btn:hover {
+  opacity: 1;
+  padding: 20px 42px;
+}
+.join-play .play-hero {
+  position: absolute;
+  width: 100%;
+  height: 125%;
+  background-position: center;
+  background-size: auto 100%;
+  background-repeat: no-repeat;
+}
+.join-play .play-hero.hero1 {
+  background-image: url(https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero1_f0293c69.webp);
+}
+.join-play .play-hero.hero2 {
+  background-image: url(https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero2_1f3ee00a.webp);
+}
+.join-play .play-hero.hero3 {
+  background-image: url(https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero3_741524a1.webp);
+}
+.join-play .play-hero.hero4 {
+  background-image: url(https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero4_74f4aebf.webp);
+}
+.join-play .play-hero.hero5 {
+  background-image: url(https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero5_282fd673.webp);
+}
+@media (max-width: 960px) {
+  .join-play {
+    height: 508px;
+  }
+  .join-play .play-hero {
+    display: none;
+  }
+  .join-play .hero-m {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    background-image: url(https://ld5.res.netease.com/pc/zt/20241113163154/assets/960_Outro_01eb9b85.webp);
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: top;
+  }
+  .join-play .play-tip-container .tip-text {
+    font-size: 36px;
+  }
+}
+@media (max-width: 750px) {
+  .join-play .play-tip-container {
+    width: 100%;
+    -webkit-box-sizing: border-box;
+            box-sizing: border-box;
+    padding: 0 20px;
+  }
+  .join-play .play-tip-container .tip-text {
+    width: 100%;
+  }
+}
+@media (max-width: 500px) {
+  .join-play {
+    height: 457px;
+  }
+  .join-play .play-tip-container {
+    bottom: 40px;
+  }
+  .join-play .play-tip-container .tip-text {
+    margin-bottom: 35px;
+  }
+  .join-play .play-tip-container .play-btn {
+    padding: 20px 30px;
+  }
+}
+
