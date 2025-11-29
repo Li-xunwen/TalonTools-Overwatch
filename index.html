@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>守望先锋鬼魅假面舞会 - 加入游戏</title>
-    <link href="./守望先锋鬼魅假面舞会_files/join_play_823ee98d.css" rel="stylesheet">
+    <title>守望先锋 - 鬼魅假面舞会</title>
     <style>
         * {
             margin: 0;
@@ -19,10 +18,12 @@
             overflow-x: hidden;
         }
         
-        .join-play.mask-inverse-top-divider {
+        .join-play {
             position: relative;
             width: 100%;
-            background: rgba(0, 0, 0, 0.95);
+            min-height: 100vh;
+            overflow: hidden;
+            background: radial-gradient(circle at center, rgba(100, 20, 180, 0.2), rgba(0, 0, 0, 0.9));
         }
         
         .join-bg {
@@ -33,7 +34,7 @@
             z-index: 1;
         }
         
-        /* 头图海报区域 - 设置为页面宽度的90%且透明 */
+        /* 头图海报区域 - 响应式设计 */
         .poster-wrapper {
             width: 100%;
             margin: 0 auto;
@@ -43,14 +44,16 @@
             box-shadow: 0 0 30px rgba(255, 156, 0, 0.3);
             margin-top: 20px;
             margin-bottom: 20px;
-            background: transparent; /* 设置为透明背景 */
+            background: transparent;
+            padding: 0 10px;
         }
         
         .poster-container {
             position: relative;
             width: 100%;
             height: 80vh;
-            background: transparent; /* 移除背景渐变，使其透明 */
+            min-height: 500px;
+            background: transparent;
             z-index: 3;
             display: flex;
             flex-direction: column;
@@ -58,55 +61,50 @@
             align-items: center;
         }
         
-        /* 英雄角色缩小为原来80%，位置向中间靠拢50% */
+        /* 英雄角色响应式设计 */
         .play-hero {
             position: absolute;
             background-size: contain;
             background-repeat: no-repeat;
             z-index: 2;
             transition: transform 3s ease-in-out;
-            transform: scale(0.8); /* 缩小为80% */
+            background-position: center bottom;
         }
         
-        /* 调整相对位置，使其在缩小后向中间靠拢50% */
         .hero1 {
-            width: 40px;
-            height: 67px;
-            bottom: -15%; /* 调整位置 */
-            left: 0%; /* 向中间靠拢50% (从7%增加到15%) */
-            background-image: url('./守望先锋鬼魅假面舞会_files/hero1.png');
+            width: 50%;
+            height: 1340px;
+            bottom: 0%;
+            background-image: url('https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero1_f0293c69.webp');
         }
         
         .hero2 {
-            width: 40px;
-            height: 67px;
-            bottom: -15%; /* 调整位置 */
-            left: 0%; /* 向中间靠拢50% (从17%增加到25%) */
-            background-image: url('./守望先锋鬼魅假面舞会_files/hero2.png');
+            width: 50%;
+            height: 1300px;
+            bottom: 0%;
+            background-image: url('https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero2_1f3ee00a.webp');
         }
         
         .hero3 {
-            width: 40px;
-            height: 67px;
-            bottom: -15%; /* 调整位置 */
-            right: 0%; /* 向中间靠拢50% (从17%增加到25%) */
-            background-image: url('./守望先锋鬼魅假面舞会_files/hero3.png');
+            width: 50%;
+            height: 1340px;
+            bottom: 0%;
+            transform: translateX(-50%);
+            background-image: url('https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero3_741524a1.webp');
         }
         
         .hero4 {
-            width: 40px;
-            height: 67px;
-            bottom: -15%; /* 调整位置 */
-            right: 0%; /* 向中间靠拢50% (从7%增加到15%) */
-            background-image: url('./守望先锋鬼魅假面舞会_files/hero4.png');
+            width: 50%;
+            height: 1340px;
+            bottom: 0%;
+            background-image: url('https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero4_74f4aebf.webp');
         }
         
         .hero5 {
-            width: 40px;
-            height: 67px;
-            bottom: -15%; /* 调整位置 */
-            left: 0%; /* 向中间靠拢50% (从27%增加到35%) */
-            background-image: url('./守望先锋鬼魅假面舞会_files/hero5.png');
+            width: 50%;
+            height: 1340px;
+            bottom: 0%;
+            background-image: url('https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero5_282fd673.webp');
         }
         
         .poster-title {
@@ -115,6 +113,7 @@
             margin-bottom: 30px;
             text-shadow: 0 0 20px rgba(255, 156, 0, 0.8);
             animation: titleGlow 2s infinite alternate;
+            z-index: 4;
         }
         
         @keyframes titleGlow {
@@ -138,33 +137,14 @@
             margin-bottom: 30px;
             text-shadow: 0 0 15px rgba(255, 156, 0, 0.7);
             line-height: 1.4;
+            color: #ffffff;
+            font-weight: 700;
+            letter-spacing: 1px;
         }
         
-        .play-btn {
-            display: inline-block;
-            padding: 15px 50px;
-            background: linear-gradient(45deg, #ff9c00, #ff6a00);
-            color: #000;
-            font-weight: bold;
-            font-size: clamp(16px, 3vw, 20px);
-            border-radius: 50px;
-            cursor: pointer;
-            position: relative;
-            transition: all 0.3s ease;
-            box-shadow: 0 5px 15px rgba(255, 156, 0, 0.4);
-            border: 2px solid #ffcc66;
-            width: 90%;
-            max-width: 300px;
-        }
+       
         
-        .play-btn:hover {
-            transform: translateY(-3px) scale(1.05);
-            box-shadow: 0 8px 25px rgba(255, 156, 0, 0.6);
-        }
-        
-        .play-btn:active {
-            transform: translateY(1px);
-        }
+    
         
         .fill-link {
             position: absolute;
@@ -175,7 +155,7 @@
             z-index: 5;
         }
         
-        /* 内容区域 */
+        /* 内容区域响应式设计 */
         .content-area {
             position: relative;
             z-index: 3;
@@ -206,7 +186,7 @@
             text-align: center;
         }
         
-        /* 测试元素 */
+        /* 测试元素网格响应式设计 */
         .test-elements-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -232,69 +212,7 @@
             box-shadow: 0 8px 25px rgba(255, 156, 0, 0.6);
         }
         
-        /* 响应式设计 */
-        @media (max-width: 768px) {
-            .play-hero {
-                transform: scale(0.64); /* 在原来80%基础上再缩小80% */
-            }
-            
-            /* 移动端也向中间靠拢 */
-            .hero1 {
-                left: 10%; /* 向中间靠拢50% */
-            }
-            
-            .hero2 {
-                left: 20%; /* 向中间靠拢50% */
-            }
-            
-            .hero3 {
-                right: 20%; /* 向中间靠拢50% */
-            }
-            
-            .hero4 {
-                right: 10%; /* 向中间靠拢50% */
-            }
-            
-            .play-tip-container {
-                bottom: 20%;
-            }
-            
-            .tip-text {
-                margin-bottom: 20px;
-            }
-            
-            .play-btn {
-                padding: 12px 40px;
-            }
-            
-            .content-area {
-                padding: 30px 15px;
-            }
-            
-            .section {
-                padding: 20px;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .play-hero {
-                display: none;
-            }
-            
-            .poster-title {
-                font-size: clamp(20px, 6vw, 32px);
-            }
-            
-            .play-tip-container {
-                bottom: 25%;
-            }
-            
-            .test-elements-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        /* 装饰元素 */
+        /* 浮动装饰元素 */
         .floating-elements {
             position: absolute;
             top: 0;
@@ -323,21 +241,22 @@
                 opacity: 1;
             }
             90% {
-                opacity: 0.8;
+                opacity: 0.9;
             }
             100% {
-                transform: translateY(-100vh) translateX(100px);
+                transform: translateY(100vh) translateX(100px);
                 opacity: 0;
             }
         }
+        
     </style>
 </head>
 <body>
-    <div class="join-play mask-inverse-top-divider" id="joinPlayContainer">
+    <div class="join-play" id="joinPlayContainer">
         <div class="floating-elements" id="floatingElements"></div>
         <div class="join-bg"></div>
         
-        <!-- 头图海报区域 - 使用单独的包装器，透明背景，人物缩小为80%并向中间靠拢50% -->
+        <!-- 头图海报区域 -->
         <div class="poster-wrapper">
             <div class="poster-container">
                 <div class="play-hero hero1" id="hero1"></div>
@@ -347,7 +266,7 @@
                 <div class="play-hero hero5" id="hero5"></div>
                 
                 <div class="play-tip-container">
-                    <div class="tip-text">这个未来值得为之奋战。快加入我们吧！</div>
+                    <div class="tip-text">这个未来值得为之奋战</div>
                 </div>
             </div>
         </div>
@@ -404,7 +323,7 @@
                 floatingElements.appendChild(element);
             }
             
-            // 英雄角色呼吸动画效果（只移动不缩放）
+            // 英雄角色呼吸动画效果
             const heroes = document.querySelectorAll('.play-hero');
             heroes.forEach(hero => {
                 // 初始化位置
@@ -418,7 +337,7 @@
             
             function resetHeroPosition(hero) {
                 hero.style.transition = 'transform 0s';
-                hero.style.transform = 'translate(0, 0) scale(0.8)';
+                hero.style.transform = 'translate(0, 0)';
                 // 强制重排
                 hero.offsetHeight;
                 hero.style.transition = 'transform 3s ease-in-out';
@@ -426,10 +345,10 @@
             
             function animateHeroBreathing(hero) {
                 // 只进行位置移动，不改变大小
-                const translateX = (Math.random() - 0.5) * 16; // -8px 到 8px 的移动 (缩小为80%)
-                const translateY = (Math.random() - 0.5) * 16;
+                const translateX = (Math.random() - 0.5) * 10;
+                const translateY = (Math.random() - 0.5) * 10;
                 
-                hero.style.transform = `translate(${translateX}px, ${translateY}px) scale(0.8)`;
+                hero.style.transform = `translate(${translateX}px, ${translateY}px)`;
             }
             
             // 页面大小调整时重置英雄位置
@@ -440,17 +359,10 @@
                     });
                 }, 100);
             });
-            
-            // 按钮悬停效果增强
-            const playBtn = document.getElementById('joinPlayYuyue');
-            playBtn.addEventListener('mouseenter', () => {
-                playBtn.style.boxShadow = '0 0 30px #ff9c00';
-            });
-            
-            playBtn.addEventListener('mouseleave', () => {
-                playBtn.style.boxShadow = '0 5px 15px rgba(255, 156, 0, 0.4)';
-            });
         });
     </script>
 </body>
 </html>
+
+
+
