@@ -1,11 +1,30 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>守望先锋 - 鬼魅假面舞会</title>
+    <title>守望先锋黑爪会议室</title>
     <style>
+        /* 主题变量 */
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f5;
+            --text-primary: #333333;
+            --card-bg: #eeeeee;
+            --accent: #555555;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #121212;
+            --bg-secondary: #1e1e1e;
+            --text-primary: #ffffff;
+            --card-bg: #2a2a2a;
+            --accent: #bbbbbb;
+            --shadow-color: rgba(0, 0, 0, 0.5);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -14,9 +33,10 @@
 
         body {
             font-family: 'Microsoft YaHei', Arial, sans-serif;
-            background: #000;
-            color: #fff;
+            background: var(--bg-primary);
+            color: var(--text-primary);
             overflow-x: hidden;
+            transition: background 0.3s, color 0.3s;
         }
 
         .join-play {
@@ -24,25 +44,16 @@
             width: 100%;
             min-height: 100vh;
             overflow: hidden;
-            background: radial-gradient(circle at center, rgba(100, 20, 180, 0.2), rgba(0, 0, 0, 0.9));
         }
 
-        .join-bg {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle at center, rgba(100, 20, 180, 0.2), rgba(0, 0, 0, 0.9));
-            z-index: 1;
-        }
-
-        /* 头图海报区域 - 响应式设计 */
+        /* 头图海报区域 */
         .poster-wrapper {
             width: 100%;
             margin: 0 auto;
             position: relative;
             border-radius: 15px;
             overflow: hidden;
-            box-shadow: 0 0 30px rgba(255, 156, 0, 0.3);
+            box-shadow: 0 0 30px var(--shadow-color);
             margin-top: 20px;
             margin-bottom: 20px;
             background: transparent;
@@ -53,7 +64,7 @@
             position: relative;
             width: 100%;
             height: 50vw;
-            min-height: 500%;
+            min-height: 500px;
             background: transparent;
             z-index: 3;
             display: flex;
@@ -62,7 +73,7 @@
             align-items: center;
         }
 
-        /* 英雄角色响应式设计 */
+        /* 英雄角色 */
         .play-hero {
             position: absolute;
             background-size: contain;
@@ -112,19 +123,7 @@
             font-size: clamp(24px, 5vw, 48px);
             text-align: center;
             margin-bottom: 30px;
-            text-shadow: 0 0 20px rgba(255, 156, 0, 0.8);
-            animation: titleGlow 2s infinite alternate;
             z-index: 4;
-        }
-
-        @keyframes titleGlow {
-            from {
-                text-shadow: 0 0 15px rgba(255, 156, 0, 0.7);
-            }
-
-            to {
-                text-shadow: 0 0 25px rgba(255, 156, 0, 0.9), 0 0 35px rgba(255, 156, 0, 0.6);
-            }
         }
 
         .play-tip-container {
@@ -141,16 +140,10 @@
         .tip-text {
             font-size: clamp(18px, 4vw, 28px);
             margin-bottom: 30px;
-            text-shadow: 0 0 15px rgba(255, 156, 0, 0.7);
             line-height: 1.4;
-            color: #ffffff;
             font-weight: 700;
             letter-spacing: 1px;
         }
-
-
-
-
 
         .fill-link {
             position: absolute;
@@ -161,28 +154,28 @@
             z-index: 5;
         }
 
-        /* 内容区域响应式设计 */
+        /* 内容区域 */
         .content-area {
             position: relative;
             z-index: 3;
             padding: 50px 20px;
             max-width: 1200px;
             margin: 0 auto;
-            background: rgba(0, 0, 0, 0.85);
+            background: var(--bg-secondary);
         }
 
         .section {
             margin-bottom: 40px;
             padding: 30px;
-            background: rgba(30, 30, 30, 0.7);
+            background: var(--card-bg);
             border-radius: 15px;
-            box-shadow: 0 0 20px rgba(255, 156, 0, 0.2);
+            box-shadow: 0 0 20px var(--shadow-color);
         }
 
         .section-title {
             font-size: 28px;
             margin-bottom: 20px;
-            color: #ff9c00;
+            color: var(--accent);
             text-align: center;
         }
 
@@ -192,7 +185,43 @@
             text-align: center;
         }
 
-        /* 测试元素网格响应式设计 */
+        /* 英雄网格 */
+        .heroes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .hero-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .hero-item img {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+            border-radius: 8px;
+            background: var(--card-bg);
+            padding: 6px;
+            transition: transform 0.2s;
+        }
+
+        .hero-item img:hover {
+            transform: scale(1.1);
+        }
+
+        .hero-item .hero-name {
+            margin-top: 8px;
+            font-size: 14px;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        /* 测试元素网格 */
         .test-elements-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -202,20 +231,40 @@
 
         .test-element {
             height: 150px;
-            background: linear-gradient(45deg, #ff9c00, #ff6a00);
+            background: var(--accent);
+            color: var(--bg-primary);
             border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: bold;
             font-size: 18px;
-            box-shadow: 0 5px 15px rgba(255, 156, 0, 0.4);
+            box-shadow: 0 5px 15px var(--shadow-color);
             transition: all 0.3s ease;
         }
 
         .test-element:hover {
             transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(255, 156, 0, 0.6);
+            box-shadow: 0 8px 25px var(--shadow-color);
+        }
+
+        /* 主题切换按钮 */
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--card-bg);
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px var(--shadow-color);
         }
 
         /* 浮动装饰元素 */
@@ -233,7 +282,8 @@
             position: absolute;
             width: 10px;
             height: 10px;
-            background: rgba(255, 156, 0, 0.6);
+            background: var(--accent);
+            opacity: 0.4;
             border-radius: 50%;
             animation: float 15s infinite linear;
         }
@@ -245,11 +295,11 @@
             }
 
             10% {
-                opacity: 1;
+                opacity: 0.4;
             }
 
             90% {
-                opacity: 0.9;
+                opacity: 0.3;
             }
 
             100% {
@@ -257,37 +307,118 @@
                 opacity: 0;
             }
         }
+
+        .top-tip-text {
+            font-size: clamp(28px, 6vw, 56px);
+            text-align: center;
+            padding: 30px 20px 40px;
+            margin: 0;
+            color: var(--text-primary);
+            font-weight: bold;
+            letter-spacing: 1.5px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .members-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .member-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 6px 16px var(--shadow-color);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .member-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px var(--shadow-color);
+        }
+
+        /* 上栏：头像 + ID */
+        .member-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .member-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: var(--accent);
+            border: 2px solid var(--text-primary);
+        }
+
+        .member-id {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--text-primary);
+            word-break: break-all;
+        }
+
+        /* 下栏：擅长英雄 */
+        .member-heroes {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .member-hero-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .member-hero-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
     </style>
 </head>
 
 <body>
+    <!-- 主题切换按钮 -->
+    <button class="theme-toggle" id="themeToggle">🌙</button>
+
     <div class="join-play" id="joinPlayContainer">
         <div class="floating-elements" id="floatingElements"></div>
-        <div class="join-bg"></div>
+
+        <!-- 页面最顶端提示（非 fixed） -->
+        <div class="top-tip-text">这个未来值得为之奋战</div>
 
         <!-- 头图海报区域 -->
         <div class="poster-wrapper">
             <div class="poster-container">
-                <div class="play-tip-container">
-                    <div class="tip-text">这个未来值得为之奋战</div>
-                </div>
                 <div class="play-hero hero1" id="hero1"></div>
                 <div class="play-hero hero2" id="hero2"></div>
                 <div class="play-hero hero3" id="hero3"></div>
                 <div class="play-hero hero4" id="hero4"></div>
                 <div class="play-hero hero5" id="hero5"></div>
-
             </div>
         </div>
 
         <!-- 内容区域 -->
         <div class="content-area">
             <div class="section">
-                <h2 class="section-title">活动介绍</h2>
-                <p class="section-content">
-                    欢迎来到守望先锋鬼魅假面舞会！在这个特殊的活动中，你将体验到前所未有的游戏乐趣。
-                    独特的角色装扮、限定的游戏模式以及丰富的奖励等着你来探索。
-                </p>
+                <h2 class="section-title">成员名单</h2>
+                <div class="members-grid" id="membersGrid">
+                    <!-- 成员名片由 JS 动态生成 -->
+                </div>
             </div>
 
             <div class="section">
@@ -317,6 +448,54 @@
     </div>
 
     <script>
+        // 渲染英雄列表
+        const heroesData = [
+            { en: 'doomfist', zh: '末日铁拳' },
+            { en: 'cassidy', zh: '卡西迪' },
+            { en: 'genji', zh: '源氏' },
+            { en: 'pharah', zh: '法老之鹰' },
+            { en: 'reaper', zh: '死神' },
+            { en: 'soldier-76', zh: '士兵：76' },
+            { en: 'sombra', zh: '黑影' },
+            { en: 'tracer', zh: '猎空' },
+            { en: 'bastion', zh: '堡垒' },
+            { en: 'hanzo', zh: '半藏' },
+            { en: 'junkrat', zh: '狂鼠' },
+            { en: 'mei', zh: '美' },
+            { en: 'torbjorn', zh: '托比昂' },
+            { en: 'widowmaker', zh: '黑百合' },
+            { en: 'ashe', zh: '艾什' },
+            { en: 'echo', zh: '回声' },
+            { en: 'sojourn', zh: '索杰恩' },
+            { en: 'ana', zh: '安娜' },
+            { en: 'baptiste', zh: '巴蒂斯特' },
+            { en: 'brigitte', zh: '布丽吉塔' },
+            { en: 'lucio', zh: '卢西奥' },
+            { en: 'mercy', zh: '天使' },
+            { en: 'moira', zh: '莫伊拉' },
+            { en: 'zenyatta', zh: '禅雅塔' },
+            { en: 'kiriko', zh: '雾子' },
+            { en: 'lifeweaver', zh: '生命之梭' },
+            { en: 'sigma', zh: '西格玛' },
+            { en: 'orisa', zh: '奥丽莎' },
+            { en: 'ramattra', zh: '拉玛刹' },
+            { en: 'reinhardt', zh: '莱因哈特' },
+            { en: 'roadhog', zh: '路霸' },
+            { en: 'winston', zh: '温斯顿' },
+            { en: 'wrecking-ball', zh: '破坏球' },
+            { en: 'zarya', zh: '查莉娅' },
+            { en: 'dva', zh: 'D.Va' },
+            { en: 'junker-queen', zh: '渣客女王' },
+            { en: 'mauga', zh: '毛加' },
+            { en: 'hazard', zh: '骇灾' },
+            { en: 'freja', zh: '弗蕾雅' },
+            { en: 'juno', zh: '朱诺' },
+            { en: 'wuyang', zh: '无漾' },
+            { en: 'venture', zh: '探奇' },
+            { en: 'symmetra', zh: '秩序之光' },
+            { en: 'illari', zh: '伊拉锐' }
+        ];
+
         document.addEventListener('DOMContentLoaded', function () {
             // 创建浮动装饰元素
             const floatingElements = document.getElementById('floatingElements');
@@ -332,42 +511,103 @@
                 floatingElements.appendChild(element);
             }
 
-            // 英雄角色呼吸动画效果
+            // 英雄呼吸动画
             const heroes = document.querySelectorAll('.play-hero');
             heroes.forEach(hero => {
-                // 初始化位置
                 resetHeroPosition(hero);
-
-                // 定期更新位置创建呼吸效果
-                setInterval(() => {
-                    animateHeroBreathing(hero);
-                }, 2000 + Math.random() * 3000);
+                setInterval(() => animateHeroBreathing(hero), 2000 + Math.random() * 3000);
             });
 
             function resetHeroPosition(hero) {
                 hero.style.transition = 'transform 0s';
                 hero.style.transform = 'translate(0, 0)';
-                // 强制重排
                 hero.offsetHeight;
                 hero.style.transition = 'transform 3s ease-in-out';
             }
 
             function animateHeroBreathing(hero) {
-                // 只进行位置移动，不改变大小
-                const translateX = (Math.random() - 0.5) * 10;
-                const translateY = (Math.random() - 0.5) * 10;
-
-                hero.style.transform = `translate(${translateX}px, ${translateY}px)`;
+                const tx = (Math.random() - 0.5) * 10;
+                const ty = (Math.random() - 0.5) * 10;
+                hero.style.transform = `translate(${tx}px, ${ty}px)`;
             }
 
-            // 页面大小调整时重置英雄位置
             window.addEventListener('resize', () => {
-                setTimeout(() => {
-                    heroes.forEach(hero => {
-                        resetHeroPosition(hero);
-                    });
-                }, 100);
+                setTimeout(() => heroes.forEach(resetHeroPosition), 100);
             });
+
+            // 主题切换逻辑
+            const themeToggle = document.getElementById('themeToggle');
+            const html = document.documentElement;
+
+            function updateThemeIcon() {
+                const isDark = html.getAttribute('data-theme') === 'dark';
+                themeToggle.textContent = isDark ? '🌙' : '☀️';
+            }
+
+            themeToggle.addEventListener('click', () => {
+                const current = html.getAttribute('data-theme');
+                const newTheme = current === 'dark' ? 'light' : 'dark';
+                html.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+                updateThemeIcon();
+            });
+
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            html.setAttribute('data-theme', savedTheme);
+            updateThemeIcon();
+
+            // 加载成员名单
+            fetch('./member.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('无法加载 member.json');
+                    }
+                    return response.json();
+                })
+                .then(members => {
+                    const grid = document.getElementById('membersGrid');
+                    if (!grid) return;
+
+                    // 确保 members 是数组
+                    const membersArray = Array.isArray(members) ? members : [members];
+
+                    membersArray.forEach(member => {
+                        const card = document.createElement('div');
+                        card.className = 'member-card';
+
+                        // 构建头像路径（注意：ID 可能含特殊字符，但文件名需匹配）
+                        const avatarPath = `./imge/${encodeURIComponent(member.ID)}.png`;
+
+                        // 上栏：头像 + ID
+                        const header = document.createElement('div');
+                        header.className = 'member-header';
+                        header.innerHTML = `
+                <img src="${avatarPath}" alt="${member.ID}" class="member-avatar" onerror="this.style.opacity='0.4'; this.parentElement.querySelector('.member-id').style.opacity='0.7'">
+                <div class="member-id">${member.ID}</div>
+            `;
+
+                        // 下栏：擅长英雄
+                        const heroesContainer = document.createElement('div');
+                        heroesContainer.className = 'member-heroes';
+
+                        if (member.hero && Array.isArray(member.hero)) {
+                            member.hero.slice(0, 5).forEach(heroKey => {
+                                const heroEl = document.createElement('div');
+                                heroEl.className = 'member-hero-icon';
+                                heroEl.innerHTML = `<img src="https://ow.mapleqaq.top/hero/${heroKey}.png" alt="${heroKey}" loading="lazy">`;
+                                heroesContainer.appendChild(heroEl);
+                            });
+                        }
+
+                        card.appendChild(header);
+                        card.appendChild(heroesContainer);
+                        grid.appendChild(card);
+                    });
+                })
+                .catch(err => {
+                    console.error('加载成员名单失败:', err);
+                    document.getElementById('membersGrid').innerHTML = '<p style="text-align:center;color:var(--accent);">⚠️ 无法加载成员名单</p>';
+                });
         });
     </script>
 </body>
