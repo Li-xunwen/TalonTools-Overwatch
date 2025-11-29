@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,14 +11,14 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: 'Microsoft YaHei', Arial, sans-serif;
             background: #000;
             color: #fff;
             overflow-x: hidden;
         }
-        
+
         .join-play {
             position: relative;
             width: 100%;
@@ -25,7 +26,7 @@
             overflow: hidden;
             background: radial-gradient(circle at center, rgba(100, 20, 180, 0.2), rgba(0, 0, 0, 0.9));
         }
-        
+
         .join-bg {
             position: absolute;
             width: 100%;
@@ -33,7 +34,7 @@
             background: radial-gradient(circle at center, rgba(100, 20, 180, 0.2), rgba(0, 0, 0, 0.9));
             z-index: 1;
         }
-        
+
         /* 头图海报区域 - 响应式设计 */
         .poster-wrapper {
             width: 100%;
@@ -47,12 +48,12 @@
             background: transparent;
             padding: 0 10px;
         }
-        
+
         .poster-container {
             position: relative;
             width: 100%;
-            height: 80vh;
-            min-height: 500px;
+            height: 50vw;
+            min-height: 500%;
             background: transparent;
             z-index: 3;
             display: flex;
@@ -60,7 +61,7 @@
             justify-content: center;
             align-items: center;
         }
-        
+
         /* 英雄角色响应式设计 */
         .play-hero {
             position: absolute;
@@ -70,43 +71,43 @@
             transition: transform 3s ease-in-out;
             background-position: center bottom;
         }
-        
+
         .hero1 {
-            width: 50%;
-            height: 1340px;
+            width: 80%;
+            height: 80%;
             bottom: 0%;
             background-image: url('https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero1_f0293c69.webp');
         }
-        
+
         .hero2 {
-            width: 50%;
-            height: 1300px;
+            width: 80%;
+            height: 80%;
             bottom: 0%;
             background-image: url('https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero2_1f3ee00a.webp');
         }
-        
+
         .hero3 {
-            width: 50%;
-            height: 1340px;
+            width: 80%;
+            height: 80%;
             bottom: 0%;
             transform: translateX(-50%);
             background-image: url('https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero3_741524a1.webp');
         }
-        
+
         .hero4 {
-            width: 50%;
-            height: 1340px;
+            width: 80%;
+            height: 80%;
             bottom: 0%;
             background-image: url('https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero4_74f4aebf.webp');
         }
-        
+
         .hero5 {
-            width: 50%;
-            height: 1340px;
+            width: 80%;
+            height: 80%;
             bottom: 0%;
             background-image: url('https://ld5.res.netease.com/pc/zt/20241113163154/assets/hero5_282fd673.webp');
         }
-        
+
         .poster-title {
             font-size: clamp(24px, 5vw, 48px);
             text-align: center;
@@ -115,12 +116,17 @@
             animation: titleGlow 2s infinite alternate;
             z-index: 4;
         }
-        
+
         @keyframes titleGlow {
-            from { text-shadow: 0 0 15px rgba(255, 156, 0, 0.7); }
-            to { text-shadow: 0 0 25px rgba(255, 156, 0, 0.9), 0 0 35px rgba(255, 156, 0, 0.6); }
+            from {
+                text-shadow: 0 0 15px rgba(255, 156, 0, 0.7);
+            }
+
+            to {
+                text-shadow: 0 0 25px rgba(255, 156, 0, 0.9), 0 0 35px rgba(255, 156, 0, 0.6);
+            }
         }
-        
+
         .play-tip-container {
             position: absolute;
             bottom: 25%;
@@ -131,7 +137,7 @@
             width: 90%;
             max-width: 600px;
         }
-        
+
         .tip-text {
             font-size: clamp(18px, 4vw, 28px);
             margin-bottom: 30px;
@@ -141,11 +147,11 @@
             font-weight: 700;
             letter-spacing: 1px;
         }
-        
-       
-        
-    
-        
+
+
+
+
+
         .fill-link {
             position: absolute;
             top: 0;
@@ -154,7 +160,7 @@
             height: 100%;
             z-index: 5;
         }
-        
+
         /* 内容区域响应式设计 */
         .content-area {
             position: relative;
@@ -164,7 +170,7 @@
             margin: 0 auto;
             background: rgba(0, 0, 0, 0.85);
         }
-        
+
         .section {
             margin-bottom: 40px;
             padding: 30px;
@@ -172,20 +178,20 @@
             border-radius: 15px;
             box-shadow: 0 0 20px rgba(255, 156, 0, 0.2);
         }
-        
+
         .section-title {
             font-size: 28px;
             margin-bottom: 20px;
             color: #ff9c00;
             text-align: center;
         }
-        
+
         .section-content {
             font-size: 18px;
             line-height: 1.6;
             text-align: center;
         }
-        
+
         /* 测试元素网格响应式设计 */
         .test-elements-grid {
             display: grid;
@@ -193,7 +199,7 @@
             gap: 20px;
             margin-top: 30px;
         }
-        
+
         .test-element {
             height: 150px;
             background: linear-gradient(45deg, #ff9c00, #ff6a00);
@@ -206,12 +212,12 @@
             box-shadow: 0 5px 15px rgba(255, 156, 0, 0.4);
             transition: all 0.3s ease;
         }
-        
+
         .test-element:hover {
             transform: translateY(-5px);
             box-shadow: 0 8px 25px rgba(255, 156, 0, 0.6);
         }
-        
+
         /* 浮动装饰元素 */
         .floating-elements {
             position: absolute;
@@ -222,7 +228,7 @@
             z-index: 0;
             pointer-events: none;
         }
-        
+
         .floating-element {
             position: absolute;
             width: 10px;
@@ -231,46 +237,49 @@
             border-radius: 50%;
             animation: float 15s infinite linear;
         }
-        
+
         @keyframes float {
             0% {
                 transform: translateY(0) translateX(0);
                 opacity: 0;
             }
+
             10% {
                 opacity: 1;
             }
+
             90% {
                 opacity: 0.9;
             }
+
             100% {
                 transform: translateY(100vh) translateX(100px);
                 opacity: 0;
             }
         }
-        
     </style>
 </head>
+
 <body>
     <div class="join-play" id="joinPlayContainer">
         <div class="floating-elements" id="floatingElements"></div>
         <div class="join-bg"></div>
-        
+
         <!-- 头图海报区域 -->
         <div class="poster-wrapper">
             <div class="poster-container">
+                <div class="play-tip-container">
+                    <div class="tip-text">这个未来值得为之奋战</div>
+                </div>
                 <div class="play-hero hero1" id="hero1"></div>
                 <div class="play-hero hero2" id="hero2"></div>
                 <div class="play-hero hero3" id="hero3"></div>
                 <div class="play-hero hero4" id="hero4"></div>
                 <div class="play-hero hero5" id="hero5"></div>
-                
-                <div class="play-tip-container">
-                    <div class="tip-text">这个未来值得为之奋战</div>
-                </div>
+
             </div>
         </div>
-        
+
         <!-- 内容区域 -->
         <div class="content-area">
             <div class="section">
@@ -280,7 +289,7 @@
                     独特的角色装扮、限定的游戏模式以及丰富的奖励等着你来探索。
                 </p>
             </div>
-            
+
             <div class="section">
                 <h2 class="section-title">活动亮点</h2>
                 <div class="test-elements-grid">
@@ -290,7 +299,7 @@
                     <div class="test-element">团队竞技</div>
                 </div>
             </div>
-            
+
             <div class="section">
                 <h2 class="section-title">测试内容区域</h2>
                 <p class="section-content">
@@ -308,7 +317,7 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // 创建浮动装饰元素
             const floatingElements = document.getElementById('floatingElements');
             for (let i = 0; i < 20; i++) {
@@ -322,19 +331,19 @@
                 element.style.animationDelay = Math.random() * 5 + 's';
                 floatingElements.appendChild(element);
             }
-            
+
             // 英雄角色呼吸动画效果
             const heroes = document.querySelectorAll('.play-hero');
             heroes.forEach(hero => {
                 // 初始化位置
                 resetHeroPosition(hero);
-                
+
                 // 定期更新位置创建呼吸效果
                 setInterval(() => {
                     animateHeroBreathing(hero);
                 }, 2000 + Math.random() * 3000);
             });
-            
+
             function resetHeroPosition(hero) {
                 hero.style.transition = 'transform 0s';
                 hero.style.transform = 'translate(0, 0)';
@@ -342,15 +351,15 @@
                 hero.offsetHeight;
                 hero.style.transition = 'transform 3s ease-in-out';
             }
-            
+
             function animateHeroBreathing(hero) {
                 // 只进行位置移动，不改变大小
                 const translateX = (Math.random() - 0.5) * 10;
                 const translateY = (Math.random() - 0.5) * 10;
-                
+
                 hero.style.transform = `translate(${translateX}px, ${translateY}px)`;
             }
-            
+
             // 页面大小调整时重置英雄位置
             window.addEventListener('resize', () => {
                 setTimeout(() => {
@@ -362,7 +371,5 @@
         });
     </script>
 </body>
+
 </html>
-
-
-
