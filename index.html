@@ -49,13 +49,15 @@
         /* 头图海报区域 */
         .poster-wrapper {
             width: 100%;
+            aspect-ratio: 2 / 1;
+            /* 宽高比为1:2，即高度是宽度的两倍 */
             margin: 0 auto;
             position: relative;
             border-radius: 15px;
             overflow: hidden;
             box-shadow: 0 0 30px var(--shadow-color);
-            margin-top: 20px;
-            margin-bottom: 20px;
+            margin-top: 0;
+            margin-bottom: 10px;
             background: transparent;
             padding: 0 10px;
         }
@@ -63,8 +65,7 @@
         .poster-container {
             position: relative;
             width: 100%;
-            height: 50vw;
-            min-height: 500px;
+            height: 100%;
             background: transparent;
             z-index: 3;
             display: flex;
@@ -309,15 +310,15 @@
         }
 
         .top-tip-text {
-            font-size: clamp(28px, 6vw, 56px);
+            top: 0;
+            font-size: clamp(5px, 4vw + 1rem, 64px);
             text-align: center;
-            padding: 30px 20px 40px;
+            padding: 10px 5px 10px;
             margin: 0;
             color: var(--text-primary);
             font-weight: bold;
             letter-spacing: 1.5px;
             background: var(--bg-secondary);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .members-grid {
@@ -398,22 +399,22 @@
     <div class="join-play" id="joinPlayContainer">
         <div class="floating-elements" id="floatingElements"></div>
 
-        <!-- 页面最顶端提示（非 fixed） -->
-        <div class="top-tip-text">这个未来值得为之奋战</div>
-
-        <!-- 头图海报区域 -->
-        <div class="poster-wrapper">
-            <div class="poster-container">
-                <div class="play-hero hero1" id="hero1"></div>
-                <div class="play-hero hero2" id="hero2"></div>
-                <div class="play-hero hero3" id="hero3"></div>
-                <div class="play-hero hero4" id="hero4"></div>
-                <div class="play-hero hero5" id="hero5"></div>
-            </div>
-        </div>
 
         <!-- 内容区域 -->
         <div class="content-area">
+            <div class="top-tip-text">这个未来值得为之奋战</div>
+            <!-- 头图海报区域 -->
+            <div class="poster-wrapper">
+                <div class="poster-container">
+                    <!-- 页面最顶端提示 -->
+                    <div class="play-hero hero1" id="hero1"></div>
+                    <div class="play-hero hero2" id="hero2"></div>
+                    <div class="play-hero hero3" id="hero3"></div>
+                    <div class="play-hero hero4" id="hero4"></div>
+                    <div class="play-hero hero5" id="hero5"></div>
+                </div>
+            </div>
+
             <div class="section">
                 <h2 class="section-title">成员名单</h2>
                 <div class="members-grid" id="membersGrid">
@@ -557,7 +558,7 @@
             updateThemeIcon();
 
             // 加载成员名单
-            fetch('./member.json')
+            fetch('https://li-xunwen.github.io/TalonTools-Overwatch/member.json')
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('无法加载 member.json');
