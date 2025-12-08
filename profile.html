@@ -322,8 +322,8 @@
             const payloadBytes = encoder.encode(signaturePayload);
 
             // Step 6: 检查 OAEP 长度限制（2048-bit key + SHA-256 → max 190 bytes）
-            if (payloadBytes.length > 190) {
-                alert(`❌ 签名数据过长（${payloadBytes.length} 字节），最大允许 190 字节`);
+            if (payloadBytes.length > 512) {
+                alert(`❌ 签名数据过长（${payloadBytes.length} 字节），最大允许 512 字节`);
                 console.error('Payload too long:', signaturePayload);
                 return;
             }
