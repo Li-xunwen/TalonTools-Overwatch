@@ -225,6 +225,7 @@
             updateThemeIcon();
 
             // 加载成员名单
+            // 加载成员名单
             fetch('https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/user.json')
                 .then(response => {
                     if (!response.ok) throw new Error('无法加载 user.json');
@@ -234,6 +235,10 @@
                     if (!Array.isArray(usernames)) {
                         throw new Error('user.json 格式错误：应为字符串数组');
                     }
+
+                    // 获取当前登录用户（即本人）
+                    const auth = getCookie('auth');
+                    const selfUsername = auth?.battletag || null;
 
                     const grid = document.getElementById('membersGrid');
                     if (!grid) return;
@@ -255,18 +260,58 @@
                     );
 
                     Promise.all(userPromises).then(users => {
+                        // 分离本人和他人
+                        let selfUser = null;
+                        const otherUsers = [];
+
                         users.forEach(user => {
+                            if (user.username === selfUsername) {
+                                selfUser = user;
+                            } else {
+                                otherUsers.push(user);
+                            }
+                        });
+
+                        // 如果本人存在，放在最前面
+                        const finalUsers = selfUser ? [selfUser, ...otherUsers] : otherUsers;
+
+                        // 随机问候语库（3~8字）
+                        const greetings = [
+                            '别来无恙~',
+                            '好久不见！',
+                            '欢迎你，特工',
+                            '近来可好？',
+                            '今天天气不错',
+                            '黑爪需要你',
+                            '又见面了！'
+            
+                        ];
+
+                        finalUsers.forEach(user => {
                             const card = document.createElement('div');
                             card.className = 'member-card';
 
+                            const isSelf = (user.username === selfUsername);
+                            if (isSelf) {
+                                card.setAttribute('data-is-self', 'true'); // 标记本人，便于后续开发
+                            }
+
                             const avatarPath = `./imge/${encodeURIComponent(user.username)}.jpg`;
+
+                            // 构建文字区域内容
+                            let textContent = '';
+                            if (isSelf) {
+                                const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+                                textContent += `<div class="member-greeting">${randomGreeting}</div>`;
+                            }
+                            textContent += `<div class="member-id">${user.username}</div>`;
 
                             const header = document.createElement('div');
                             header.className = 'member-header';
                             header.innerHTML = `
-              <img src="${avatarPath}" alt="${user.username}" class="member-avatar" onerror="this.style.opacity='0.4'; this.parentElement.querySelector('.member-id').style.opacity='0.7'">
-              <div class="member-id">${user.username}</div>
-            `;
+                    <img src="${avatarPath}" alt="${user.username}" class="member-avatar" onerror="this.style.opacity='0.4'; this.nextElementSibling.querySelector('.member-id').style.opacity='0.7'">
+                    <div class="member-text">${textContent}</div>
+                `;
 
                             const heroesContainer = document.createElement('div');
                             heroesContainer.className = 'member-heroes';
@@ -285,7 +330,7 @@
                             grid.appendChild(card);
                         });
 
-                        if (users.length === 0) {
+                        if (finalUsers.length === 0) {
                             grid.innerHTML = '<p style="text-align:center;color:var(--accent);">📭 暂无成员</p>';
                         }
                     });
@@ -313,9 +358,15 @@
 
     <!-- ✅ 再放底部导航栏 -->
     <div class="fixed-bottom-nav">
-        <a href="/news" class="nav-tab"><div>黑爪动态</div></a>
-        <a href="./" class="nav-tab active"><div>主页</div></a>
-        <a href="/profile" class="nav-tab"><div>我的</div></a>
+        <a href="/news" class="nav-tab">
+            <div>黑爪动态</div>
+        </a>
+        <a href="./" class="nav-tab active">
+            <div>主页</div>
+        </a>
+        <a href="/profile" class="nav-tab">
+            <div>我的</div>
+        </a>
     </div>
 
 </body>

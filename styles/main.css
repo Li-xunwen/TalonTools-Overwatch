@@ -382,6 +382,62 @@
            object-fit: contain;
        }
 
+       /* 本人专属问候语 */
+       .member-greeting {
+           font-size: 14px;
+           color: var(--accent);
+           opacity: 0.9;
+           margin-bottom: 6px;
+           text-align: center;
+           font-weight: 500;
+           line-height: 1.3;
+       }
+
+       /* 上栏：头像 + 文字区 —— 整体垂直居中 */
+       .member-header {
+           display: flex;
+           align-items: center;
+           /* 关键：整体垂直居中 */
+           gap: 16px;
+           margin-bottom: 20px;
+       }
+
+       .member-avatar {
+           width: 60px;
+           height: 60px;
+           border-radius: 50%;
+           object-fit: cover;
+           background: var(--accent);
+           border: 2px solid var(--text-primary);
+           flex-shrink: 0;
+       }
+
+       /* 文字容器：内部顶部对齐（问候语在上，ID在下） */
+       .member-text {
+           display: flex;
+           flex-direction: column;
+           justify-content: flex-start;
+           /* 内部从顶部开始排 */
+           gap: 4px;
+           /* 确保即使没有问候语，用户名也能垂直居中（因父级已居中） */
+       }
+
+       .member-id {
+           font-size: 18px;
+           font-weight: bold;
+           color: var(--text-primary);
+           word-break: break-all;
+       }
+
+       /* 本人专属问候语 —— 更柔和 */
+       .member-greeting {
+           font-size: 14px;
+           color: var(--text-primary);
+           opacity: 0.7;
+           font-weight: 500;
+           line-height: 1.3;
+       }
+
        /* === 底部固定导航栏 === */
        .fixed-bottom-nav {
            position: fixed;
