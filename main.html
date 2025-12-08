@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>守望先锋黑爪会议室</title>
+     <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- 主题切换按钮 -->
+    <button class="theme-toggle" id="themeToggle">🌙</button>
+
+    <div class="join-play" id="joinPlayContainer">
+        <div class="floating-elements" id="floatingElements"></div>
+
+
+        <!-- 内容区域 -->
+        <div class="content-area">
+            <div class="top-tip-text">这个未来值得为之奋战</div>
+            <!-- 头图海报区域 -->
+            <div class="poster-wrapper">
+                <div class="poster-container">
+                    <!-- 页面最顶端提示 -->
+                    <div class="play-hero hero1" id="hero1"></div>
+                    <div class="play-hero hero2" id="hero2"></div>
+                    <div class="play-hero hero3" id="hero3"></div>
+                    <div class="play-hero hero4" id="hero4"></div>
+                    <div class="play-hero hero5" id="hero5"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">成员名单</h2>
+                <div class="members-grid" id="membersGrid">
+                    <!-- 成员名片由 JS 动态生成 -->
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">活动亮点</h2>
+                <div class="test-elements-grid">
+                    <div class="test-element">特色玩法</div>
+                    <div class="test-element">限定皮肤</div>
+                    <div class="test-element">专属成就</div>
+                    <div class="test-element">团队竞技</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">测试内容区域</h2>
+                <p class="section-content">
+                    此区域用于展示测试元素和占位内容。<br>
+                    在实际开发中，这里将包含更多详细信息、排行榜、玩家统计数据等内容。
+                </p>
+                <div class="test-elements-grid">
+                    <div class="test-element">数据统计</div>
+                    <div class="test-element">排行榜</div>
+                    <div class="test-element">奖励预览</div>
+                    <div class="test-element">玩家社区</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 渲染英雄列表
+        const heroesData = [
+            { en: 'doomfist', zh: '末日铁拳' },
+            { en: 'cassidy', zh: '卡西迪' },
+            { en: 'genji', zh: '源氏' },
+            { en: 'pharah', zh: '法老之鹰' },
+            { en: 'reaper', zh: '死神' },
+            { en: 'soldier-76', zh: '士兵：76' },
+            { en: 'sombra', zh: '黑影' },
+            { en: 'tracer', zh: '猎空' },
+            { en: 'bastion', zh: '堡垒' },
+            { en: 'hanzo', zh: '半藏' },
+            { en: 'junkrat', zh: '狂鼠' },
+            { en: 'mei', zh: '美' },
+            { en: 'torbjorn', zh: '托比昂' },
+            { en: 'widowmaker', zh: '黑百合' },
+            { en: 'ashe', zh: '艾什' },
+            { en: 'echo', zh: '回声' },
+            { en: 'sojourn', zh: '索杰恩' },
+            { en: 'ana', zh: '安娜' },
+            { en: 'baptiste', zh: '巴蒂斯特' },
+            { en: 'brigitte', zh: '布丽吉塔' },
+            { en: 'lucio', zh: '卢西奥' },
+            { en: 'mercy', zh: '天使' },
+            { en: 'moira', zh: '莫伊拉' },
+            { en: 'zenyatta', zh: '禅雅塔' },
+            { en: 'kiriko', zh: '雾子' },
+            { en: 'lifeweaver', zh: '生命之梭' },
+            { en: 'sigma', zh: '西格玛' },
+            { en: 'orisa', zh: '奥丽莎' },
+            { en: 'ramattra', zh: '拉玛刹' },
+            { en: 'reinhardt', zh: '莱因哈特' },
+            { en: 'roadhog', zh: '路霸' },
+            { en: 'winston', zh: '温斯顿' },
+            { en: 'wrecking-ball', zh: '破坏球' },
+            { en: 'zarya', zh: '查莉娅' },
+            { en: 'dva', zh: 'D.Va' },
+            { en: 'junker-queen', zh: '渣客女王' },
+            { en: 'mauga', zh: '毛加' },
+            { en: 'hazard', zh: '骇灾' },
+            { en: 'freja', zh: '弗蕾雅' },
+            { en: 'juno', zh: '朱诺' },
+            { en: 'wuyang', zh: '无漾' },
+            { en: 'venture', zh: '探奇' },
+            { en: 'symmetra', zh: '秩序之光' },
+            { en: 'illari', zh: '伊拉锐' }
+        ];
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // 创建浮动装饰元素
+            const floatingElements = document.getElementById('floatingElements');
+            for (let i = 0; i < 20; i++) {
+                const element = document.createElement('div');
+                element.classList.add('floating-element');
+                element.style.left = Math.random() * 100 + '%';
+                element.style.top = Math.random() * 100 + '%';
+                element.style.width = (Math.random() * 10 + 5) + 'px';
+                element.style.height = element.style.width;
+                element.style.animationDuration = (Math.random() * 10 + 10) + 's';
+                element.style.animationDelay = Math.random() * 5 + 's';
+                floatingElements.appendChild(element);
+            }
+
+            // 英雄呼吸动画
+            const heroes = document.querySelectorAll('.play-hero');
+            heroes.forEach(hero => {
+                resetHeroPosition(hero);
+                setInterval(() => animateHeroBreathing(hero), 2000 + Math.random() * 3000);
+            });
+
+            function resetHeroPosition(hero) {
+                hero.style.transition = 'transform 0s';
+                hero.style.transform = 'translate(0, 0)';
+                hero.offsetHeight;
+                hero.style.transition = 'transform 3s ease-in-out';
+            }
+
+            function animateHeroBreathing(hero) {
+                const tx = (Math.random() - 0.5) * 10;
+                const ty = (Math.random() - 0.5) * 10;
+                hero.style.transform = `translate(${tx}px, ${ty}px)`;
+            }
+
+            window.addEventListener('resize', () => {
+                setTimeout(() => heroes.forEach(resetHeroPosition), 100);
+            });
+
+            // 主题切换逻辑
+            const themeToggle = document.getElementById('themeToggle');
+            const html = document.documentElement;
+
+            function updateThemeIcon() {
+                const isDark = html.getAttribute('data-theme') === 'dark';
+                themeToggle.textContent = isDark ? '🌙' : '☀️';
+            }
+
+            themeToggle.addEventListener('click', () => {
+                const current = html.getAttribute('data-theme');
+                const newTheme = current === 'dark' ? 'light' : 'dark';
+                html.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+                updateThemeIcon();
+            });
+
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            html.setAttribute('data-theme', savedTheme);
+            updateThemeIcon();
+
+            // 加载成员名单
+            // 加载成员名单（新逻辑）
+            fetch('https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/user.json')
+                .then(response => {
+                    if (!response.ok) throw new Error('无法加载 user.json');
+                    return response.json();
+                })
+                .then(usernames => {
+                    if (!Array.isArray(usernames)) {
+                        throw new Error('user.json 格式错误：应为字符串数组');
+                    }
+
+                    const grid = document.getElementById('membersGrid');
+                    if (!grid) return;
+
+                    // 清空容器（可选）
+                    grid.innerHTML = '';
+
+                    // 并发请求每个用户的资料
+                    const userPromises = usernames.map(username =>
+                        fetch(`https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encodeURIComponent(username)}/${encodeURIComponent(username)}.json`)
+                            .then(res => {
+                                if (!res.ok) {
+                                    console.warn(`用户资料加载失败: ${username}`, res.status);
+                                    return { username, hero: [], error: true };
+                                }
+                                return res.json().then(data => ({ username, ...data }));
+                            })
+                            .catch(err => {
+                                console.error(`请求用户 ${username} 失败:`, err);
+                                return { username, hero: [], error: true };
+                            })
+                    );
+
+                    Promise.all(userPromises).then(users => {
+                        users.forEach(user => {
+                            const card = document.createElement('div');
+                            card.className = 'member-card';
+
+                            // 构建头像路径（注意：ID 可能含 #，需编码）
+                            const avatarPath = `./imge/${encodeURIComponent(user.username)}.jpg`;
+
+                            // 上栏：头像 + ID
+                            const header = document.createElement('div');
+                            header.className = 'member-header';
+                            header.innerHTML = `
+                    <img src="${avatarPath}" alt="${user.username}" class="member-avatar" onerror="this.style.opacity='0.4'; this.parentElement.querySelector('.member-id').style.opacity='0.7'">
+                    <div class="member-id">${user.username}</div>
+                `;
+
+                            // 下栏：擅长英雄
+                            const heroesContainer = document.createElement('div');
+                            heroesContainer.className = 'member-heroes';
+
+                            if (user.hero && Array.isArray(user.hero)) {
+                                user.hero.slice(0, 5).forEach(heroKey => {
+                                    const heroEl = document.createElement('div');
+                                    heroEl.className = 'member-hero-icon';
+                                    heroEl.innerHTML = `<img src="https://ow.mapleqaq.top/hero/${encodeURIComponent(heroKey)}.png" alt="${heroKey}" loading="lazy">`;
+                                    heroesContainer.appendChild(heroEl);
+                                });
+                            }
+
+                            card.appendChild(header);
+                            card.appendChild(heroesContainer);
+                            grid.appendChild(card);
+                        });
+
+                        // 可选：若无成员，显示提示
+                        if (users.length === 0) {
+                            grid.innerHTML = '<p style="text-align:center;color:var(--accent);">📭 暂无成员</p>';
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.error('加载成员名单失败:', err);
+                    const grid = document.getElementById('membersGrid');
+                    if (grid) {
+                        grid.innerHTML = '<p style="text-align:center;color:var(--accent);">⚠️ 无法加载成员名单</p>';
+                    }
+                });
+        });
+    </script>
+</body>
+
+</html>
