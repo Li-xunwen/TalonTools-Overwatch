@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>守望先锋黑爪会议室</title>
-     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles/main.css">
 </head>
 
 <body>
@@ -63,9 +63,60 @@
             </div>
         </div>
     </div>
-
     <script>
-        // 渲染英雄列表
+        // ========== 身份验证守卫 ==========
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) {
+                try {
+                    return JSON.parse(decodeURIComponent(parts.pop().split(';').shift()));
+                } catch (e) {
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        function deleteCookie(name) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+        }
+
+        async function verifyAuth() {
+            const auth = getCookie('auth');
+            if (!auth || !auth.battletag || !auth.passwordHash) {
+                deleteCookie('auth');
+                window.location.href = './';
+                return false;
+            }
+
+            const { battletag, passwordHash } = auth;
+            const expectedPrefix = passwordHash.substring(0, 16).toUpperCase();
+            const encodedTag = encodeURIComponent(battletag);
+            const url = `https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTag}/${encodedTag}.json?t=${Date.now()}`;
+
+            try {
+                const res = await fetch(url, { cache: 'no-store' });
+                if (!res.ok) throw new Error('User data not found');
+
+                const userData = await res.json();
+                const serverPwd16 = (userData.PWD16Byte || '').toUpperCase();
+
+                if (expectedPrefix !== serverPwd16) {
+                    throw new Error('Password mismatch');
+                }
+
+                // 验证通过，继续渲染页面
+                return true;
+            } catch (err) {
+                console.warn('身份验证失败:', err);
+                deleteCookie('auth');
+                window.location.href = './';
+                return false;
+            }
+        }
+
+        // ========== 原有页面逻辑（封装为函数）==========
         const heroesData = [
             { en: 'doomfist', zh: '末日铁拳' },
             { en: 'cassidy', zh: '卡西迪' },
@@ -113,7 +164,7 @@
             { en: 'illari', zh: '伊拉锐' }
         ];
 
-        document.addEventListener('DOMContentLoaded', function () {
+        function initPage() {
             // 创建浮动装饰元素
             const floatingElements = document.getElementById('floatingElements');
             for (let i = 0; i < 20; i++) {
@@ -174,7 +225,6 @@
             updateThemeIcon();
 
             // 加载成员名单
-            // 加载成员名单（新逻辑）
             fetch('https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/user.json')
                 .then(response => {
                     if (!response.ok) throw new Error('无法加载 user.json');
@@ -187,11 +237,8 @@
 
                     const grid = document.getElementById('membersGrid');
                     if (!grid) return;
-
-                    // 清空容器（可选）
                     grid.innerHTML = '';
 
-                    // 并发请求每个用户的资料
                     const userPromises = usernames.map(username =>
                         fetch(`https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encodeURIComponent(username)}/${encodeURIComponent(username)}.json`)
                             .then(res => {
@@ -212,18 +259,15 @@
                             const card = document.createElement('div');
                             card.className = 'member-card';
 
-                            // 构建头像路径（注意：ID 可能含 #，需编码）
                             const avatarPath = `./imge/${encodeURIComponent(user.username)}.jpg`;
 
-                            // 上栏：头像 + ID
                             const header = document.createElement('div');
                             header.className = 'member-header';
                             header.innerHTML = `
-                    <img src="${avatarPath}" alt="${user.username}" class="member-avatar" onerror="this.style.opacity='0.4'; this.parentElement.querySelector('.member-id').style.opacity='0.7'">
-                    <div class="member-id">${user.username}</div>
-                `;
+              <img src="${avatarPath}" alt="${user.username}" class="member-avatar" onerror="this.style.opacity='0.4'; this.parentElement.querySelector('.member-id').style.opacity='0.7'">
+              <div class="member-id">${user.username}</div>
+            `;
 
-                            // 下栏：擅长英雄
                             const heroesContainer = document.createElement('div');
                             heroesContainer.className = 'member-heroes';
 
@@ -241,7 +285,6 @@
                             grid.appendChild(card);
                         });
 
-                        // 可选：若无成员，显示提示
                         if (users.length === 0) {
                             grid.innerHTML = '<p style="text-align:center;color:var(--accent);">📭 暂无成员</p>';
                         }
@@ -254,8 +297,27 @@
                         grid.innerHTML = '<p style="text-align:center;color:var(--accent);">⚠️ 无法加载成员名单</p>';
                     }
                 });
+        }
+
+        // ========== 启动流程 ==========
+        document.addEventListener('DOMContentLoaded', async function () {
+            const isValid = await verifyAuth();
+            if (isValid) {
+                initPage(); // 只有验证通过才初始化页面
+            }
         });
     </script>
+
+
+    </div> <!-- 这是 #joinPlayContainer 的闭合标签 -->
+
+    <!-- ✅ 再放底部导航栏 -->
+    <div class="fixed-bottom-nav">
+        <a href="/news" class="nav-tab"><div>黑爪动态</div></a>
+        <a href="./" class="nav-tab active"><div>主页</div></a>
+        <a href="/profile" class="nav-tab"><div>我的</div></a>
+    </div>
+
 </body>
 
 </html>

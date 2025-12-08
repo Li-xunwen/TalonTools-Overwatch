@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cookie 测试页面</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+    .btn {
+      display: inline-block;
+      margin: 10px 5px;
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .btn:hover {
+      background-color: #0056b3;
+    }
+    .btn.delete {
+      background-color: #dc3545;
+    }
+    .btn.delete:hover {
+      background-color: #a71e2a;
+    }
+    #result {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <h1>🍪 Cookie 测试工具</h1>
+  <button class="btn" onclick="setTestCookie()">设置测试 Cookie</button>
+  <button class="btn" onclick="readAllCookies()">读取所有 Cookie</button>
+  <button class="btn delete" onclick="deleteTestCookie()">删除测试 Cookie</button>
+
+  <div id="result">点击按钮查看结果...</div>
+
+  <script>
+    const COOKIE_NAME = "test_cookie";
+    const COOKIE_VALUE = "cookie_is_working_" + new Date().toISOString();
+
+    function setTestCookie() {
+      const d = new Date();
+      d.setTime(d.getTime() + (5 * 60 * 1000)); // 5 分钟后过期
+      const expires = "expires=" + d.toUTCString();
+      document.cookie = `${COOKIE_NAME}=${COOKIE_VALUE}; ${expires}; path=/`;
+      updateResult("✅ 已设置测试 Cookie（5 分钟后过期）");
+    }
+
+    function readAllCookies() {
+      const cookies = document.cookie || "无 Cookie";
+      updateResult("📋 当前所有 Cookie:\n\n" + cookies);
+    }
+
+    function deleteTestCookie() {
+      document.cookie = `${COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+      updateResult("🗑️ 测试 Cookie 已删除");
+    }
+
+    function updateResult(text) {
+      document.getElementById("result").textContent = text;
+    }
+
+    // 页面加载时自动读取一次 Cookie
+    window.onload = readAllCookies;
+  </script>
+</body>
+</html>

@@ -4,227 +4,192 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>登录 · 深色模式</title>
-    <style>
-        /* ========== 全局变量：亮色 & 深色 ========== */
-        :root {
-            --bg-body: #f0f2f5;
-            --card-bg: #ffffff;
-            --text-primary: #1c1e21;
-            --input-border: #ddd;
-            --input-focus: #1877f2;
-            --button-bg: #1877f2;
-            --button-hover: #156ae9;
-            --link-color: #1877f2;
-            --shadow: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
-        }
-
-        .dark-theme {
-            --bg-body: #121212;
-            --card-bg: #1e1e1e;
-            --text-primary: #f0f0f0;
-            --input-border: #444;
-            --input-focus: #4dabf7;
-            --button-bg: #1877f2;
-            --button-hover: #339af0;
-            --link-color: #4dabf7;
-            --shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', Arial, sans-serif;
-            background-color: var(--bg-body);
-            color: var(--text-primary);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            transition: background-color 0.3s ease;
-        }
-
-        .login-container {
-            position: relative;
-            background: var(--card-bg);
-            padding: 40px;
-            border-radius: 12px;
-            width: 360px;
-            box-shadow: var(--shadow);
-            transition: background-color 0.3s ease, color 0.3s ease;
-        }
-
-        .theme-toggle {
-            position: absolute;
-            top: 16px;
-            right: 16px;
-            background: none;
-            border: none;
-            font-size: 20px;
-            cursor: pointer;
-            color: var(--text-primary);
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background-color 0.2s;
-        }
-
-        .theme-toggle:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-
-        .login-container h2 {
-            text-align: center;
-            margin-bottom: 24px;
-            font-weight: 600;
-        }
-
-        .input-field {
-            width: 100%;
-            padding: 12px 10px;
-            margin: 8px 0 16px;
-            border: none;
-            border-bottom: 2px solid var(--input-border);
-            background: transparent;
-            color: var(--text-primary);
-            font-size: 16px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .input-field:focus {
-            border-color: var(--input-focus);
-        }
-
-        .login-btn {
-            width: 100%;
-            padding: 12px;
-            background-color: var(--button-bg);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        .login-btn:hover {
-            background-color: var(--button-hover);
-        }
-
-        .forgot-password {
-            display: block;
-            text-align: right;
-            color: var(--link-color);
-            margin-top: -8px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            text-decoration: none;
-            transition: color 0.2s;
-        }
-
-        .forgot-password:hover {
-            text-decoration: underline;
-        }
-    </style>
+    <title>登录 · 黑爪特工</title>
+    <link rel="stylesheet" href="styles/index.css">
 </head>
 
 <body>
-    <!-- 主题切换按钮 -->
     <button class="theme-toggle" id="themeToggle">🌙</button>
 
     <div class="login-container">
         <h2>欢迎回来,黑爪特工</h2>
-        <form>
-            <!-- 自动补全输入框 -->
+        <form id="loginForm">
             <input type="text" id="battletagInput" class="input-field" placeholder="战网ID" required />
             <datalist id="userSuggestions"></datalist>
 
-            <input type="password" class="input-field" placeholder="密码" required />
+            <input type="password" id="passwordInput" class="input-field" placeholder="密码" required />
+
+            <div class="error-message" id="errorMessage"></div>
+
             <a href="#" class="forgot-password">忘记密码？</a>
             <button type="submit" class="login-btn">登录</button>
         </form>
     </div>
 
-    <script>
-        // ====== 主题切换逻辑 ======
-        const html = document.getElementById('htmlRoot');
-        const themeToggle = document.getElementById('themeToggle');
-        const useDark = localStorage.getItem('theme') === 'dark' || localStorage.getItem('theme') === null;
+<script>
+  // ========== 主题切换 ==========
+  const html = document.getElementById('htmlRoot');
+  const themeToggle = document.getElementById('themeToggle');
+  const useDark = localStorage.getItem('theme') === 'dark' || localStorage.getItem('theme') === null;
 
-        function applyTheme(isDark) {
-            if (isDark) {
-                html.classList.add('dark-theme');
-                themeToggle.textContent = '☀️';
-                localStorage.setItem('theme', 'dark');
-            } else {
-                html.classList.remove('dark-theme');
-                themeToggle.textContent = '🌙';
-                localStorage.setItem('theme', 'light');
-            }
+  function applyTheme(isDark) {
+    if (isDark) {
+      html.classList.add('dark-theme');
+      themeToggle.textContent = '☀️';
+      localStorage.setItem('theme', 'dark');
+    } else {
+      html.classList.remove('dark-theme');
+      themeToggle.textContent = '🌙';
+      localStorage.setItem('theme', 'light');
+    }
+  }
+  applyTheme(useDark);
+  themeToggle.addEventListener('click', () => {
+    const isCurrentlyDark = html.classList.contains('dark-theme');
+    applyTheme(!isCurrentlyDark);
+  });
+
+  // ========== 全局变量 ==========
+  let validUsernames = []; // 用于快速校验ID是否存在
+  const battletagInput = document.getElementById('battletagInput');
+  const passwordInput = document.getElementById('passwordInput');
+  const errorMessage = document.getElementById('errorMessage');
+  const loginForm = document.getElementById('loginForm');
+  const datalist = document.getElementById('userSuggestions');
+
+  // ========== 工具函数 ==========
+  function sha256(str) {
+    const encoder = new TextEncoder();
+    return crypto.subtle.digest('SHA-256', encoder.encode(str)).then(hash => {
+      return Array.from(new Uint8Array(hash))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase();
+    });
+  }
+
+  function setAuthCookie(data, days = 7) {
+    const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
+    document.cookie = `auth=${encodeURIComponent(JSON.stringify(data))}; expires=${expires}; path=/; SameSite=Lax`;
+  }
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) {
+      try {
+        return JSON.parse(decodeURIComponent(parts.pop().split(';').shift()));
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  // ========== 自动登录检测 ==========
+  (async () => {
+    const auth = getCookie('auth');
+    if (auth && auth.battletag && auth.passwordHash) {
+      // 可选：显示提示
+      document.querySelector('.login-container h2').textContent = '自动登录中...';
+      document.querySelector('.login-container').style.opacity = '0.6';
+      // 短暂延迟后跳转（提升体验）
+      setTimeout(() => {
+        window.location.href = './main.html';
+      }, 800);
+      return; // 阻止后续初始化（如加载用户列表等非必需操作）
+    }
+
+    // 如果没有自动登录，则继续初始化表单
+    await initLoginForm();
+  })();
+
+  async function initLoginForm() {
+    // 加载用户名列表（防缓存）
+    try {
+      const res = await fetch('https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/user.json?t=' + Date.now(), { cache: 'no-store' });
+      if (res.ok) {
+        validUsernames = await res.json();
+        if (Array.isArray(validUsernames)) {
+          datalist.innerHTML = '';
+          validUsernames.forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            datalist.appendChild(opt);
+          });
+          toggleDatalist(battletagInput.value.trim());
+        }
+      }
+    } catch (err) {
+      console.warn('用户列表加载失败:', err);
+    }
+
+    // 绑定输入事件
+    function toggleDatalist(value) {
+      if (value === '') {
+        battletagInput.removeAttribute('list');
+      } else {
+        battletagInput.setAttribute('list', 'userSuggestions');
+      }
+    }
+    battletagInput.addEventListener('input', e => toggleDatalist(e.target.value.trim()));
+    battletagInput.addEventListener('focus', () => {
+      if (battletagInput.value.trim() !== '') {
+        battletagInput.setAttribute('list', 'userSuggestions');
+      }
+    });
+
+    // 绑定表单提交
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorMessage.textContent = '';
+
+      const battletag = battletagInput.value.trim();
+      const password = passwordInput.value;
+
+      if (!battletag || !password) {
+        errorMessage.textContent = '请输入战网ID和密码';
+        return;
+      }
+
+      // ✅ 第一步：检查战网ID是否存在
+      if (!validUsernames.includes(battletag)) {
+        errorMessage.textContent = '战网ID 不存在';
+        return;
+      }
+
+      try {
+        // 计算密码哈希
+        const hash = await sha256(password);
+        const hashPrefix16 = hash.substring(0, 16);
+
+        // 请求用户数据
+        const encodedTag = encodeURIComponent(battletag);
+        const userUrl = `https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTag}/${encodedTag}.json?t=${Date.now()}`;
+        const userRes = await fetch(userUrl, { cache: 'no-store' });
+
+        if (!userRes.ok) {
+          errorMessage.textContent = '用户数据加载失败';
+          return;
         }
 
-        applyTheme(useDark);
-        themeToggle.addEventListener('click', () => {
-            const isCurrentlyDark = html.classList.contains('dark-theme');
-            applyTheme(!isCurrentlyDark);
-        });
+        const userData = await userRes.json();
+        const serverPwd16 = (userData.PWD16Byte || '').toUpperCase();
 
-        // ====== 自动补全逻辑（防缓存 + 空值不提示）======
-        const datalist = document.getElementById('userSuggestions');
-        const input = document.getElementById('battletagInput');
-
-        // 加载用户列表（带时间戳防缓存）
-        const jsonUrl = 'https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/user.json?t=' + Date.now();
-        fetch(jsonUrl, { cache: 'no-store' })
-            .then(response => {
-                if (!response.ok) throw new Error('Network response was not ok');
-                return response.json();
-            })
-            .then(usernames => {
-                if (Array.isArray(usernames)) {
-                    datalist.innerHTML = '';
-                    usernames.forEach(name => {
-                        const option = document.createElement('option');
-                        option.value = name;
-                        datalist.appendChild(option);
-                    });
-                    // 初始化：如果已有值，绑定 list
-                    toggleDatalist(input.value.trim());
-                }
-            })
-            .catch(err => {
-                console.warn('未能加载用户列表，自动补全功能将不可用:', err);
-            });
-
-        // 动态控制是否启用 datalist
-        function toggleDatalist(value) {
-            if (value === '') {
-                input.removeAttribute('list');
-            } else {
-                input.setAttribute('list', 'userSuggestions');
-            }
+        if (hashPrefix16 === serverPwd16) {
+          // 登录成功
+          setAuthCookie({ battletag, passwordHash: hash });
+          window.location.href = './main.html';
+        } else {
+          errorMessage.textContent = '密码错误';
         }
-
-        // 监听输入事件
-        input.addEventListener('input', (e) => {
-            toggleDatalist(e.target.value.trim());
-        });
-
-        // 可选：聚焦时如果已有内容，确保 list 存在
-        input.addEventListener('focus', () => {
-            if (input.value.trim() !== '') {
-                input.setAttribute('list', 'userSuggestions');
-            }
-        });
-    </script>
+      } catch (err) {
+        console.error(err);
+        errorMessage.textContent = '登录过程中发生错误';
+      }
+    });
+  }
+</script>
 </body>
 
 </html>
