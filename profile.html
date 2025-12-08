@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>我的档案 - 黑爪会议室</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <link rel="stylesheet" href="styles/profile.css" />
+</head>
+
+<body>
+    <!-- 主题切换按钮 -->
+    <button class="theme-toggle" id="themeToggle">🌙</button>
+
+    <!-- 内容区 -->
+    <div class="profile-container" id="profileContainer">
+        <div class="loading">正在加载你的档案...</div>
+    </div>
+
+    <!-- 底部导航栏 -->
+    <div class="fixed-bottom-nav">
+        <a href="/news.html" class="nav-tab">
+            <div>黑爪动态</div>
+        </a>
+        <a href="./main.html" class="nav-tab">
+            <div>主页</div>
+        </a>
+        <a href="/profile.html" class="nav-tab active">
+            <div>我的</div>
+        </a>
+    </div>
+
+    <script>
+        // ========== 工具函数 ==========
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) {
+                try {
+                    return JSON.parse(decodeURIComponent(parts.pop().split(';').shift()));
+                } catch (e) {
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        function deleteCookie(name) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+        }
+
+        // ========== 身份验证 ==========
+        async function verifyAuth() {
+            const auth = getCookie('auth');
+            if (!auth || !auth.battletag) {
+                deleteCookie('auth');
+                window.location.href = './';
+                return null;
+            }
+            return auth.battletag;
+        }
+
+        // 英雄数据（略，保持原样）
+        const heroesData = [
+            { en: 'doomfist', zh: '末日铁拳', role: 'tank', position: '重装' },
+            { en: 'sigma', zh: '西格玛', role: 'tank', position: '重装' },
+            { en: 'orisa', zh: '奥丽莎', role: 'tank', position: '重装' },
+            { en: 'ramattra', zh: '拉玛刹', role: 'tank', position: '重装' },
+            { en: 'reinhardt', zh: '莱因哈特', role: 'tank', position: '重装' },
+            { en: 'roadhog', zh: '路霸', role: 'tank', position: '重装' },
+            { en: 'winston', zh: '温斯顿', role: 'tank', position: '重装' },
+            { en: 'wrecking-ball', zh: '破坏球', role: 'tank', position: '重装' },
+            { en: 'zarya', zh: '查莉娅', role: 'tank', position: '重装' },
+            { en: 'dva', zh: 'D.Va', role: 'tank', position: '重装' },
+            { en: 'junker-queen', zh: '渣客女王', role: 'tank', position: '重装' },
+            { en: 'mauga', zh: '毛加', role: 'tank', position: '重装' },
+            { en: 'hazard', zh: '骇灾', role: 'tank', position: '重装' },
+            { en: 'freja', zh: '弗蕾雅', role: 'tank', position: '重装' },
+
+            { en: 'cassidy', zh: '卡西迪', role: 'damage', position: '输出' },
+            { en: 'genji', zh: '源氏', role: 'damage', position: '输出' },
+            { en: 'pharah', zh: '法老之鹰', role: 'damage', position: '输出' },
+            { en: 'reaper', zh: '死神', role: 'damage', position: '输出' },
+            { en: 'soldier-76', zh: '士兵：76', role: 'damage', position: '输出' },
+            { en: 'sombra', zh: '黑影', role: 'damage', position: '输出' },
+            { en: 'tracer', zh: '猎空', role: 'damage', position: '输出' },
+            { en: 'bastion', zh: '堡垒', role: 'damage', position: '输出' },
+            { en: 'hanzo', zh: '半藏', role: 'damage', position: '输出' },
+            { en: 'junkrat', zh: '狂鼠', role: 'damage', position: '输出' },
+            { en: 'mei', zh: '美', role: 'damage', position: '输出' },
+            { en: 'torbjorn', zh: '托比昂', role: 'damage', position: '输出' },
+            { en: 'widowmaker', zh: '黑百合', role: 'damage', position: '输出' },
+            { en: 'ashe', zh: '艾什', role: 'damage', position: '输出' },
+            { en: 'echo', zh: '回声', role: 'damage', position: '输出' },
+            { en: 'sojourn', zh: '索杰恩', role: 'damage', position: '输出' },
+            { en: 'symmetra', zh: '秩序之光', role: 'damage', position: '输出' },
+            { en: 'juno', zh: '朱诺', role: 'damage', position: '输出' },
+            { en: 'wuyang', zh: '无漾', role: 'damage', position: '输出' },
+            { en: 'venture', zh: '探奇', role: 'damage', position: '输出' },
+
+            { en: 'ana', zh: '安娜', role: 'support', position: '支援' },
+            { en: 'baptiste', zh: '巴蒂斯特', role: 'support', position: '支援' },
+            { en: 'brigitte', zh: '布丽吉塔', role: 'support', position: '支援' },
+            { en: 'lucio', zh: '卢西奥', role: 'support', position: '支援' },
+            { en: 'mercy', zh: '天使', role: 'support', position: '支援' },
+            { en: 'moira', zh: '莫伊拉', role: 'support', position: '支援' },
+            { en: 'zenyatta', zh: '禅雅塔', role: 'support', position: '支援' },
+            { en: 'kiriko', zh: '雾子', role: 'support', position: '支援' },
+            { en: 'lifeweaver', zh: '生命之梭', role: 'support', position: '支援' },
+            { en: 'illari', zh: '伊拉锐', role: 'support', position: '支援' }
+        ];
+
+        let currentHeroList = [];
+        let originalHeroList = [];
+        let isEditing = false;
+        let battletag = '';
+
+        async function renderProfile(tag) {
+            battletag = tag;
+            const container = document.getElementById('profileContainer');
+            const encodedTag = encodeURIComponent(tag);
+            const avatarPath = `./imge/${encodedTag}.jpg`;
+
+            const greetings = [
+                '别来无恙~', '好久不见！', '欢迎你，特工', '近来可好？', '今天天气不错',
+                '黑爪需要你', '又见面了！', '任务顺利吗？', '一切安好？'
+            ];
+            const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+
+            let userData = null;
+            let isPendingSubmission = false;
+
+            // Step 1: 优先尝试从 talon-public 加载（用户提交但未审核）
+            try {
+                const publicRes = await fetch(
+                    `https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTag}/${encodedTag}.json?t=${Date.now()}`
+                );
+                if (publicRes.ok) {
+                    userData = await publicRes.json();
+                    isPendingSubmission = true; // 标记为待审核状态
+                }
+            } catch (err) {
+                console.warn('Public config not found or failed to load:', err);
+            }
+
+            // Step 2: 如果 public 没有，则回退到 talon-admin（已审核）
+            if (!userData) {
+                try {
+                    const adminRes = await fetch(
+                        `https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTag}/${encodedTag}.json?t=${Date.now()}`
+                    );
+                    if (!adminRes.ok) throw new Error('Admin data not found');
+                    userData = await adminRes.json();
+                } catch (err) {
+                    console.error('Failed to load both public and admin profile:', err);
+                    container.innerHTML = `<div class="error">⚠️ 无法加载你的档案<br>请确认账号已注册</div>`;
+                    return;
+                }
+            }
+
+            // Step 3: 处理英雄列表
+            currentHeroList = (userData.hero && Array.isArray(userData.hero)) ? userData.hero.slice(0, 5) : [];
+            while (currentHeroList.length < 5) currentHeroList.push(null);
+            originalHeroList = [...currentHeroList];
+
+            // Step 4: 渲染 UI
+            let statusNotice = '';
+            if (isPendingSubmission) {
+                statusNotice = '<div class="pending-notice">存在待管理员 Node 验证的提交，在快马加鞭啦~</div>';
+            }
+
+            container.innerHTML = `
+        <img src="${avatarPath}" alt="${tag}" class="profile-avatar" onerror="this.style.opacity='0.5'" />
+        <div class="profile-greeting">${greeting}</div>
+        <div class="profile-id">${tag}</div>
+        ${statusNotice}
+        <div class="hero-edit-wrapper">
+            <div class="profile-heroes" id="profileHeroes"></div>
+            <button class="edit-btn" id="editBtn">✎ 编辑</button>
+        </div>
+        <div class="edit-actions" id="editActions" style="display:none;">
+            <button class="btn-save">💾 保存</button>
+            <button class="btn-cancel">❌ 取消</button>
+        </div>
+    `;
+
+            renderHeroesUI();
+            bindEditEvents();
+        }
+
+        function renderHeroesUI() {
+            const heroContainer = document.getElementById('profileHeroes');
+            if (!heroContainer) return;
+
+            heroContainer.innerHTML = '';
+            currentHeroList.forEach((heroKey, index) => {
+                const item = document.createElement('div');
+                item.className = 'hero-slot';
+                item.dataset.index = index;
+
+                if (heroKey) {
+                    item.innerHTML = `
+                <div class="profile-hero-icon">
+                    <img src="https://ow.mapleqaq.top/hero/${encodeURIComponent(heroKey)}.png" alt="${heroKey}" loading="lazy" />
+                    <button class="remove-hero" style="display:none;">✕</button>
+                </div>
+            `;
+                } else {
+                    item.innerHTML = `
+                <div class="empty-slot" data-index="${index}">
+                    <span>+</span>
+                </div>
+            `;
+                }
+                heroContainer.appendChild(item);
+            });
+        }
+
+        function bindEditEvents() {
+            const editBtn = document.getElementById('editBtn');
+            const saveBtn = document.querySelector('.btn-save');
+            const cancelBtn = document.querySelector('.btn-cancel');
+            const heroContainer = document.getElementById('profileHeroes');
+
+            editBtn.onclick = () => {
+                isEditing = true;
+                document.querySelectorAll('.remove-hero').forEach(btn => btn.style.display = 'block');
+                document.getElementById('editActions').style.display = 'flex';
+                editBtn.style.display = 'none';
+            };
+
+            cancelBtn.onclick = async () => {
+                const encodedTag = encodeURIComponent(battletag);
+                try {
+                    const res = await fetch(
+                        `https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTag}/${encodedTag}.json?t=${Date.now()}`
+                    );
+                    if (res.ok) {
+                        const userData = await res.json();
+                        currentHeroList = (userData.hero && Array.isArray(userData.hero)) ? userData.hero.slice(0, 5) : [];
+                        while (currentHeroList.length < 5) currentHeroList.push(null);
+                        originalHeroList = [...currentHeroList];
+                    }
+                } catch (e) {
+                    console.warn('取消时重载失败，使用缓存副本');
+                    currentHeroList = [...originalHeroList];
+                }
+                renderHeroesUI();
+                exitEditMode();
+            };
+
+            saveBtn.onclick = async () => {
+                await handleSave();
+            };
+
+            heroContainer.onclick = (e) => {
+                if (!isEditing) return;
+
+                if (e.target.classList.contains('remove-hero')) {
+                    const slot = e.target.closest('.hero-slot');
+                    const index = parseInt(slot.dataset.index);
+                    currentHeroList[index] = null;
+                    renderHeroesUI();
+                    return;
+                }
+
+                const emptySlot = e.target.closest('.empty-slot');
+                if (emptySlot) {
+                    const slot = emptySlot.closest('.hero-slot');
+                    const index = parseInt(slot.dataset.index);
+                    showHeroPickerByIndex(index);
+                }
+            };
+        }
+
+        async function handleSave() {
+            const encodedTag = encodeURIComponent(battletag);
+            const cleanHeroes = currentHeroList.filter(h => h !== null);
+            const userData = { hero: cleanHeroes };
+            const jsonStr = JSON.stringify(userData, null, 2);
+
+            // Step 1: 计算文件哈希
+            const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(jsonStr));
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+            console.log('File SHA-256:', fileHash);
+
+            // Step 2: 上传 JSON
+            try {
+                await fetch(`https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTag}/${encodedTag}.json`, {
+                    method: 'PUT',
+                    body: jsonStr,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            } catch (err) {
+                alert('❌ 保存失败：JSON 上传出错');
+                console.error(err);
+                return;
+            }
+
+            // Step 3: 从 cookie 中提取 passwordHash
+            const auth = getCookie('auth');
+            if (!auth || !auth.passwordHash) {
+                alert('❌ Cookie 中缺少 passwordHash 字段');
+                return;
+            }
+            const passwordHash = auth.passwordHash.toLowerCase();
+
+            // Step 4: 构造精简签名 payload（关键：缩短字段名！）
+            const timestamp = Date.now();
+            const signaturePayload = JSON.stringify({
+                UserID: battletag,           // username → u
+                FileHash: fileHash,            // hash → h
+                Time: timestamp,           // timestamp → t
+                PasswordHash: passwordHash         // password_hash → p
+            });
+
+            // Step 5: 编码 payload 为 Uint8Array（✅ 定义在函数顶层）
+            const encoder = new TextEncoder();
+            const payloadBytes = encoder.encode(signaturePayload);
+
+            // Step 6: 检查 OAEP 长度限制（2048-bit key + SHA-256 → max 190 bytes）
+            if (payloadBytes.length > 190) {
+                alert(`❌ 签名数据过长（${payloadBytes.length} 字节），最大允许 190 字节`);
+                console.error('Payload too long:', signaturePayload);
+                return;
+            }
+
+            // Step 7: RSA 公钥（PEM 格式）
+            const publicKeyPem = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsoywmxv9e4Td4yp9g4bl
+KpfQvjBXc+Hp7/I+el7aSzozm1awUXssKoAzXvvI9O2SpZ/1I6qH8lm3+cRmuKfl
+nKbwdIWC0njlhJLVuNWWhGFZE3H+sD1Ntmv4F1LARFVe17LcO6GzfmFLFnBYeGnl
+wsheIlz6tSqq5pfExMCwkWR5vcltfYi1s1mF+i+69M3YzNOEpzkkXsvWrXSmpncA
+eeQ4cVYAxpWQMLbG4ozwxWSo6xLsM9a5TNKAYKVOuJVbBBfNvmbd/7wGbIkV4yPK
+Rslt7C0rskkC4qjr+AwYoo+DryivVhnMLnehGiUjcFn7FX4EvZmZb8OCLId8510g
+mQIDAQAB
+-----END PUBLIC KEY-----`;
+
+            // Step 8: 解析 PEM → DER
+            let binaryDer;
+            try {
+                const pemHeader = "-----BEGIN PUBLIC KEY-----";
+                const pemFooter = "-----END PUBLIC KEY-----";
+                const pemContents = publicKeyPem
+                    .replace(pemHeader, '')
+                    .replace(pemFooter, '')
+                    .replace(/\s/g, '');
+                const binaryDerString = atob(pemContents);
+                binaryDer = new Uint8Array(binaryDerString.length);
+                for (let i = 0; i < binaryDerString.length; i++) {
+                    binaryDer[i] = binaryDerString.charCodeAt(i);
+                }
+            } catch (e) {
+                alert('❌ 公钥解析失败');
+                console.error(e);
+                return;
+            }
+
+            // Step 9: 导入公钥（✅ 使用 RSA-OAEP，带 hash）
+            let publicKey;
+            try {
+                publicKey = await crypto.subtle.importKey(
+                    "spki",
+                    binaryDer.buffer,
+                    { name: "RSA-OAEP", hash: "SHA-256" },
+                    true,
+                    ["encrypt"]
+                );
+            } catch (e) {
+                alert('❌ RSA 公钥导入失败：' + e.message);
+                console.error(e);
+                return;
+            }
+
+            // Step 10: 加密（✅ 使用 payloadBytes）
+            let encrypted;
+            try {
+                encrypted = await crypto.subtle.encrypt(
+                    { name: "RSA-OAEP", hash: "SHA-256" },
+                    publicKey,
+                    payloadBytes
+                );
+            } catch (e) {
+                alert('❌ 签名加密失败：' + e.message);
+                console.error(e);
+                return;
+            }
+
+            // Step 11: 将加密结果转为 Base64 并上传
+            const encryptedArray = new Uint8Array(encrypted);
+            let binary = '';
+            for (let i = 0; i < encryptedArray.length; i++) {
+                binary += String.fromCharCode(encryptedArray[i]);
+            }
+            const signatureBase64 = btoa(binary);
+
+            try {
+                await fetch(`https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTag}/push.signature`, {
+                    method: 'PUT',
+                    body: signatureBase64,
+                    headers: { 'Content-Type': 'text/plain;charset=UTF-8' }
+                });
+            } catch (err) {
+                alert('❌ 签名上传失败');
+                console.error(err);
+                return;
+            }
+
+            alert('✅ 保存成功！');
+            originalHeroList = [...currentHeroList];
+            exitEditMode();
+        }
+
+        function exitEditMode() {
+            isEditing = false;
+            document.querySelectorAll('.remove-hero').forEach(btn => btn.style.display = 'none');
+            document.getElementById('editActions').style.display = 'none';
+            document.getElementById('editBtn').style.display = 'block';
+        }
+
+        function showHeroPickerByIndex(index) {
+            const usedHeroes = new Set(currentHeroList.filter(h => h));
+            const availableHeroes = heroesData.filter(h => !usedHeroes.has(h.en));
+
+            const tankHeroes = availableHeroes.filter(h => h.role === 'tank');
+            const damageHeroes = availableHeroes.filter(h => h.role === 'damage');
+            const supportHeroes = availableHeroes.filter(h => h.role === 'support');
+
+            const picker = document.createElement('div');
+            picker.className = 'hero-picker';
+            picker.dataset.index = index;
+            picker.innerHTML = '<div class="picker-title">选择英雄</div>';
+
+            const groupsContainer = document.createElement('div');
+            groupsContainer.className = 'hero-groups';
+
+            if (tankHeroes.length > 0) groupsContainer.appendChild(renderHeroGroup('重装', tankHeroes));
+            if (damageHeroes.length > 0) groupsContainer.appendChild(renderHeroGroup('输出', damageHeroes));
+            if (supportHeroes.length > 0) groupsContainer.appendChild(renderHeroGroup('支援', supportHeroes));
+
+            picker.appendChild(groupsContainer);
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'picker-close';
+            closeBtn.textContent = '×';
+            closeBtn.onclick = () => document.body.removeChild(picker);
+            picker.appendChild(closeBtn);
+
+            document.body.appendChild(picker);
+        }
+
+        function renderHeroGroup(title, heroes) {
+            const group = document.createElement('div');
+            group.className = 'hero-group';
+            const titleEl = document.createElement('div');
+            titleEl.className = 'group-title';
+            titleEl.textContent = title;
+            group.appendChild(titleEl);
+            const grid = document.createElement('div');
+            grid.className = 'hero-grid';
+            heroes.forEach(h => {
+                const item = document.createElement('div');
+                item.className = 'hero-picker-item';
+                item.innerHTML = `
+            <img src="https://ow.mapleqaq.top/hero/${encodeURIComponent(h.en)}.png" alt="${h.zh}" />
+            <span class="hero-name">${h.zh}</span>
+        `;
+                item.onclick = (e) => {
+                    const picker = e.target.closest('.hero-picker');
+                    const targetIndex = parseInt(picker.dataset.index);
+                    currentHeroList[targetIndex] = h.en;
+                    renderHeroesUI();
+                    document.body.removeChild(picker);
+                };
+                grid.appendChild(item);
+            });
+            group.appendChild(grid);
+            return group;
+        }
+
+        function initThemeToggle() {
+            const themeToggle = document.getElementById('themeToggle');
+            const html = document.documentElement;
+            function updateIcon() {
+                const isDark = html.getAttribute('data-theme') === 'dark';
+                themeToggle.textContent = isDark ? '🌙' : '☀️';
+            }
+            themeToggle.addEventListener('click', () => {
+                const current = html.getAttribute('data-theme');
+                const newTheme = current === 'dark' ? 'light' : 'dark';
+                html.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+                updateIcon();
+            });
+            const saved = localStorage.getItem('theme') || 'dark';
+            html.setAttribute('data-theme', saved);
+            updateIcon();
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            initThemeToggle();
+            const tag = await verifyAuth();
+            if (tag) {
+                renderProfile(tag);
+            }
+        });
+    </script>
+</body>
+
+</html>

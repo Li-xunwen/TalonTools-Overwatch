@@ -429,7 +429,7 @@
            word-break: break-all;
        }
 
-       /* 本人专属问候语 —— 更柔和 */
+       /* 本人专属问候语 */
        .member-greeting {
            font-size: 14px;
            color: var(--text-primary);
