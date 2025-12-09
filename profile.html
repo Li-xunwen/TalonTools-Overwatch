@@ -311,10 +311,10 @@
             // Step 4: 构造精简签名 payload（关键：缩短字段名！）
             const timestamp = Date.now();
             const signaturePayload = JSON.stringify({
-                UserID: battletag,           // username → u
-                FileHash: fileHash,            // hash → h
-                Time: timestamp,           // timestamp → t
-                PasswordHash: passwordHash         // password_hash → p
+                ID: battletag,           // username → u
+                F: fileHash,            // hash → h
+                T: timestamp,           // timestamp → t
+                P: passwordHash         // password_hash → p
             });
 
             // Step 5: 编码 payload 为 Uint8Array（✅ 定义在函数顶层）
@@ -322,8 +322,8 @@
             const payloadBytes = encoder.encode(signaturePayload);
 
             // Step 6: 检查 OAEP 长度限制（2048-bit key + SHA-256 → max 190 bytes）
-            if (payloadBytes.length > 512) {
-                alert(`❌ 签名数据过长（${payloadBytes.length} 字节），最大允许 512 字节`);
+            if (payloadBytes.length > 190) {
+                alert(`❌ 签名数据过长（${payloadBytes.length} 字节），最大允许 190 字节`);
                 console.error('Payload too long:', signaturePayload);
                 return;
             }
