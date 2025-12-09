@@ -599,6 +599,34 @@
                         });
                     }
 
+                    // === 段位显示逻辑 ===
+                    let rankElement = '';
+                    if (user.Rank && user.Rank.rank && typeof user.Rank.level === 'number') {
+                        const validRanks = ['silver', 'gold', 'diamond', 'master', 'grandmaster'];
+                        if (validRanks.includes(user.Rank.rank) && user.Rank.level >= 1 && user.Rank.level <= 5) {
+                            rankElement = `
+            <div class="member-rank">
+                <img src="./imge/rank/${user.Rank.rank}.png" alt="${user.Rank.rank}" />
+                <span class="rank-level">${user.Rank.level}</span>
+            </div>
+        `;
+                        }
+                    }
+
+                    // 将段位元素插入到 card 的顶部（在 header 和 heroesContainer 之上）
+                    if (rankElement) {
+                        const rankContainer = document.createElement('div');
+                        rankContainer.innerHTML = rankElement;
+                        rankContainer.style.position = 'absolute';
+                        rankContainer.style.top = '8px';
+                        rankContainer.style.left = '8px';
+                        rankContainer.style.width = '48px';
+                        rankContainer.style.height = '48px';
+                        rankContainer.style.zIndex = '10';
+                        card.style.position = 'relative'; // 确保定位上下文
+                        card.appendChild(rankContainer);
+                    }
+
                     card.appendChild(header);
                     card.appendChild(heroesContainer);
                     grid.appendChild(card);
