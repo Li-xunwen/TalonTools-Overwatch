@@ -106,7 +106,6 @@
                     throw new Error('Password mismatch');
                 }
 
-                // 验证通过，继续渲染页面
                 return true;
             } catch (err) {
                 console.warn('身份验证失败:', err);
@@ -114,6 +113,239 @@
                 window.location.href = './';
                 return false;
             }
+        }
+
+        // ========== 点赞相关逻辑 ==========
+        const likeCache = new Map(); // 缓存每个用户的点赞数据 { username => likeArray }
+        const pendingLikes = new Map(); // 记录待提交的点赞增量 { targetUser => count }
+        const likeTimeouts = new Map(); // 用于延迟提交
+
+        // 获取某用户的点赞数据（带缓存）
+        async function fetchLikes(username) {
+            if (likeCache.has(username)) {
+                return likeCache.get(username);
+            }
+
+            const encoded = encodeURIComponent(username);
+            const url = `https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/like/${encoded}.json?t=${Date.now()}`;
+
+            try {
+                const res = await fetch(url, { cache: 'no-store' });
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        likeCache.set(username, []);
+                        return [];
+                    }
+                    throw new Error('Network error');
+                }
+                const data = await res.json();
+                if (!Array.isArray(data)) throw new Error('Invalid format');
+                likeCache.set(username, data);
+                return data;
+            } catch (err) {
+                console.warn(`Failed to load likes for ${username}:`, err);
+                likeCache.set(username, []);
+                return [];
+            }
+        }
+
+        // 计算总赞数（从缓存取）
+        function getTotalLikes(username) {
+            const likes = likeCache.get(username) || [];
+            return likes.reduce((sum, item) => sum + (item.Like || 0), 0);
+        }
+
+        // 更新卡片上的总赞数显示（支持临时增量）
+        const tempLikeIncrements = new Map(); // username => increment (未提交但已显示)
+
+
+        // 提交点赞变更
+        async function submitLikes(targetUser) {
+            const selfTag = getCookie('auth')?.battletag;
+            if (!selfTag) return;
+
+            const encodedSelf = encodeURIComponent(selfTag);
+            const encodedTarget = encodeURIComponent(targetUser);
+            const url = `https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/like/${encodedTarget}.json`;
+
+            let currentLikes = await fetchLikes(targetUser);
+            currentLikes = [...currentLikes]; // clone
+
+            const existing = currentLikes.find(item => item.ID === selfTag);
+            const addCount = pendingLikes.get(targetUser) || 0;
+
+            if (addCount <= 0) return;
+
+            if (existing) {
+                existing.Like += addCount;
+            } else {
+                currentLikes.push({ ID: selfTag, Like: addCount });
+            }
+
+            // 排序（高到低）
+            currentLikes.sort((a, b) => b.Like - a.Like);
+
+            try {
+                const putRes = await fetch(url, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentLikes)
+                });
+
+                if (!putRes.ok) throw new Error('PUT failed');
+
+                // 更新缓存
+                likeCache.set(targetUser, currentLikes);
+                pendingLikes.delete(targetUser);
+                console.log(`✅ 成功提交 ${addCount} 个赞给 ${targetUser}`);
+
+                // 提交成功后刷新对应卡片的点赞数
+                const grid = document.getElementById('membersGrid');
+                if (grid) {
+                    const cards = grid.querySelectorAll('.member-card');
+                    for (const card of cards) {
+                        const idEl = card.querySelector('.member-id');
+                        if (idEl && idEl.textContent === targetUser) {
+                            updateLikeCountDisplay(card, targetUser);
+                            break;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(`❌ 提交点赞失败 (${targetUser}):`, err);
+                alert('点赞提交失败，请稍后重试');
+            }
+        }
+
+        // 触发点赞（UI + 计数）
+        function handleLikeClick(card, targetUser, isSelf) {
+            const selfTag = getCookie('auth')?.battletag;
+            if (!selfTag) return;
+
+            if (isSelf) {
+                toggleLikeList(card, targetUser);
+                return;
+            }
+
+            // 增加待提交计数
+            const current = pendingLikes.get(targetUser) || 0;
+            pendingLikes.set(targetUser, current + 1);
+
+            // 立即更新 UI（+1 效果）
+            updateLikeCountDisplay(card, targetUser);
+
+            // 设置自动提交
+            clearTimeout(likeTimeouts.get(targetUser));
+            likeTimeouts.set(targetUser, setTimeout(() => submitLikes(targetUser), 3000));
+
+            // 展开列表
+            toggleLikeList(card, targetUser);
+        }
+
+        // 切换点赞列表显示
+        async function toggleLikeList(card, username) {
+            const listEl = card.querySelector('.like-list');
+            if (listEl) {
+                listEl.remove();
+                return;
+            }
+
+            const likes = await fetchLikes(username);
+            const total = likes.reduce((sum, item) => sum + item.Like, 0);
+
+            const listContainer = document.createElement('div');
+            listContainer.className = 'like-list';
+
+            // 总赞数标题
+            const totalEl = document.createElement('div');
+            totalEl.className = 'like-total';
+            totalEl.textContent = `❤️ 总赞数：${total}`;
+            listContainer.appendChild(totalEl);
+
+            // 排名列表（最多10条）
+            likes.slice(0, 10).forEach(item => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'like-item';
+                itemEl.textContent = `${item.ID} ❤️${item.Like}`;
+                listContainer.appendChild(itemEl);
+            });
+
+            card.appendChild(listContainer);
+
+            // 点击别处关闭
+            const closeOnClickOutside = (e) => {
+                if (!card.contains(e.target)) {
+                    listContainer.remove();
+                    document.removeEventListener('click', closeOnClickOutside);
+                }
+            };
+            document.addEventListener('click', closeOnClickOutside);
+        }
+
+        // 渲染带数字的点赞按钮：[数字] ❤️
+        function renderLikeButton(card, username) {
+            let container = card.querySelector('.like-button-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'like-button-container';
+                container.style.position = 'absolute';
+                container.style.top = '8px';
+                container.style.right = '8px';
+                container.style.display = 'flex';
+                container.style.alignItems = 'center';
+                container.style.gap = '4px';
+                container.style.zIndex = '10';
+                container.style.cursor = 'pointer';
+                container.style.fontSize = '14px';
+                container.style.fontWeight = 'bold';
+                container.style.textShadow = '0 0 3px rgba(0,0,0,0.7)';
+                card.style.position = 'relative';
+                card.appendChild(container);
+
+                const countSpan = document.createElement('span');
+                countSpan.className = 'like-count';
+                countSpan.style.color = '#ffffff'; // 白色数字
+                countSpan.textContent = '0';
+
+                const heartIcon = document.createElement('span');
+                heartIcon.innerHTML = '❤️';
+                heartIcon.style.color = '#ff4d6d';
+
+                container.appendChild(countSpan);
+                container.appendChild(heartIcon);
+
+                container.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isSelf = card.hasAttribute('data-is-self');
+                    handleLikeClick(card, username, isSelf);
+                });
+            }
+
+            // 初始化显示真实总赞数
+            updateLikeCountDisplay(card, username);
+        }
+
+        // 更新按钮旁的数字（含临时增量）
+        function updateLikeCountDisplay(card, username) {
+            const countSpan = card.querySelector('.like-count');
+            if (!countSpan) return;
+
+            const baseTotal = getTotalLikes(username);
+            const pending = pendingLikes.get(username) || 0;
+            countSpan.textContent = baseTotal + pending;
+        }
+
+        // 更新按钮上的总赞数（支持临时增量）
+        function updateLikeButtonDisplay(card, username) {
+            const likeBtn = card.querySelector('.like-button');
+            if (!likeBtn) return;
+
+            const countSpan = likeBtn.querySelector('.like-count');
+            if (!countSpan) return;
+
+            const baseTotal = getTotalLikes(username);
+            const tempInc = pendingLikes.get(username) || 0; // 注意：pending 是已点但未提交的，应计入显示
+            countSpan.textContent = baseTotal + tempInc;
         }
 
         // ========== 原有页面逻辑（封装为函数）==========
@@ -258,7 +490,6 @@
                     );
 
                     Promise.all(userPromises).then(users => {
-                        // 分离本人和他人
                         let selfUser = null;
                         const otherUsers = [];
 
@@ -270,10 +501,8 @@
                             }
                         });
 
-                        // 如果本人存在，放在最前面
                         const finalUsers = selfUser ? [selfUser, ...otherUsers] : otherUsers;
 
-                        // 随机问候语库（3~8字）
                         const greetings = [
                             '别来无恙~',
                             '好久不见！',
@@ -282,7 +511,6 @@
                             '今天天气不错',
                             '黑爪需要你',
                             '又见面了！'
-
                         ];
 
                         finalUsers.forEach(user => {
@@ -291,12 +519,11 @@
 
                             const isSelf = (user.username === selfUsername);
                             if (isSelf) {
-                                card.setAttribute('data-is-self', 'true'); // 标记本人，便于后续开发
+                                card.setAttribute('data-is-self', 'true');
                             }
 
                             const avatarPath = `./imge/${encodeURIComponent(user.username)}.jpg`;
 
-                            // 构建文字区域内容
                             let textContent = '';
                             if (isSelf) {
                                 const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
@@ -307,9 +534,9 @@
                             const header = document.createElement('div');
                             header.className = 'member-header';
                             header.innerHTML = `
-                    <img src="${avatarPath}" alt="${user.username}" class="member-avatar" onerror="this.style.opacity='0.4'; this.nextElementSibling.querySelector('.member-id').style.opacity='0.7'">
-                    <div class="member-text">${textContent}</div>
-                `;
+                            <img src="${avatarPath}" alt="${user.username}" class="member-avatar" onerror="this.style.opacity='0.4'; this.nextElementSibling.querySelector('.member-id').style.opacity='0.7'">
+                            <div class="member-text">${textContent}</div>
+                        `;
 
                             const heroesContainer = document.createElement('div');
                             heroesContainer.className = 'member-heroes';
@@ -326,6 +553,20 @@
                             card.appendChild(header);
                             card.appendChild(heroesContainer);
                             grid.appendChild(card);
+
+                            // ======== 新增：渲染点赞按钮 ========
+                            renderLikeButton(card, user.username);
+                            //const likeBtn = card.querySelector('.like-button');
+                            //likeBtn.addEventListener('click', (e) => {
+                           //     e.stopPropagation();
+                            //    handleLikeClick(card, user.username, isSelf);
+                           //});
+
+                            (async () => {
+                                await fetchLikes(user.username); // 预加载（填充缓存）
+
+                            })();
+
                         });
 
                         if (finalUsers.length === 0) {
@@ -340,15 +581,39 @@
                         grid.innerHTML = '<p style="text-align:center;color:var(--accent);">⚠️ 无法加载成员名单</p>';
                     }
                 });
+
+        }
+
+        // 示例：当用户点击某个用户的点赞按钮时
+        function onLikeButtonClick(targetUser, card) {
+            const self = getCookie('auth')?.battletag;
+            if (!self || targetUser === self) return;
+
+            // 1. 增加临时 UI 增量
+            const currentTemp = tempLikeIncrements.get(targetUser) || 0;
+            tempLikeIncrements.set(targetUser, currentTemp + 1);
+
+            // 2. 立即更新显示（看起来点了就+1）
+            updateTotalLikeDisplay(card, targetUser);
+
+            // 3. 加入待提交队列（你原有的 pendingLikes 逻辑）
+            const currentPending = pendingLikes.get(targetUser) || 0;
+            pendingLikes.set(targetUser, currentPending + 1);
+
+            // 4. 触发延迟提交（如 3 秒后）
+            clearTimeout(likeTimeouts.get(targetUser));
+            likeTimeouts.set(targetUser, setTimeout(() => submitLikes(targetUser), 3000));
         }
 
         // ========== 启动流程 ==========
         document.addEventListener('DOMContentLoaded', async function () {
             const isValid = await verifyAuth();
             if (isValid) {
-                initPage(); // 只有验证通过才初始化页面
+                initPage();
             }
         });
+
+
     </script>
 
 
