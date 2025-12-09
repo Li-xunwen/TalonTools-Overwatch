@@ -36,6 +36,41 @@
     </div>
 
     <script>
+
+        function showTemporaryTip(message, duration = 2500) {
+            // 防止重复创建
+            let tip = document.getElementById('temporary-tip');
+            if (!tip) {
+                tip = document.createElement('div');
+                tip.id = 'temporary-tip';
+                tip.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            z-index: 9999;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        `;
+                document.body.appendChild(tip);
+            }
+
+            tip.textContent = message;
+            tip.style.opacity = '1';
+
+            setTimeout(() => {
+                tip.style.opacity = '0';
+                setTimeout(() => {
+                    if (tip.parentNode) tip.parentNode.removeChild(tip);
+                }, 200);
+            }, duration);
+        }
         // ========== 工具函数 ==========
         function getCookie(name) {
             const value = `; ${document.cookie}`;
@@ -115,6 +150,17 @@
             { en: 'illari', zh: '伊拉锐', role: 'support', position: '支援' }
         ];
 
+        // ========== 段位数据 ==========
+        const ranksData = [
+            { key: 'silver', name: '白银' },
+            { key: 'gold', name: '黄金' },
+            { key: 'diamond', name: '钻石' },
+            { key: 'master', name: '大师' },
+            { key: 'grandmaster', name: '宗师' }
+        ];
+
+        let currentRank = null; // { rank: 'gold', level: 2 } 或 null
+
         let currentHeroList = [];
         let originalHeroList = [];
         let isEditing = false;
@@ -172,17 +218,40 @@
             while (currentHeroList.length < 5) currentHeroList.push(null);
             originalHeroList = [...currentHeroList];
 
-            // Step 4: 渲染 UI
+            // Step 4: 处理段位数据
+            currentRank = userData.Rank || null;
+
+            // Step 5: 渲染 UI
             let statusNotice = '';
             if (isPendingSubmission) {
                 statusNotice = '<div class="pending-notice">存在待管理员 Node 验证的提交，在快马加鞭啦~</div>';
             }
 
+
+
+            // 构建段位显示 HTML
+            let rankDisplayHTML = '';
+            if (currentRank && currentRank.rank && typeof currentRank.level === 'number') {
+                const rankInfo = ranksData.find(r => r.key === currentRank.rank);
+                if (rankInfo) {
+                    rankDisplayHTML = `
+            <div class="profile-rank" id="profileRank">
+                <img src="./imge/rank/${currentRank.rank}.png" alt="${rankInfo.name}" />
+                <span class="rank-level">${currentRank.level}</span>
+            </div>
+        `;
+                } else {
+                    rankDisplayHTML = '<div class="profile-rank empty-rank" id="profileRank">+</div>';
+                }
+            } else {
+                rankDisplayHTML = '<div class="profile-rank empty-rank" id="profileRank">+</div>';
+            }
             container.innerHTML = `
         <img src="${avatarPath}" alt="${tag}" class="profile-avatar" onerror="this.style.opacity='0.5'" />
         <div class="profile-greeting">${greeting}</div>
         <div class="profile-id">${tag}</div>
         ${statusNotice}
+        ${rankDisplayHTML}
         <div class="hero-edit-wrapper">
             <div class="profile-heroes" id="profileHeroes"></div>
             <button class="edit-btn" id="editBtn">✎ 编辑</button>
@@ -193,6 +262,7 @@
         </div>
     `;
 
+            bindRankClick();
             renderHeroesUI();
             bindEditEvents();
         }
@@ -236,33 +306,58 @@
                 document.querySelectorAll('.remove-hero').forEach(btn => btn.style.display = 'block');
                 document.getElementById('editActions').style.display = 'flex';
                 editBtn.style.display = 'none';
+                updateRankDisplay();
             };
 
             cancelBtn.onclick = async () => {
-                const encodedTag = encodeURIComponent(battletag);
-                try {
-                    const res = await fetch(
-                        `https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTag}/${encodedTag}.json?t=${Date.now()}`
-                    );
-                    if (res.ok) {
-                        const userData = await res.json();
-                        currentHeroList = (userData.hero && Array.isArray(userData.hero)) ? userData.hero.slice(0, 5) : [];
-                        while (currentHeroList.length < 5) currentHeroList.push(null);
-                        originalHeroList = [...currentHeroList];
-                    }
-                } catch (e) {
-                    console.warn('取消时重载失败，使用缓存副本');
-                    currentHeroList = [...originalHeroList];
+                // 先退出编辑模式，确保 isEditing = false
+                exitEditMode(); // 👈 提前调用！
+
+                // 再回滚数据
+                if (fullUserData) {
+                    currentHeroList = (fullUserData.hero && Array.isArray(fullUserData.hero))
+                        ? fullUserData.hero.slice(0, 5)
+                        : [];
+                    while (currentHeroList.length < 5) currentHeroList.push(null);
+                    originalHeroList = [...currentHeroList];
+
+                    currentRank = fullUserData.Rank || null;
+                } else {
+                    currentHeroList = [null, null, null, null, null];
+                    originalHeroList = [...currentHeroList];
+                    currentRank = null;
                 }
+
+                // 最后更新 UI（此时 isEditing 已为 false，不会显示删除按钮）
                 renderHeroesUI();
-                exitEditMode();
+                updateRankDisplay();
             };
 
             saveBtn.onclick = async () => {
                 await handleSave();
+                // 更新段位（如果已设置）
+                if (currentRank && currentRank.rank && typeof currentRank.level === 'number') {
+                    updatedData.Rank = { rank: currentRank.rank, level: currentRank.level };
+                } else {
+                    delete updatedData.Rank; // 或设为 null，根据后端约定
+                }
             };
 
             heroContainer.onclick = (e) => {
+                const emptySlot = e.target.closest('.empty-slot');
+                if (emptySlot) {
+                    if (!isEditing) {
+                        // 显示提示
+                        showTemporaryTip('请先点击左上角编辑按钮', 2500);
+                        return;
+                    }
+
+                    const slot = emptySlot.closest('.hero-slot');
+                    const index = parseInt(slot.dataset.index);
+                    showHeroPickerByIndex(index);
+                    return;
+                }
+
                 if (!isEditing) return;
 
                 if (e.target.classList.contains('remove-hero')) {
@@ -272,39 +367,58 @@
                     renderHeroesUI();
                     return;
                 }
-
-                const emptySlot = e.target.closest('.empty-slot');
-                if (emptySlot) {
-                    const slot = emptySlot.closest('.hero-slot');
-                    const index = parseInt(slot.dataset.index);
-                    showHeroPickerByIndex(index);
-                }
             };
+
+            // 绑定段位点击事件（仅在编辑模式下生效）
+            const rankEl = document.getElementById('profileRank');
+            if (rankEl) {
+                rankEl.onclick = (e) => {
+                    if (!isEditing) return;
+                    showRankPicker();
+                };
+            }
+
+
+            document.addEventListener('click', (e) => {
+                if (e.target.classList.contains('remove-rank')) {
+                    if (isEditing) {
+                        currentRank = null;
+                        updateRankDisplay();
+                    }
+                }
+            });
         }
 
         async function handleSave() {
             const encodedTag = encodeURIComponent(battletag);
             const cleanHeroes = currentHeroList.filter(h => h !== null);
 
-            // ✅ 基于缓存的完整用户数据，仅更新 hero 字段
             if (!fullUserData) {
                 alert('❌ 未加载用户数据，无法保存');
                 return;
             }
 
-            const updatedData = JSON.parse(JSON.stringify(fullUserData)); // 深拷贝
+            // ✅ 正确深拷贝并更新 hero 和 Rank
+            const updatedData = JSON.parse(JSON.stringify(fullUserData));
             updatedData.hero = cleanHeroes;
+
+            // ✅ 正确处理 Rank 字段
+            if (currentRank && currentRank.rank && typeof currentRank.level === 'number') {
+                updatedData.Rank = { rank: currentRank.rank, level: currentRank.level };
+            } else {
+                delete updatedData.Rank; // 或设为 undefined，但 delete 更干净
+            }
+
             const jsonStr = JSON.stringify(updatedData, null, 2);
 
-            // Step 1: 计算文件哈希（仅取前16字节）
+            // --- 以下签名和上传逻辑保持不变 ---
             const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(jsonStr));
             const fullHashArray = new Uint8Array(hashBuffer);
-            const halfHashArray = fullHashArray.slice(0, 16); // 只取前16字节（128位）
+            const halfHashArray = fullHashArray.slice(0, 16);
             const fileHash = Array.from(halfHashArray).map(b => b.toString(16).padStart(2, '0')).join('');
 
             console.log('File SHA-256:', fileHash);
 
-            // Step 2: 上传 JSON
             try {
                 await fetch(`https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTag}/${encodedTag}.json`, {
                     method: 'PUT',
@@ -317,7 +431,6 @@
                 return;
             }
 
-            // Step 3: 从 cookie 中提取 passwordHash
             const auth = getCookie('auth');
             if (!auth || !auth.passwordHash) {
                 alert('❌ Cookie 中缺少 passwordHash 字段');
@@ -325,7 +438,6 @@
             }
             const passwordHash = auth.passwordHash.toLowerCase();
 
-            // Step 4: 构造签名 payload（字段名已精简）
             const timestamp = Date.now();
             const signaturePayload = JSON.stringify({
                 ID: battletag,
@@ -337,14 +449,12 @@
             const encoder = new TextEncoder();
             const payloadBytes = encoder.encode(signaturePayload);
 
-            // Step 5: 检查长度（OAEP 最大约 190 字节）
             if (payloadBytes.length > 190) {
                 alert(`❌ 签名数据过长（${payloadBytes.length} 字节），最大允许 190 字节`);
                 console.error('Payload too long:', signaturePayload);
                 return;
             }
 
-            // Step 6: RSA 公钥
             const publicKeyPem = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsoywmxv9e4Td4yp9g4bl
 KpfQvjBXc+Hp7/I+el7aSzozm1awUXssKoAzXvvI9O2SpZ/1I6qH8lm3+cRmuKfl
@@ -355,7 +465,6 @@ Rslt7C0rskkC4qjr+AwYoo+DryivVhnMLnehGiUjcFn7FX4EvZmZb8OCLId8510g
 mQIDAQAB
 -----END PUBLIC KEY-----`;
 
-            // Step 7: PEM → DER
             let binaryDer;
             try {
                 const pemHeader = "-----BEGIN PUBLIC KEY-----";
@@ -375,7 +484,6 @@ mQIDAQAB
                 return;
             }
 
-            // Step 8: 导入公钥
             let publicKey;
             try {
                 publicKey = await crypto.subtle.importKey(
@@ -391,7 +499,6 @@ mQIDAQAB
                 return;
             }
 
-            // Step 9: 加密
             let encrypted;
             try {
                 encrypted = await crypto.subtle.encrypt(
@@ -405,7 +512,6 @@ mQIDAQAB
                 return;
             }
 
-            // Step 10: 转 Base64 并上传签名
             const encryptedArray = new Uint8Array(encrypted);
             let binary = '';
             for (let i = 0; i < encryptedArray.length; i++) {
@@ -427,6 +533,8 @@ mQIDAQAB
 
             alert('✅ 保存成功！');
             originalHeroList = [...currentHeroList];
+            // ✅ 保存后更新 fullUserData 缓存，避免下次取消时用旧数据
+            fullUserData = updatedData;
             exitEditMode();
         }
 
@@ -466,6 +574,123 @@ mQIDAQAB
             picker.appendChild(closeBtn);
 
             document.body.appendChild(picker);
+        }
+
+        function showRankPicker() {
+            // 先移除已存在的 picker（防止重复）
+            const existing = document.querySelector('.rank-picker');
+            if (existing) {
+                existing.remove();
+                return;
+            }
+
+            const picker = document.createElement('div');
+            picker.className = 'rank-picker';
+
+            // 如果已选段位，则进入等级选择；否则先选段位
+            if (currentRank && currentRank.rank) {
+                // 显示等级选择 (5 → 1)
+                picker.innerHTML = '<div class="picker-title">选择等级</div>';
+                const levels = [5, 4, 3, 2, 1];
+                const grid = document.createElement('div');
+                grid.className = 'rank-level-grid';
+                levels.forEach(level => {
+                    const btn = document.createElement('button');
+                    btn.className = 'rank-level-btn';
+                    btn.textContent = level;
+                    btn.onclick = () => {
+                        currentRank.level = level;
+                        updateRankDisplay();
+                        picker.remove();
+                    };
+                    grid.appendChild(btn);
+                });
+                picker.appendChild(grid);
+            } else {
+                // 显示段位选择
+                picker.innerHTML = '<div class="picker-title">选择段位</div>';
+                const grid = document.createElement('div');
+                grid.className = 'rank-grid';
+                ranksData.forEach(rank => {
+                    const item = document.createElement('div');
+                    item.className = 'rank-item';
+                    item.innerHTML = `
+                <img src="./imge/rank/${rank.key}.png" alt="${rank.name}" />
+                <span>${rank.name}</span>
+            `;
+                    item.onclick = () => {
+                        currentRank = { rank: rank.key, level: 5 }; // 默认选5级
+                        // 自动进入等级选择
+                        picker.remove();
+                        showRankPicker(); // 递归调用以切换到等级选择
+                    };
+                    grid.appendChild(item);
+                });
+                picker.appendChild(grid);
+            }
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'picker-close';
+            closeBtn.textContent = '×';
+            closeBtn.onclick = () => picker.remove();
+            picker.appendChild(closeBtn);
+
+            document.body.appendChild(picker);
+        }
+
+        function updateRankDisplay() {
+            const rankEl = document.getElementById('profileRank');
+            if (!rankEl) return;
+
+            // 清空内容（但保留容器）
+            rankEl.innerHTML = '';
+
+            if (currentRank && currentRank.rank && typeof currentRank.level === 'number') {
+                const rankInfo = ranksData.find(r => r.key === currentRank.rank);
+                if (rankInfo) {
+                    const img = document.createElement('img');
+                    img.src = `./imge/rank/${currentRank.rank}.png`;
+                    img.alt = rankInfo.name;
+                    rankEl.appendChild(img);
+
+                    const levelSpan = document.createElement('span');
+                    levelSpan.className = 'rank-level';
+                    levelSpan.textContent = currentRank.level;
+                    rankEl.appendChild(levelSpan);
+
+                    // ✅ 仅在编辑模式下添加删除按钮
+                    if (isEditing) {
+                        const removeBtn = document.createElement('button');
+                        removeBtn.className = 'remove-rank';
+                        removeBtn.textContent = '✕';
+                        removeBtn.style.cssText = `
+                    position: absolute;
+                    top: -8px;
+                    right: -8px;
+                    width: 20px;
+                    height: 20px;
+                    background: #ff4d4d;
+                    color: white;
+                    border: none;
+                    border-radius: 50%;
+                    font-size: 12px;
+                    cursor: pointer;
+                    display: block;
+                    z-index: 2;
+                `;
+                        rankEl.appendChild(removeBtn);
+                    }
+                } else {
+                    rankEl.className = 'profile-rank empty-rank';
+                    rankEl.textContent = '+';
+                }
+            } else {
+                rankEl.className = 'profile-rank empty-rank';
+                rankEl.textContent = '+';
+            }
+
+            // 确保类名正确（避免被覆盖）
+            rankEl.className = currentRank ? 'profile-rank' : 'profile-rank empty-rank';
         }
 
         function renderHeroGroup(title, heroes) {
@@ -523,6 +748,19 @@ mQIDAQAB
                 renderProfile(tag);
             }
         });
+
+        function bindRankClick() {
+            const rankEl = document.getElementById('profileRank');
+            if (rankEl) {
+                // 移除可能的旧监听器（避免重复）
+                rankEl.onclick = null;
+                rankEl.onclick = () => {
+                    if (isEditing) {
+                        showRankPicker();
+                    }
+                };
+            }
+        }
 
 
         // 退出登录功能
