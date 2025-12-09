@@ -615,18 +615,8 @@
 
                     // 将段位元素插入到 card 的顶部（在 header 和 heroesContainer 之上）
                     if (rankElement) {
-                        const rankContainer = document.createElement('div');
-                        rankContainer.innerHTML = rankElement;
-                        rankContainer.style.position = 'absolute';
-                        rankContainer.style.top = '8px';
-                        rankContainer.style.left = '8px';
-                        rankContainer.style.width = '48px';
-                        rankContainer.style.height = '48px';
-                        rankContainer.style.zIndex = '10';
-                        card.style.position = 'relative'; // 确保定位上下文
-                        card.appendChild(rankContainer);
+                        attachRankToLikeButton(card, rankElement);
                     }
-
                     card.appendChild(header);
                     card.appendChild(heroesContainer);
                     grid.appendChild(card);
@@ -647,6 +637,74 @@
             }
 
 
+        }
+
+        /**
+ * 将段位图标正确贴合到点赞按钮左侧（响应式、不随屏幕抖动）
+ * @param {HTMLElement} card - 成员卡片 DOM 元素
+ * @param {string} rankElementHTML - 段位 HTML 字符串（如 '<div class="member-rank">...</div>'）
+ */
+        function attachRankToLikeButton(card, rankElementHTML) {
+            let likeContainer = card.querySelector('.like-button-container');
+            if (!likeContainer) {
+                likeContainer = document.createElement('div');
+                likeContainer.className = 'like-button-container';
+                likeContainer.style.position = 'absolute';
+                likeContainer.style.top = '8px';
+                likeContainer.style.right = '8px';
+                likeContainer.style.display = 'flex';
+                likeContainer.style.alignItems = 'center';
+                likeContainer.style.gap = '6px';
+                likeContainer.style.zIndex = '10';
+                likeContainer.style.cursor = 'pointer';
+                likeContainer.style.fontSize = '14px';
+                likeContainer.style.fontWeight = 'bold';
+                likeContainer.style.textShadow = '0 0 3px rgba(0,0,0,0.7)';
+                card.style.position = 'relative';
+                card.appendChild(likeContainer);
+
+                const countSpan = document.createElement('span');
+                countSpan.className = 'like-count';
+                countSpan.style.color = '#ffffff';
+                countSpan.textContent = '0';
+
+                const heartIcon = document.createElement('span');
+                heartIcon.innerHTML = '❤️';
+                heartIcon.style.color = '#ff4d6d';
+
+                likeContainer.appendChild(countSpan);
+                likeContainer.appendChild(heartIcon);
+            }
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = rankElementHTML.trim();
+            const rankEl = tempDiv.firstElementChild;
+
+            if (rankEl) {
+                // ✅ 关键：设为 relative，让内部 absolute 元素正确对齐
+                rankEl.style.position = 'relative';
+                rankEl.style.width = '28px';
+                rankEl.style.height = '28px';
+                rankEl.style.margin = '0';
+
+                const levelSpan = rankEl.querySelector('.rank-level');
+                if (levelSpan) {
+                    // ✅ 精确定位到右下角
+                    levelSpan.style.position = 'absolute';
+                    levelSpan.style.bottom = '2px';
+                    levelSpan.style.right = '2px';
+                    levelSpan.style.fontSize = '10px';
+                    levelSpan.style.fontWeight = 'bold';
+                    levelSpan.style.color = '#fff';
+                    levelSpan.style.backgroundColor = 'rgba(0,0,0,0.6)';
+                    levelSpan.style.borderRadius = '2px';
+                    levelSpan.style.padding = '0 2px';
+                    levelSpan.style.lineHeight = '1';
+                    levelSpan.style.zIndex = '2';
+                }
+
+                likeContainer.insertBefore(rankEl, likeContainer.firstChild);
+            }
         }
 
         // 示例：当用户点击某个用户的点赞按钮时

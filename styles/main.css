@@ -557,8 +557,8 @@
 
        .member-rank {
            position: absolute;
-           top: -5px;
-           right: -225px;
+           top: 0px;
+           right: 0px;
            width: 28px;
            height: 28px;
            z-index: 10;
@@ -572,7 +572,7 @@
 
        .member-rank .rank-level {
            position: absolute;
-           bottom: 0px;
+           bottom: -2px;
            right: -4px;
            background: transparent;
            color: var(--text-primary);
