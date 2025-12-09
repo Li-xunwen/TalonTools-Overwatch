@@ -396,7 +396,7 @@
             { en: 'illari', zh: '伊拉锐' }
         ];
 
-        function initPage() {
+        async function initPage() {
             // 创建浮动装饰元素
             const floatingElements = document.getElementById('floatingElements');
             for (let i = 0; i < 20; i++) {
@@ -456,131 +456,124 @@
             html.setAttribute('data-theme', savedTheme);
             updateThemeIcon();
 
-            // 加载成员名单
-            fetch(`https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/user.json?t=${Date.now()}`)
-                .then(response => {
-                    if (!response.ok) throw new Error('无法加载 user.json');
-                    return response.json();
-                })
-                .then(usernames => {
-                    if (!Array.isArray(usernames)) {
-                        throw new Error('user.json 格式错误：应为字符串数组');
-                    }
+            // 加载成员名单（使用 async/await）
+            try {
+                const response = await fetch(`https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/user.json?t=${Date.now()}`);
+                if (!response.ok) throw new Error('无法加载 user.json');
+                const usernames = await response.json();
 
-                    const auth = getCookie('auth');
-                    const selfUsername = auth?.battletag || null;
+                if (!Array.isArray(usernames)) {
+                    throw new Error('user.json 格式错误：应为字符串数组');
+                }
 
-                    const grid = document.getElementById('membersGrid');
-                    if (!grid) return;
-                    grid.innerHTML = '';
+                const auth = getCookie('auth');
+                const selfUsername = auth?.battletag || null;
 
-                    const userPromises = usernames.map(username =>
-                        fetch(`https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encodeURIComponent(username)}/${encodeURIComponent(username)}.json?t=${Date.now()}`)
-                            .then(res => {
-                                if (!res.ok) {
-                                    console.warn(`用户资料加载失败: ${username}`, res.status);
-                                    return { username, hero: [], error: true };
-                                }
-                                return res.json().then(data => ({ username, ...data }));
-                            })
-                            .catch(err => {
-                                console.error(`请求用户 ${username} 失败:`, err);
+                const grid = document.getElementById('membersGrid');
+                if (!grid) return;
+                grid.innerHTML = '';
+
+                // 并行获取所有用户资料
+                const userPromises = usernames.map(username =>
+                    fetch(`https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encodeURIComponent(username)}/${encodeURIComponent(username)}.json?t=${Date.now()}`)
+                        .then(res => {
+                            if (!res.ok) {
+                                console.warn(`用户资料加载失败: ${username}`, res.status);
                                 return { username, hero: [], error: true };
-                            })
-                    );
-
-                    Promise.all(userPromises).then(users => {
-                        let selfUser = null;
-                        const otherUsers = [];
-
-                        users.forEach(user => {
-                            if (user.username === selfUsername) {
-                                selfUser = user;
-                            } else {
-                                otherUsers.push(user);
                             }
-                        });
+                            return res.json().then(data => ({ username, ...data }));
+                        })
+                        .catch(err => {
+                            console.error(`请求用户 ${username} 失败:`, err);
+                            return { username, hero: [], error: true };
+                        })
+                );
 
-                        const finalUsers = selfUser ? [selfUser, ...otherUsers] : otherUsers;
+                const users = await Promise.all(userPromises);
 
-                        const greetings = [
-                            '别来无恙~',
-                            '好久不见！',
-                            '欢迎你，特工',
-                            '近来可好？',
-                            '今天天气不错',
-                            '黑爪需要你',
-                            '又见面了！'
-                        ];
+                let selfUser = null;
+                const otherUsers = [];
 
-                        finalUsers.forEach(user => {
-                            const card = document.createElement('div');
-                            card.className = 'member-card';
-
-                            const isSelf = (user.username === selfUsername);
-                            if (isSelf) {
-                                card.setAttribute('data-is-self', 'true');
-                            }
-
-                            const avatarPath = `./imge/${encodeURIComponent(user.username)}.jpg`;
-
-                            let textContent = '';
-                            if (isSelf) {
-                                const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-                                textContent += `<div class="member-greeting">${randomGreeting}</div>`;
-                            }
-                            textContent += `<div class="member-id">${user.username}</div>`;
-
-                            const header = document.createElement('div');
-                            header.className = 'member-header';
-                            header.innerHTML = `
-                            <img src="${avatarPath}" alt="${user.username}" class="member-avatar" onerror="this.style.opacity='0.4'; this.nextElementSibling.querySelector('.member-id').style.opacity='0.7'">
-                            <div class="member-text">${textContent}</div>
-                        `;
-
-                            const heroesContainer = document.createElement('div');
-                            heroesContainer.className = 'member-heroes';
-
-                            if (user.hero && Array.isArray(user.hero)) {
-                                user.hero.slice(0, 5).forEach(heroKey => {
-                                    const heroEl = document.createElement('div');
-                                    heroEl.className = 'member-hero-icon';
-                                    heroEl.innerHTML = `<img src="https://ow.mapleqaq.top/hero/${encodeURIComponent(heroKey)}.png" alt="${heroKey}" loading="lazy">`;
-                                    heroesContainer.appendChild(heroEl);
-                                });
-                            }
-
-                            card.appendChild(header);
-                            card.appendChild(heroesContainer);
-                            grid.appendChild(card);
-
-                            // ======== 新增：渲染点赞按钮 ========
-                            renderLikeButton(card, user.username);
-                            //const likeBtn = card.querySelector('.like-button');
-                            //likeBtn.addEventListener('click', (e) => {
-                           //     e.stopPropagation();
-                            //    handleLikeClick(card, user.username, isSelf);
-                           //});
-
-                            (async () => {
-                                await fetchLikes(user.username); // 预加载（填充缓存）
-
-                            })();
-
-                        });
-
-                        if (finalUsers.length === 0) {
-                            grid.innerHTML = '<p style="text-align:center;color:var(--accent);">📭 暂无成员</p>';
-                        }
-                    });
-                })
-                .catch(err => {
-                    console.error('加载成员名单失败:', err);
-                    const grid = document.getElementById('membersGrid');
-                    if (grid) {
-                        grid.innerHTML = '<p style="text-align:center;color:var(--accent);">⚠️ 无法加载成员名单</p>';
+                users.forEach(user => {
+                    if (user.username === selfUsername) {
+                        selfUser = user;
+                    } else {
+                        otherUsers.push(user);
                     }
                 });
+
+                const finalUsers = selfUser ? [selfUser, ...otherUsers] : otherUsers;
+
+                const greetings = [
+                    '别来无恙~',
+                    '好久不见！',
+                    '欢迎你，特工',
+                    '近来可好？',
+                    '今天天气不错',
+                    '黑爪需要你',
+                    '又见面了！'
+                ];
+
+                // ✅ 关键：使用 for...of + await 确保点赞数据已加载
+                for (const user of finalUsers) {
+                    // 预加载点赞数据（确保缓存有值）
+                    await fetchLikes(user.username);
+
+                    const card = document.createElement('div');
+                    card.className = 'member-card';
+
+                    const isSelf = (user.username === selfUsername);
+                    if (isSelf) {
+                        card.setAttribute('data-is-self', 'true');
+                    }
+
+                    const avatarPath = `./imge/${encodeURIComponent(user.username)}.jpg`;
+
+                    let textContent = '';
+                    if (isSelf) {
+                        const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+                        textContent += `<div class="member-greeting">${randomGreeting}</div>`;
+                    }
+                    textContent += `<div class="member-id">${user.username}</div>`;
+
+                    const header = document.createElement('div');
+                    header.className = 'member-header';
+                    header.innerHTML = `
+            <img src="${avatarPath}" alt="${user.username}" class="member-avatar" onerror="this.style.opacity='0.4'; this.nextElementSibling.querySelector('.member-id').style.opacity='0.7'">
+            <div class="member-text">${textContent}</div>
+        `;
+
+                    const heroesContainer = document.createElement('div');
+                    heroesContainer.className = 'member-heroes';
+
+                    if (user.hero && Array.isArray(user.hero)) {
+                        user.hero.slice(0, 5).forEach(heroKey => {
+                            const heroEl = document.createElement('div');
+                            heroEl.className = 'member-hero-icon';
+                            heroEl.innerHTML = `<img src="https://ow.mapleqaq.top/hero/${encodeURIComponent(heroKey)}.png" alt="${heroKey}" loading="lazy">`;
+                            heroesContainer.appendChild(heroEl);
+                        });
+                    }
+
+                    card.appendChild(header);
+                    card.appendChild(heroesContainer);
+                    grid.appendChild(card);
+
+                    // 此时 likeCache 已有数据，可正确显示总赞数
+                    renderLikeButton(card, user.username);
+                }
+
+                if (finalUsers.length === 0) {
+                    grid.innerHTML = '<p style="text-align:center;color:var(--accent);">📭 暂无成员</p>';
+                }
+            } catch (err) {
+                console.error('加载成员名单失败:', err);
+                const grid = document.getElementById('membersGrid');
+                if (grid) {
+                    grid.innerHTML = '<p style="text-align:center;color:var(--accent);">⚠️ 无法加载成员名单</p>';
+                }
+            }
+
 
         }
 
