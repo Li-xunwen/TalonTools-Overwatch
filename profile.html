@@ -296,10 +296,11 @@
             updatedData.hero = cleanHeroes;
             const jsonStr = JSON.stringify(updatedData, null, 2);
 
-            // Step 1: 计算文件哈希
+            // Step 1: 计算文件哈希（仅取前16字节）
             const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(jsonStr));
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            const fullHashArray = new Uint8Array(hashBuffer);
+            const halfHashArray = fullHashArray.slice(0, 16); // 只取前16字节（128位）
+            const fileHash = Array.from(halfHashArray).map(b => b.toString(16).padStart(2, '0')).join('');
 
             console.log('File SHA-256:', fileHash);
 
