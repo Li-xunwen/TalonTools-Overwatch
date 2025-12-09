@@ -18,6 +18,10 @@
         <div class="loading">正在加载你的档案...</div>
     </div>
 
+    <!-- 退出登录按钮 -->
+    <div class="logout-section">
+        <button id="logoutBtn" class="logout-btn">退出登录</button>
+    </div>
     <!-- 底部导航栏 -->
     <div class="fixed-bottom-nav">
         <a href="/news.html" class="nav-tab">
@@ -517,6 +521,19 @@ mQIDAQAB
             if (tag) {
                 renderProfile(tag);
             }
+        });
+
+
+        // 退出登录功能
+        document.getElementById('logoutBtn')?.addEventListener('click', () => {
+            // 清除所有相关 cookie（这里清除 'auth' 即可，因为只有它用于认证）
+            deleteCookie('auth');
+
+            // 可选：清除其他可能的 cookie（如 theme 等，但通常不需要）
+            // 例如：deleteCookie('theme');
+
+            // 跳转到网站根目录
+            window.location.href = './';
         });
     </script>
 </body>

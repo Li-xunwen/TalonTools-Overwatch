@@ -225,8 +225,7 @@
             updateThemeIcon();
 
             // 加载成员名单
-            // 加载成员名单
-            fetch('https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/user.json')
+            fetch(`https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/user.json?t=${Date.now()}`)
                 .then(response => {
                     if (!response.ok) throw new Error('无法加载 user.json');
                     return response.json();
@@ -236,7 +235,6 @@
                         throw new Error('user.json 格式错误：应为字符串数组');
                     }
 
-                    // 获取当前登录用户（即本人）
                     const auth = getCookie('auth');
                     const selfUsername = auth?.battletag || null;
 
@@ -245,7 +243,7 @@
                     grid.innerHTML = '';
 
                     const userPromises = usernames.map(username =>
-                        fetch(`https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encodeURIComponent(username)}/${encodeURIComponent(username)}.json`)
+                        fetch(`https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encodeURIComponent(username)}/${encodeURIComponent(username)}.json?t=${Date.now()}`)
                             .then(res => {
                                 if (!res.ok) {
                                     console.warn(`用户资料加载失败: ${username}`, res.status);
@@ -284,7 +282,7 @@
                             '今天天气不错',
                             '黑爪需要你',
                             '又见面了！'
-            
+
                         ];
 
                         finalUsers.forEach(user => {
