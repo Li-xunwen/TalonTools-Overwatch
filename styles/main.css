@@ -520,23 +520,19 @@
        }
 
        .like-list {
-           position: absolute;
-           top: 100%;
-           left: 0;
-           right: 0;
            background: var(--card-bg);
            border: 1px solid var(--accent);
-           /* 使用已有变量，避免硬编码 */
            border-radius: 8px;
            padding: 8px;
-           margin-top: 4px;
+           margin-top: 12px;
            z-index: 20;
            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
            max-height: 200px;
            overflow-y: auto;
            font-size: 14px;
            color: var(--text-primary);
-           /* 确保文字颜色适配主题 */
+           display: none;
+           /* 默认隐藏 */
        }
 
        .like-button-container {
