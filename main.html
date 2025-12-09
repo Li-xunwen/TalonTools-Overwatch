@@ -615,18 +615,8 @@
 
                     // 将段位元素插入到 card 的顶部（在 header 和 heroesContainer 之上）
                     if (rankElement) {
-                        const rankContainer = document.createElement('div');
-                        rankContainer.innerHTML = rankElement;
-                        rankContainer.style.position = 'absolute';
-                        rankContainer.style.top = '8px';
-                        rankContainer.style.left = '8px';
-                        rankContainer.style.width = '48px';
-                        rankContainer.style.height = '48px';
-                        rankContainer.style.zIndex = '10';
-                        card.style.position = 'relative'; // 确保定位上下文
-                        card.appendChild(rankContainer);
+                        attachRankToLikeButton(card, rankElement);
                     }
-
                     card.appendChild(header);
                     card.appendChild(heroesContainer);
                     grid.appendChild(card);
@@ -647,6 +637,94 @@
             }
 
 
+        }
+
+        /**
+ * 将段位图标正确贴合到点赞按钮左侧（响应式、不随屏幕抖动）
+ * @param {HTMLElement} card - 成员卡片 DOM 元素
+ * @param {string} rankElementHTML - 段位 HTML 字符串（如 '<div class="member-rank">...</div>'）
+ */
+        function attachRankToLikeButton(card, rankElementHTML) {
+            // 获取或创建容器
+            let likeContainer = card.querySelector('.like-button-container');
+            if (!likeContainer) {
+                likeContainer = document.createElement('div');
+                likeContainer.className = 'like-button-container';
+                Object.assign(likeContainer.style, {
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px', // 减小间距
+                    zIndex: '10',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    textShadow: '0 0 3px rgba(0,0,0,0.7)',
+                    cursor: 'pointer'
+                });
+                card.style.position = 'relative';
+                card.appendChild(likeContainer);
+            }
+
+            // 清空容器，重新构建（避免重复插入）
+            likeContainer.innerHTML = '';
+
+            // 1. 添加段位图标（如果有）
+            if (rankElementHTML) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = rankElementHTML.trim();
+                const rankEl = tempDiv.firstElementChild;
+                if (rankEl) {
+                    rankEl.style.position = 'relative';
+                    rankEl.style.width = '24px';   // 👈 稍微缩小一点，更紧凑
+                    rankEl.style.height = '24px';
+
+                    const levelSpan = rankEl.querySelector('.rank-level');
+                    if (levelSpan) {
+                        Object.assign(levelSpan.style, {
+                            position: 'absolute',
+                            bottom: '1px',
+                            right: '1px',
+                            fontSize: '9px',
+                            fontWeight: 'bold',
+                            color: '#fff',
+                            backgroundColor: 'rgba(0,0,0,0.6)',
+                            borderRadius: '2px',
+                            padding: '0 1px',
+                            lineHeight: '1',
+                            zIndex: '2'
+                        });
+                    }
+                    likeContainer.appendChild(rankEl);
+                }
+            }
+
+            // 2. 添加点赞数字
+            const countSpan = document.createElement('span');
+            countSpan.className = 'like-count';
+            countSpan.style.color = '#ffffff';
+            countSpan.textContent = '0';
+            likeContainer.appendChild(countSpan);
+
+            // 3. 添加心形图标
+            const heartIcon = document.createElement('span');
+            heartIcon.innerHTML = '❤️';
+            heartIcon.style.color = '#ff4d6d';
+            likeContainer.appendChild(heartIcon);
+
+            // 4. 绑定点击事件（如果还没有）
+            if (!likeContainer.hasClickHandler) {
+                likeContainer.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isSelf = card.hasAttribute('data-is-self');
+                    const username = card.querySelector('.member-id')?.textContent;
+                    if (username) {
+                        handleLikeClick(card, username, isSelf);
+                    }
+                });
+                likeContainer.hasClickHandler = true;
+            }
         }
 
         // 示例：当用户点击某个用户的点赞按钮时
