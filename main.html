@@ -217,6 +217,7 @@
             }
         }
 
+        const tempSelfLikeMap = new Map(); // username => temporary like count (for self)
         // 触发点赞（UI + 计数）
         function handleLikeClick(card, targetUser, isSelf) {
             const selfTag = getCookie('auth')?.battletag;
@@ -227,59 +228,102 @@
                 return;
             }
 
-            // 增加待提交计数
-            const current = pendingLikes.get(targetUser) || 0;
-            pendingLikes.set(targetUser, current + 1);
+            // 增加待提交计数（用于 PUT）
+            const currentPending = pendingLikes.get(targetUser) || 0;
+            pendingLikes.set(targetUser, currentPending + 1);
 
-            // 立即更新 UI（+1 效果）
+            // 👇 新增：记录当前用户对 targetUser 的临时点赞数（用于 UI 列表显示）
+            const currentTempSelf = tempSelfLikeMap.get(targetUser) || 0;
+            tempSelfLikeMap.set(targetUser, currentTempSelf + 1);
+
+            // 立即更新 UI 总数
             updateLikeCountDisplay(card, targetUser);
 
             // 设置自动提交
             clearTimeout(likeTimeouts.get(targetUser));
-            likeTimeouts.set(targetUser, setTimeout(() => submitLikes(targetUser), 3000));
+            likeTimeouts.set(targetUser, setTimeout(() => submitLikes(targetUser), 1200));
 
-            // 展开列表
+            // 展开列表（此时会包含刚点的赞）
             toggleLikeList(card, targetUser);
         }
 
-        // 切换点赞列表显示
+        // 全局变量：记录当前打开的 like-list 及其关闭函数
+        let currentLikeList = null;
+        let currentCloseHandler = null;
+
         async function toggleLikeList(card, username) {
-            const listEl = card.querySelector('.like-list');
-            if (listEl) {
-                listEl.remove();
-                return;
+            // 关闭已打开的列表
+            if (currentLikeList) {
+                currentLikeList.remove();
+                if (currentCloseHandler) {
+                    document.removeEventListener('click', currentCloseHandler);
+                }
+                currentLikeList = null;
+                currentCloseHandler = null;
             }
 
+            const selfTag = getCookie('auth')?.battletag;
             const likes = await fetchLikes(username);
-            const total = likes.reduce((sum, item) => sum + item.Like, 0);
+            let displayLikes = [...likes]; // 复制一份用于展示
+
+            // 👇 合并当前用户的临时点赞（未提交但已点击）
+            if (selfTag) {
+                const tempSelfLike = tempSelfLikeMap.get(username) || 0;
+                if (tempSelfLike > 0) {
+                    const existingIndex = displayLikes.findIndex(item => item.ID === selfTag);
+                    if (existingIndex >= 0) {
+                        // 已存在：增加临时点赞数
+                        displayLikes[existingIndex] = {
+                            ...displayLikes[existingIndex],
+                            Like: (displayLikes[existingIndex].Like || 0) + tempSelfLike
+                        };
+                    } else {
+                        // 不存在：添加新条目
+                        displayLikes.push({ ID: selfTag, Like: tempSelfLike });
+                    }
+                }
+            }
+
+            // 按赞数降序排序（高到低）
+            displayLikes.sort((a, b) => (b.Like || 0) - (a.Like || 0));
+
+            const total = displayLikes.reduce((sum, item) => sum + (item.Like || 0), 0);
 
             const listContainer = document.createElement('div');
             listContainer.className = 'like-list';
 
-            // 总赞数标题
-            const totalEl = document.createElement('div');
-            totalEl.className = 'like-total';
-            totalEl.textContent = `❤️ 总赞数：${total}`;
-            listContainer.appendChild(totalEl);
 
-            // 排名列表（最多10条）
-            likes.slice(0, 10).forEach(item => {
+            // 渲染前10名
+            displayLikes.slice(0, 10).forEach(item => {
                 const itemEl = document.createElement('div');
                 itemEl.className = 'like-item';
-                itemEl.textContent = `${item.ID} ❤️${item.Like}`;
+                itemEl.style.display = 'flex';
+                itemEl.style.justifyContent = 'space-between';
+                itemEl.style.alignItems = 'center';
+                itemEl.style.padding = '4px 8px';
+                itemEl.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
+
+                itemEl.innerHTML = `
+            <span class="like-item-id">${item.ID}</span>
+            <span class="like-item-like">❤️${item.Like}</span>
+        `;
                 listContainer.appendChild(itemEl);
             });
 
             card.appendChild(listContainer);
+            currentLikeList = listContainer;
 
-            // 点击别处关闭
-            const closeOnClickOutside = (e) => {
+            const closeHandler = (e) => {
                 if (!card.contains(e.target)) {
                     listContainer.remove();
-                    document.removeEventListener('click', closeOnClickOutside);
+                    document.removeEventListener('click', closeHandler);
+                    currentLikeList = null;
+                    currentCloseHandler = null;
                 }
             };
-            document.addEventListener('click', closeOnClickOutside);
+
+            currentCloseHandler = closeHandler;
+            document.addEventListener('click', closeHandler, { capture: false });
         }
 
         // 渲染带数字的点赞按钮：[数字] ❤️
