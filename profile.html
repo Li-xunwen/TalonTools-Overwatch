@@ -115,6 +115,7 @@
         let originalHeroList = [];
         let isEditing = false;
         let battletag = '';
+        let fullUserData = null; // 用于缓存从服务器加载的完整用户档案
 
         async function renderProfile(tag) {
             battletag = tag;
@@ -138,7 +139,7 @@
                 );
                 if (publicRes.ok) {
                     userData = await publicRes.json();
-                    isPendingSubmission = true; // 标记为待审核状态
+                    isPendingSubmission = true;
                 }
             } catch (err) {
                 console.warn('Public config not found or failed to load:', err);
@@ -158,6 +159,9 @@
                     return;
                 }
             }
+
+            // ✅ 关键：缓存完整用户数据
+            fullUserData = userData;
 
             // Step 3: 处理英雄列表
             currentHeroList = (userData.hero && Array.isArray(userData.hero)) ? userData.hero.slice(0, 5) : [];
@@ -277,8 +281,16 @@
         async function handleSave() {
             const encodedTag = encodeURIComponent(battletag);
             const cleanHeroes = currentHeroList.filter(h => h !== null);
-            const userData = { hero: cleanHeroes };
-            const jsonStr = JSON.stringify(userData, null, 2);
+
+            // ✅ 基于缓存的完整用户数据，仅更新 hero 字段
+            if (!fullUserData) {
+                alert('❌ 未加载用户数据，无法保存');
+                return;
+            }
+
+            const updatedData = JSON.parse(JSON.stringify(fullUserData)); // 深拷贝
+            updatedData.hero = cleanHeroes;
+            const jsonStr = JSON.stringify(updatedData, null, 2);
 
             // Step 1: 计算文件哈希
             const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(jsonStr));
@@ -308,27 +320,26 @@
             }
             const passwordHash = auth.passwordHash.toLowerCase();
 
-            // Step 4: 构造精简签名 payload（关键：缩短字段名！）
+            // Step 4: 构造签名 payload（字段名已精简）
             const timestamp = Date.now();
             const signaturePayload = JSON.stringify({
-                ID: battletag,           // username → u
-                F: fileHash,            // hash → h
-                T: timestamp,           // timestamp → t
-                P: passwordHash         // password_hash → p
+                ID: battletag,
+                F: fileHash,
+                T: timestamp,
+                P: passwordHash
             });
 
-            // Step 5: 编码 payload 为 Uint8Array（✅ 定义在函数顶层）
             const encoder = new TextEncoder();
             const payloadBytes = encoder.encode(signaturePayload);
 
-            // Step 6: 检查 OAEP 长度限制（2048-bit key + SHA-256 → max 190 bytes）
+            // Step 5: 检查长度（OAEP 最大约 190 字节）
             if (payloadBytes.length > 190) {
                 alert(`❌ 签名数据过长（${payloadBytes.length} 字节），最大允许 190 字节`);
                 console.error('Payload too long:', signaturePayload);
                 return;
             }
 
-            // Step 7: RSA 公钥（PEM 格式）
+            // Step 6: RSA 公钥
             const publicKeyPem = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsoywmxv9e4Td4yp9g4bl
 KpfQvjBXc+Hp7/I+el7aSzozm1awUXssKoAzXvvI9O2SpZ/1I6qH8lm3+cRmuKfl
@@ -339,7 +350,7 @@ Rslt7C0rskkC4qjr+AwYoo+DryivVhnMLnehGiUjcFn7FX4EvZmZb8OCLId8510g
 mQIDAQAB
 -----END PUBLIC KEY-----`;
 
-            // Step 8: 解析 PEM → DER
+            // Step 7: PEM → DER
             let binaryDer;
             try {
                 const pemHeader = "-----BEGIN PUBLIC KEY-----";
@@ -359,7 +370,7 @@ mQIDAQAB
                 return;
             }
 
-            // Step 9: 导入公钥（✅ 使用 RSA-OAEP，带 hash）
+            // Step 8: 导入公钥
             let publicKey;
             try {
                 publicKey = await crypto.subtle.importKey(
@@ -375,7 +386,7 @@ mQIDAQAB
                 return;
             }
 
-            // Step 10: 加密（✅ 使用 payloadBytes）
+            // Step 9: 加密
             let encrypted;
             try {
                 encrypted = await crypto.subtle.encrypt(
@@ -389,7 +400,7 @@ mQIDAQAB
                 return;
             }
 
-            // Step 11: 将加密结果转为 Base64 并上传
+            // Step 10: 转 Base64 并上传签名
             const encryptedArray = new Uint8Array(encrypted);
             let binary = '';
             for (let i = 0; i < encryptedArray.length; i++) {
