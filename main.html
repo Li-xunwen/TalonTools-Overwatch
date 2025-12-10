@@ -224,27 +224,110 @@
             if (!selfTag) return;
 
             if (isSelf) {
-                toggleLikeList(card, targetUser);
+                renderLikeList(card, targetUser); // 自己也允许看列表（可选）
                 return;
             }
 
-            // 增加待提交计数（用于 PUT）
+            // 增加待提交计数
             const currentPending = pendingLikes.get(targetUser) || 0;
             pendingLikes.set(targetUser, currentPending + 1);
 
-            // 👇 新增：记录当前用户对 targetUser 的临时点赞数（用于 UI 列表显示）
+            // 记录自己的临时点赞数（用于 UI 列表）
             const currentTempSelf = tempSelfLikeMap.get(targetUser) || 0;
             tempSelfLikeMap.set(targetUser, currentTempSelf + 1);
 
-            // 立即更新 UI 总数
+            // 立即更新总赞数显示
             updateLikeCountDisplay(card, targetUser);
 
-            // 设置自动提交
+            // 设置自动提交（防抖）
             clearTimeout(likeTimeouts.get(targetUser));
             likeTimeouts.set(targetUser, setTimeout(() => submitLikes(targetUser), 1200));
 
-            // 展开列表（此时会包含刚点的赞）
-            toggleLikeList(card, targetUser);
+            // 👇 关键修复：点击后始终展开列表（不 toggle）
+            renderLikeList(card, targetUser);
+        }
+
+
+        // 全局变量：记录当前打开的 like-list 容器
+        let currentOpenLikeList = null;
+
+        async function renderLikeList(card, username) {
+            const selfTag = getCookie('auth')?.battletag;
+            const likes = await fetchLikes(username);
+            let displayLikes = [...likes];
+
+            // 合并临时点赞（包括刚点的）
+            if (selfTag) {
+                const tempSelfLike = tempSelfLikeMap.get(username) || 0;
+                if (tempSelfLike > 0) {
+                    const existingIndex = displayLikes.findIndex(item => item.ID === selfTag);
+                    if (existingIndex >= 0) {
+                        displayLikes[existingIndex] = {
+                            ...displayLikes[existingIndex],
+                            Like: (displayLikes[existingIndex].Like || 0) + tempSelfLike
+                        };
+                    } else {
+                        displayLikes.push({ ID: selfTag, Like: tempSelfLike });
+                    }
+                }
+            }
+
+            // 排序
+            displayLikes.sort((a, b) => (b.Like || 0) - (a.Like || 0));
+
+            // 获取或创建 .like-list 容器
+            let listContainer = card.querySelector('.like-list');
+            if (!listContainer) {
+                listContainer = document.createElement('div');
+                listContainer.className = 'like-list';
+                Object.assign(listContainer.style, {
+                    position: 'absolute',
+                    top: '100%',
+                    left: '0',
+                    right: '0',
+                    backgroundColor: 'rgba(0,0,0,0.85)',
+                    borderRadius: '0 0 8px 8px',
+                    padding: '8px 0',
+                    zIndex: '5',
+                    display: 'none',
+                    maxHeight: '200px',
+                    overflowY: 'auto'
+                });
+                card.style.position = 'relative';
+                card.appendChild(listContainer);
+            }
+
+            // 清空内容
+            listContainer.innerHTML = '';
+            if (displayLikes.length === 0) {
+                listContainer.innerHTML = '<div style="padding:6px;text-align:center;color:#aaa;">暂无点赞</div>';
+            } else {
+                displayLikes.slice(0, 10).forEach(item => {
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'like-item';
+                    Object.assign(itemEl.style, {
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '4px 12px',
+                        borderBottom: '1px solid rgba(255,255,255,0.1)'
+                    });
+                    itemEl.innerHTML = `
+                <span class="like-item-id">${item.ID}</span>
+                <span class="like-item-like">❤️${item.Like}</span>
+            `;
+                    listContainer.appendChild(itemEl);
+                });
+            }
+
+            // 👇 关键逻辑：先关闭当前打开的列表（如果不是同一个）
+            if (currentOpenLikeList && currentOpenLikeList !== listContainer) {
+                currentOpenLikeList.style.display = 'none';
+            }
+
+            // 显示新列表
+            listContainer.style.display = 'block';
+            currentOpenLikeList = listContainer; // 更新当前打开的引用
         }
 
         // 全局变量：记录当前打开的 like-list 及其关闭函数
@@ -252,46 +335,35 @@
         let currentCloseHandler = null;
 
         async function toggleLikeList(card, username) {
-            // 关闭已打开的列表
-            if (currentLikeList) {
-                currentLikeList.remove();
-                if (currentCloseHandler) {
-                    document.removeEventListener('click', currentCloseHandler);
-                }
-                currentLikeList = null;
-                currentCloseHandler = null;
-            }
-
             const selfTag = getCookie('auth')?.battletag;
             const likes = await fetchLikes(username);
-            let displayLikes = [...likes]; // 复制一份用于展示
+            let displayLikes = [...likes];
 
-            // 👇 合并当前用户的临时点赞（未提交但已点击）
+            // 合并临时点赞
             if (selfTag) {
                 const tempSelfLike = tempSelfLikeMap.get(username) || 0;
                 if (tempSelfLike > 0) {
                     const existingIndex = displayLikes.findIndex(item => item.ID === selfTag);
                     if (existingIndex >= 0) {
-                        // 已存在：增加临时点赞数
                         displayLikes[existingIndex] = {
                             ...displayLikes[existingIndex],
                             Like: (displayLikes[existingIndex].Like || 0) + tempSelfLike
                         };
                     } else {
-                        // 不存在：添加新条目
                         displayLikes.push({ ID: selfTag, Like: tempSelfLike });
                     }
                 }
             }
 
-            // 按赞数降序排序（高到低）
             displayLikes.sort((a, b) => (b.Like || 0) - (a.Like || 0));
-
             const total = displayLikes.reduce((sum, item) => sum + (item.Like || 0), 0);
 
-            const listContainer = document.createElement('div');
-            listContainer.className = 'like-list';
+            // 获取已存在的 .like-list 容器
+            const listContainer = card.querySelector('.like-list');
+            if (!listContainer) return;
 
+            // 清空内容
+            listContainer.innerHTML = '';
 
             // 渲染前10名
             displayLikes.slice(0, 10).forEach(item => {
@@ -310,20 +382,12 @@
                 listContainer.appendChild(itemEl);
             });
 
-            card.appendChild(listContainer);
-            currentLikeList = listContainer;
-
-            const closeHandler = (e) => {
-                if (!card.contains(e.target)) {
-                    listContainer.remove();
-                    document.removeEventListener('click', closeHandler);
-                    currentLikeList = null;
-                    currentCloseHandler = null;
-                }
-            };
-
-            currentCloseHandler = closeHandler;
-            document.addEventListener('click', closeHandler, { capture: false });
+            // 切换显示/隐藏
+            if (listContainer.style.display === 'block') {
+                listContainer.style.display = 'none';
+            } else {
+                listContainer.style.display = 'block';
+            }
         }
 
         // 渲染带数字的点赞按钮：[数字] ❤️
@@ -619,10 +683,16 @@
                     }
                     card.appendChild(header);
                     card.appendChild(heroesContainer);
+                    const likeListPlaceholder = document.createElement('div');
+                    likeListPlaceholder.className = 'like-list';
+                    likeListPlaceholder.style.display = 'none';
+                    card.appendChild(likeListPlaceholder);
                     grid.appendChild(card);
 
                     // 此时 likeCache 已有数据，可正确显示总赞数
                     renderLikeButton(card, user.username);
+
+
                 }
 
                 if (finalUsers.length === 0) {
@@ -645,65 +715,85 @@
  * @param {string} rankElementHTML - 段位 HTML 字符串（如 '<div class="member-rank">...</div>'）
  */
         function attachRankToLikeButton(card, rankElementHTML) {
+            // 获取或创建容器
             let likeContainer = card.querySelector('.like-button-container');
             if (!likeContainer) {
                 likeContainer = document.createElement('div');
                 likeContainer.className = 'like-button-container';
-                likeContainer.style.position = 'absolute';
-                likeContainer.style.top = '8px';
-                likeContainer.style.right = '8px';
-                likeContainer.style.display = 'flex';
-                likeContainer.style.alignItems = 'center';
-                likeContainer.style.gap = '6px';
-                likeContainer.style.zIndex = '10';
-                likeContainer.style.cursor = 'pointer';
-                likeContainer.style.fontSize = '14px';
-                likeContainer.style.fontWeight = 'bold';
-                likeContainer.style.textShadow = '0 0 3px rgba(0,0,0,0.7)';
+                Object.assign(likeContainer.style, {
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px', // 减小间距
+                    zIndex: '10',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    textShadow: '0 0 3px rgba(0,0,0,0.7)',
+                    cursor: 'pointer'
+                });
                 card.style.position = 'relative';
                 card.appendChild(likeContainer);
-
-                const countSpan = document.createElement('span');
-                countSpan.className = 'like-count';
-                countSpan.style.color = '#ffffff';
-                countSpan.textContent = '0';
-
-                const heartIcon = document.createElement('span');
-                heartIcon.innerHTML = '❤️';
-                heartIcon.style.color = '#ff4d6d';
-
-                likeContainer.appendChild(countSpan);
-                likeContainer.appendChild(heartIcon);
             }
 
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = rankElementHTML.trim();
-            const rankEl = tempDiv.firstElementChild;
+            // 清空容器，重新构建（避免重复插入）
+            likeContainer.innerHTML = '';
 
-            if (rankEl) {
-                // ✅ 关键：设为 relative，让内部 absolute 元素正确对齐
-                rankEl.style.position = 'relative';
-                rankEl.style.width = '28px';
-                rankEl.style.height = '28px';
-                rankEl.style.margin = '0';
+            // 1. 添加段位图标（如果有）
+            if (rankElementHTML) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = rankElementHTML.trim();
+                const rankEl = tempDiv.firstElementChild;
+                if (rankEl) {
+                    rankEl.style.position = 'relative';
+                    rankEl.style.width = '24px';   // 👈 稍微缩小一点，更紧凑
+                    rankEl.style.height = '24px';
 
-                const levelSpan = rankEl.querySelector('.rank-level');
-                if (levelSpan) {
-                    // ✅ 精确定位到右下角
-                    levelSpan.style.position = 'absolute';
-                    levelSpan.style.bottom = '2px';
-                    levelSpan.style.right = '2px';
-                    levelSpan.style.fontSize = '10px';
-                    levelSpan.style.fontWeight = 'bold';
-                    levelSpan.style.color = '#fff';
-                    levelSpan.style.backgroundColor = 'rgba(0,0,0,0.6)';
-                    levelSpan.style.borderRadius = '2px';
-                    levelSpan.style.padding = '0 2px';
-                    levelSpan.style.lineHeight = '1';
-                    levelSpan.style.zIndex = '2';
+                    const levelSpan = rankEl.querySelector('.rank-level');
+                    if (levelSpan) {
+                        Object.assign(levelSpan.style, {
+                            position: 'absolute',
+                            bottom: '1px',
+                            right: '1px',
+                            fontSize: '9px',
+                            fontWeight: 'bold',
+                            color: '#fff',
+                            backgroundColor: 'rgba(0,0,0,0.6)',
+                            borderRadius: '2px',
+                            padding: '0 1px',
+                            lineHeight: '1',
+                            zIndex: '2'
+                        });
+                    }
+                    likeContainer.appendChild(rankEl);
                 }
+            }
 
-                likeContainer.insertBefore(rankEl, likeContainer.firstChild);
+            // 2. 添加点赞数字
+            const countSpan = document.createElement('span');
+            countSpan.className = 'like-count';
+            countSpan.style.color = '#ffffff';
+            countSpan.textContent = '0';
+            likeContainer.appendChild(countSpan);
+
+            // 3. 添加心形图标
+            const heartIcon = document.createElement('span');
+            heartIcon.innerHTML = '❤️';
+            heartIcon.style.color = '#ff4d6d';
+            likeContainer.appendChild(heartIcon);
+
+            // 4. 绑定点击事件（如果还没有）
+            if (!likeContainer.hasClickHandler) {
+                likeContainer.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isSelf = card.hasAttribute('data-is-self');
+                    const username = card.querySelector('.member-id')?.textContent;
+                    if (username) {
+                        handleLikeClick(card, username, isSelf);
+                    }
+                });
+                likeContainer.hasClickHandler = true;
             }
         }
 
