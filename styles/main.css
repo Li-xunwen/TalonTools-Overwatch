@@ -582,3 +582,206 @@
                0 0 2px var(--bg-primary),
                0 0 2px var(--bg-primary);
        }
+
+       /* ===== 仅美化评价输入框 ===== */
+       .evaluation-input {
+           border-radius: 8px;
+           padding: 8px 12px;
+           font-size: 0.9rem;
+           border: 1px solid;
+           background-clip: padding-box;
+       }
+
+       [data-theme="dark"] .evaluation-input {
+           background-color: rgba(30, 30, 40, 0.7);
+           border-color: rgba(100, 100, 120, 0.5);
+           color: #f0f0f5;
+       }
+
+       [data-theme="light"] .evaluation-input {
+           background-color: #ffffff;
+           border-color: #ccc;
+           color: #222222;
+       }
+
+       .evaluation-input:focus {
+           outline: none;
+           box-shadow: 0 0 0 2px var(--focus-ring-color);
+       }
+
+       [data-theme="dark"] .evaluation-input:focus {
+           --focus-ring-color: rgba(74, 108, 247, 0.5);
+           border-color: #4a6cf7;
+       }
+
+       [data-theme="light"] .evaluation-input:focus {
+           --focus-ring-color: rgba(67, 97, 238, 0.4);
+           border-color: #4361ee;
+       }
+
+       /* ===== 仅美化评论相关按钮 ===== */
+       .evaluation-submit-btn,
+       .evaluation-edit-btn,
+       .evaluation-update-btn,
+       .evaluation-cancel-btn {
+           border-radius: 8px;
+           padding: 6px 14px;
+           font-size: 0.875rem;
+           font-weight: 500;
+           border: none;
+           cursor: pointer;
+           transition: opacity 0.2s ease;
+       }
+
+       .evaluation-submit-btn:hover,
+       .evaluation-edit-btn:hover,
+       .evaluation-update-btn:hover,
+       .evaluation-cancel-btn:hover {
+           opacity: 0.92;
+       }
+
+       /* 深色模式按钮样式 */
+       [data-theme="dark"] .evaluation-submit-btn,
+       [data-theme="dark"] .evaluation-edit-btn,
+       [data-theme="dark"] .evaluation-update-btn {
+           background-color: #4a6cf7;
+           color: white;
+       }
+
+       [data-theme="dark"] .evaluation-cancel-btn {
+           background-color: rgba(100, 100, 120, 0.3);
+           color: #ddd;
+       }
+
+       /* 浅色模式按钮样式 */
+       [data-theme="light"] .evaluation-submit-btn,
+       [data-theme="light"] .evaluation-edit-btn,
+       [data-theme="light"] .evaluation-update-btn {
+           background-color: #4361ee;
+           color: white;
+       }
+
+       [data-theme="light"] .evaluation-cancel-btn {
+           background-color: #e0e0e0;
+           color: #333;
+       }
+
+       /* ===== 仅美化评论相关按钮（固定尺寸、不换行） ===== */
+.evaluation-submit-btn,
+.evaluation-edit-btn,
+.evaluation-update-btn,
+.evaluation-cancel-btn {
+  /* 固定外观 */
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+
+  /* 关键：防止换行和尺寸变化 */
+  white-space: nowrap;          /* 文字不换行 */
+  flex-shrink: 0;               /* 在 flex 容器中不收缩 */
+  min-width: auto;
+  width: auto;                  /* 由内容决定，但不压缩 */
+  height: auto;
+  line-height: 1.4;             /* 确保垂直居中 */
+
+  /* 防止被父容器挤压变形 */
+  box-sizing: border-box;
+}
+
+/* 悬停效果 */
+.evaluation-submit-btn:hover,
+.evaluation-edit-btn:hover,
+.evaluation-update-btn:hover,
+.evaluation-cancel-btn:hover {
+  opacity: 0.92;
+}
+
+/* 深色模式按钮样式 */
+[data-theme="dark"] .evaluation-submit-btn,
+[data-theme="dark"] .evaluation-edit-btn,
+[data-theme="dark"] .evaluation-update-btn {
+  background-color: #4a6cf7;
+  color: white;
+}
+
+[data-theme="dark"] .evaluation-cancel-btn {
+  background-color: rgba(100, 100, 120, 0.3);
+  color: #ddd;
+}
+
+/* 浅色模式按钮样式 */
+[data-theme="light"] .evaluation-submit-btn,
+[data-theme="light"] .evaluation-edit-btn,
+[data-theme="light"] .evaluation-update-btn {
+  background-color: #4361ee;
+  color: white;
+}
+
+[data-theme="light"] .evaluation-cancel-btn {
+  background-color: #e0e0e0;
+  color: #333;
+}
+
+/* ===== 仅美化评论相关按钮（固定尺寸、不换行） ===== */
+.evaluation-submit-btn,
+.evaluation-edit-btn,
+.evaluation-update-btn,
+.evaluation-cancel-btn {
+  /* 固定外观 */
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+
+  /* 关键：防止换行和尺寸变化 */
+  white-space: nowrap;          /* 文字不换行 */
+  flex-shrink: 0;               /* 在 flex 容器中不收缩 */
+  min-width: auto;
+  width: auto;                  /* 由内容决定，但不压缩 */
+  height: auto;
+  line-height: 1.4;             /* 确保垂直居中 */
+
+  /* 防止被父容器挤压变形 */
+  box-sizing: border-box;
+}
+
+/* 悬停效果 */
+.evaluation-submit-btn:hover,
+.evaluation-edit-btn:hover,
+.evaluation-update-btn:hover,
+.evaluation-cancel-btn:hover {
+  opacity: 0.92;
+}
+
+/* 深色模式按钮样式 */
+[data-theme="dark"] .evaluation-submit-btn,
+[data-theme="dark"] .evaluation-edit-btn,
+[data-theme="dark"] .evaluation-update-btn {
+  background-color: #545869;
+  color: white;
+}
+
+[data-theme="dark"] .evaluation-cancel-btn {
+  background-color: rgba(100, 100, 120, 0.3);
+  color: #ddd;
+}
+
+/* 浅色模式按钮样式 */
+[data-theme="light"] .evaluation-submit-btn,
+[data-theme="light"] .evaluation-edit-btn,
+[data-theme="light"] .evaluation-update-btn {
+  background-color: #545869;
+  color: white;
+}
+
+[data-theme="light"] .evaluation-cancel-btn {
+  background-color: #e0e0e0;
+  color: #333;
+}

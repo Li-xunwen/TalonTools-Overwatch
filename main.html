@@ -341,8 +341,24 @@ mQIDAQAB
             }
         }
 
+        // 全局变量：记录当前打开的 evaluation-list 容器
+        let currentOpenEvaluationList = null;
+
         // 处理评价点击（显示评价列表和输入框）
         function handleEvaluationClick(card, targetUser) {
+            // 如果当前点击的卡片就是已打开的评价列表，则收起
+            const listContainer = card.querySelector('.evaluation-list');
+            if (currentOpenEvaluationList && currentOpenEvaluationList === listContainer && currentOpenEvaluationList.style.display === 'block') {
+                currentOpenEvaluationList.style.display = 'none';
+                currentOpenEvaluationList = null;
+                return;
+            }
+
+            // 关闭其他已打开的列表
+            if (currentOpenEvaluationList) {
+                currentOpenEvaluationList.style.display = 'none';
+            }
+
             renderEvaluationList(card, targetUser);
         }
 
@@ -644,7 +660,7 @@ mQIDAQAB
                 if (!putRes.ok) throw new Error('PUT failed');
 
                 // 更新缓存
-                likeCache.set(targetUser, currentEvaluations);
+                likeCache.set(targetUser, currentLikes);
                 pendingLikes.delete(targetUser);
                 console.log(`✅ 成功提交 ${addCount} 个赞给 ${targetUser}`);
 
@@ -667,12 +683,35 @@ mQIDAQAB
         }
 
         const tempSelfLikeMap = new Map(); // username => temporary like count (for self)
+
+        // 全局变量：记录当前打开的 like-list 容器
+        let currentOpenLikeList = null;
+
         // 触发点赞（UI + 计数）
         function handleLikeClick(card, targetUser, isSelf) {
+            // 关闭任何已打开的评价列表
+            if (currentOpenEvaluationList) {
+                currentOpenEvaluationList.style.display = 'none';
+                currentOpenEvaluationList = null;
+            }
+
             const selfTag = getCookie('auth')?.battletag;
             if (!selfTag) return;
 
             if (isSelf) {
+                // 如果当前点击的卡片就是已打开的点赞列表，则收起
+                const listContainer = card.querySelector('.like-list');
+                if (currentOpenLikeList && currentOpenLikeList === listContainer && currentOpenLikeList.style.display === 'block') {
+                    currentOpenLikeList.style.display = 'none';
+                    currentOpenLikeList = null;
+                    return;
+                }
+
+                // 关闭其他已打开的列表
+                if (currentOpenLikeList) {
+                    currentOpenLikeList.style.display = 'none';
+                }
+
                 renderLikeList(card, targetUser); // 自己也允许看列表（可选）
                 return;
             }
@@ -692,13 +731,10 @@ mQIDAQAB
             clearTimeout(likeTimeouts.get(targetUser));
             likeTimeouts.set(targetUser, setTimeout(() => submitLikes(targetUser), 1200));
 
-            // 👇 关键修复：点击后始终展开列表（不 toggle）
+            // 点击后展开列表
             renderLikeList(card, targetUser);
         }
 
-
-        // 全局变量：记录当前打开的 like-list 容器
-        let currentOpenLikeList = null;
 
         async function renderLikeList(card, username) {
             const selfTag = getCookie('auth')?.battletag;
@@ -769,7 +805,7 @@ mQIDAQAB
                 });
             }
 
-            // 👇 关键逻辑：先关闭当前打开的列表（如果不是同一个）
+            // 关键逻辑：先关闭当前打开的列表（如果不是同一个）
             if (currentOpenLikeList && currentOpenLikeList !== listContainer) {
                 currentOpenLikeList.style.display = 'none';
             }
@@ -777,132 +813,6 @@ mQIDAQAB
             // 显示新列表
             listContainer.style.display = 'block';
             currentOpenLikeList = listContainer; // 更新当前打开的引用
-        }
-
-        // 全局变量：记录当前打开的 like-list 及其关闭函数
-        let currentLikeList = null;
-        let currentCloseHandler = null;
-
-        async function toggleLikeList(card, username) {
-            const selfTag = getCookie('auth')?.battletag;
-            const likes = await fetchLikes(username);
-            let displayLikes = [...likes];
-
-            // 合并临时点赞
-            if (selfTag) {
-                const tempSelfLike = tempSelfLikeMap.get(username) || 0;
-                if (tempSelfLike > 0) {
-                    const existingIndex = displayLikes.findIndex(item => item.ID === selfTag);
-                    if (existingIndex >= 0) {
-                        displayLikes[existingIndex] = {
-                            ...displayLikes[existingIndex],
-                            Like: (displayLikes[existingIndex].Like || 0) + tempSelfLike
-                        };
-                    } else {
-                        displayLikes.push({ ID: selfTag, Like: tempSelfLike });
-                    }
-                }
-            }
-
-            displayLikes.sort((a, b) => (b.Like || 0) - (a.Like || 0));
-            const total = displayLikes.reduce((sum, item) => sum + (item.Like || 0), 0);
-
-            // 获取已存在的 .like-list 容器
-            const listContainer = card.querySelector('.like-list');
-            if (!listContainer) return;
-
-            // 清空内容
-            listContainer.innerHTML = '';
-
-            // 渲染前10名
-            displayLikes.slice(0, 10).forEach(item => {
-                const itemEl = document.createElement('div');
-                itemEl.className = 'like-item';
-                itemEl.style.display = 'flex';
-                itemEl.style.justifyContent = 'space-between';
-                itemEl.style.alignItems = 'center';
-                itemEl.style.padding = '4px 8px';
-                itemEl.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
-
-                itemEl.innerHTML = `
-            <span class="like-item-id">${item.ID}</span>
-            <span class="like-item-like">❤️${item.Like}</span>
-        `;
-                listContainer.appendChild(itemEl);
-            });
-
-            // 切换显示/隐藏
-            if (listContainer.style.display === 'block') {
-                listContainer.style.display = 'none';
-            } else {
-                listContainer.style.display = 'block';
-            }
-        }
-
-        // 渲染带数字的点赞按钮：[数字] ❤️
-        function renderLikeButton(card, username) {
-            let container = card.querySelector('.like-button-container');
-            if (!container) {
-                container = document.createElement('div');
-                container.className = 'like-button-container';
-                container.style.position = 'absolute';
-                container.style.top = '8px';
-                container.style.right = '8px';
-                container.style.display = 'flex';
-                container.style.alignItems = 'center';
-                container.style.gap = '4px';
-                container.style.zIndex = '10';
-                container.style.cursor = 'pointer';
-                container.style.fontSize = '14px';
-                container.style.fontWeight = 'bold';
-                container.style.textShadow = '0 0 3px rgba(0,0,0,0.7)';
-                card.style.position = 'relative';
-                card.appendChild(container);
-
-                const countSpan = document.createElement('span');
-                countSpan.className = 'like-count';
-                countSpan.style.color = '#ffffff'; // 白色数字
-                countSpan.textContent = '0';
-
-                const heartIcon = document.createElement('span');
-                heartIcon.innerHTML = '❤️';
-                heartIcon.style.color = '#ff4d6d';
-
-                container.appendChild(countSpan);
-                container.appendChild(heartIcon);
-
-                container.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const isSelf = card.hasAttribute('data-is-self');
-                    handleLikeClick(card, username, isSelf);
-                });
-            }
-
-            // 初始化显示真实总赞数
-            updateLikeCountDisplay(card, username);
-        }
-
-        // 更新按钮旁的数字（含临时增量）
-        function updateLikeCountDisplay(card, username) {
-            const countSpan = card.querySelector('.like-count');
-            if (!countSpan) return;
-
-            const baseTotal = getTotalLikes(username);
-            const pending = pendingLikes.get(username) || 0;
-            countSpan.textContent = baseTotal + pending;
-        }
-
-        // 更新按钮上的总赞数（支持临时增量）
-        function updateLikeButtonDisplay(card, username) {
-            const likeBtn = card.querySelector('.like-button');
-            if (!likeBtn) return;
-
-            const countSpan = likeBtn.querySelector('.like-count');
-            if (!countSpan) return;
-
-            const baseTotal = getTotalLikes(username);
-            const tempInc = pendingLikes.get(username) || 0; // 注意：pending 是已点但未提交的，应计入显示
-            countSpan.textContent = baseTotal + tempInc;
         }
 
         // ========== 原有页面逻辑（封装为函数）==========
@@ -1064,8 +974,8 @@ mQIDAQAB
                 // ✅ 关键：并行预加载所有用户的点赞数据（确保 likeCache 填充）
                 await Promise.all(allUsers.map(user => fetchLikes(user.username)));
 
-                // ✅ 关键：并行预加载所有用户的评价数据（确保 evaluationCache 填充）
-                await Promise.all(allUsers.map(user => fetchEvaluations(user.username)));
+                // ✅ 不再预加载评价数据，仅在点击时加载
+                // await Promise.all(allUsers.map(user => fetchEvaluations(user.username)));
 
                 // ✅ 关键：排序（此时缓存已就绪）
                 const sortedUsers = sortMembersBySelfLike(allUsers);
@@ -1278,27 +1188,6 @@ mQIDAQAB
             }
         }
 
-        // 示例：当用户点击某个用户的点赞按钮时
-        function onLikeButtonClick(targetUser, card) {
-            const self = getCookie('auth')?.battletag;
-            if (!self || targetUser === self) return;
-
-            // 1. 增加临时 UI 增量
-            const currentTemp = tempLikeIncrements.get(targetUser) || 0;
-            tempLikeIncrements.set(targetUser, currentTemp + 1);
-
-            // 2. 立即更新显示（看起来点了就+1）
-            updateTotalLikeDisplay(card, targetUser);
-
-            // 3. 加入待提交队列（你原有的 pendingLikes 逻辑）
-            const currentPending = pendingLikes.get(targetUser) || 0;
-            pendingLikes.set(targetUser, currentPending + 1);
-
-            // 4. 触发延迟提交（如 3 秒后）
-            clearTimeout(likeTimeouts.get(targetUser));
-            likeTimeouts.set(targetUser, setTimeout(() => submitLikes(targetUser), 3000));
-        }
-
 
         function sortMembersBySelfLike(members) {
             const selfTag = getCookie('auth')?.battletag;
@@ -1328,7 +1217,25 @@ mQIDAQAB
                 return totalB - totalA; // 高赞在前
             });
         }
+        // 更新卡片上显示的点赞数量
+        function updateLikeCountDisplay(card, username) {
+            const likeCountElement = card.querySelector('.like-count');
+            if (!likeCountElement) return;
 
+            // 从缓存获取已提交的点赞数据
+            const likes = likeCache.get(username) || [];
+            const selfTag = getCookie('auth')?.battletag;
+            let total = getTotalLikes(username); // 已提交的总数
+
+            // 加上当前未提交的临时增量（自己点的）
+            const tempIncrement = tempSelfLikeMap.get(username) || 0;
+            total += tempIncrement;
+
+            // 如果是自己看自己，且有 pending 点赞，也应显示（可选）
+            // 此处已包含 tempSelfLikeMap，所以无需额外处理
+
+            likeCountElement.textContent = total;
+        }
 
         // ========== 评价相关逻辑 ==========
 
@@ -1353,11 +1260,27 @@ mQIDAQAB
 
         // 处理评价点击（显示评价列表和输入框）
         function handleEvaluationClick(card, targetUser) {
+            // 如果当前点击的卡片就是已打开的评价列表，则收起
+            const listContainer = card.querySelector('.evaluation-list');
+            if (currentOpenEvaluationList && currentOpenEvaluationList === listContainer && currentOpenEvaluationList.style.display === 'block') {
+                currentOpenEvaluationList.style.display = 'none';
+                currentOpenEvaluationList = null;
+                return;
+            }
+
+            // 关闭任何已打开的点赞列表
+            if (currentOpenLikeList) {
+                currentOpenLikeList.style.display = 'none';
+                currentOpenLikeList = null;
+            }
+
+            // 关闭其他已打开的评价列表
+            if (currentOpenEvaluationList) {
+                currentOpenEvaluationList.style.display = 'none';
+            }
+
             renderEvaluationList(card, targetUser);
         }
-
-        // 全局变量：记录当前打开的 evaluation-list 容器
-        let currentOpenEvaluationList = null;
 
         // 渲染某个用户的评价列表（username = 被评价者）
         async function renderEvaluationList(card, username) {
@@ -1426,7 +1349,7 @@ mQIDAQAB
             <span class="evaluation-item-evaluation">${escapeHtml(item.evaluation)}</span>
           </div>
           <div class="evaluation-actions">
-            <span class="evaluation-read-only">只读</span>
+            <span class="evaluation-read-only"></span>
           </div>
         `;
                     }
