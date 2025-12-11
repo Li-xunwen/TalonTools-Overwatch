@@ -8,17 +8,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Mirror to Gitee via HTTPS
-        uses: Yikun/hub-mirror-action@v0.18.0  # 使用明确版本，避免 master 不稳定
+        uses: Yikun/hub-mirror-action@v0.17.3  # ✅ 确认存在的版本
         with:
           src: github/Li-xunwen
           dst: gitee/Li-xunwen
           mappings: |
             TalonTools-Overwatch=>talon-tools-overwatch
-            intelligent-logistics-car=>intelligent-logistics-car
-            RemoteControlCarRTCWeb=>remote-control-car-rtc-web
-            xunwen=>xunwen
           clone_style: https
-          push_style: https        # 👈 关键！强制推送也用 HTTPS
+          # v0.17.3 虽未显式支持 push_style，
+          # 但可通过 force_update + dst_token 自动走 HTTPS（需配合正确配置）
           dst_token: ${{ secrets.GITEE_TOKEN }}
           force_update: true
           static_list: ""
