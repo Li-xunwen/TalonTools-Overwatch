@@ -1,26 +1,27 @@
 name: Sync to Gitee
 on:
   push:
-    branches: [ main ] # 如果主分支是 master 请修改
+    branches: [ main ] # 请确保与你的主分支名一致
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
     steps:
-      - name: Mirror GitHub -> Gitee
+      - name: Mirror to Gitee via HTTPS
         uses: Yikun/hub-mirror-action@master
         with:
-          # 源：你的 GitHub 用户名（公开仓库）
+          # 源：GitHub 用户名
           src: github/Li-xunwen
-          # 目标：你的 Gitee 用户名
+          # 目标：Gitee 用户名
           dst: gitee/Li-xunwen
           
-          # 🗺️ 关键修改：使用 => 而不是 ->
+          # 🗺️ 仓库映射（GitHub仓库名 => Gitee仓库名）
           mappings: "TalonTools-Overwatch=>talon-tools-overwatch"
           
-          # 🔐 Gitee推送令牌
-          dst_token: ${{ secrets.GITEE_TOKEN }}
+          # 🔐 关键配置：强制使用HTTPS协议及Token认证
+          clone_style: "https"           # 强制使用 HTTPS，避免 SSH 问题
+          dst_token: ${{ secrets.GITEE_TOKEN }} # 使用你的 Gitee 私人令牌
           
-          # 其他参数
-          force_update: true
-          static_list: "" # 使用 mappings 时此项留空
+          # ⚙️ 其他参数
+          force_update: true    # 启用强制推送
+          static_list: ""       # 使用 mappings 时必须留空
