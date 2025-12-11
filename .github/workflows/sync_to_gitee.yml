@@ -1,8 +1,7 @@
 name: Sync to Gitee
-
 on:
-  push: # 当向 GitHub 仓库推送代码时触发同步
-    branches: [ main ] # 可根据需要修改为你工作的分支，如 master
+  push:
+    branches: [ main ] # 如果主分支是 master，请修改此处
 
 jobs:
   mirror:
@@ -11,14 +10,18 @@ jobs:
       - name: Mirror GitHub -> Gitee
         uses: Yikun/hub-mirror-action@master
         with:
+          # 源：你的 GitHub 用户名
           src: github/Li-xunwen
+          # 目标：你的 Gitee 用户名
           dst: gitee/Li-xunwen
           
-          src_token: ${{ secrets.GH_TOKEN }}
+
+          mappings: "TalonTools-Overwatch->talon-tools-overwatch"
+          
+
           dst_token: ${{ secrets.GITEE_TOKEN }}
           
-          mappings: “TalonTools-Overwatch->talon-tools-overwatch” 
-          
-          # 其他优化参数
-          force_update: true # 强制更新，处理历史差异
-          static_list: “” # 使用 mappings 时，此项必须留空
+          # 其他参数
+          force_update: true
+          # static_list 留空即可
+          static_list: ""
