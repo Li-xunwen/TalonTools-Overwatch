@@ -115,6 +115,455 @@
             }
         }
 
+        // ========== 评价相关逻辑 ==========
+        const evaluationCache = new Map(); // 缓存每个用户的评价数据 { username => evaluationArray }
+        const pendingEvaluations = new Map(); // 记录待提交的评价 { targetUser => evaluationText }
+
+        // 获取某用户的评价数据（带缓存），优先从talon-public获取
+        async function fetchEvaluations(username) {
+            if (evaluationCache.has(username)) {
+                return evaluationCache.get(username);
+            }
+
+            const encoded = encodeURIComponent(username);
+
+            // 优先从talon-public获取
+            let url = `https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/${encoded}/evaluation.json?t=${Date.now()}`;
+            let res;
+            try {
+                res = await fetch(url, { cache: 'no-store' });
+                if (!res.ok) {
+                    throw new Error('Public evaluation not found');
+                }
+                const data = await res.json();
+                if (!Array.isArray(data)) throw new Error('Invalid format');
+                evaluationCache.set(username, data);
+                return data;
+            } catch (err) {
+                console.warn(`Failed to load public evaluations for ${username}, trying admin:`, err);
+            }
+
+            // 如果public获取失败，尝试从talon-admin获取
+            url = `https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encoded}/evaluation.json?t=${Date.now()}`;
+            try {
+                res = await fetch(url, { cache: 'no-store' });
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        evaluationCache.set(username, []);
+                        return [];
+                    }
+                    throw new Error('Network error');
+                }
+                const data = await res.json();
+                if (!Array.isArray(data)) throw new Error('Invalid format');
+                evaluationCache.set(username, data);
+                return data;
+            } catch (err) {
+                console.warn(`Failed to load admin evaluations for ${username}:`, err);
+                evaluationCache.set(username, []);
+                return [];
+            }
+        }
+
+        // 提交评价变更
+        async function submitEvaluation(targetUser, evaluationText) {
+            const selfTag = getCookie('auth')?.battletag;
+            if (!selfTag) return;
+
+            const encodedSelf = encodeURIComponent(selfTag);
+            const encodedTarget = encodeURIComponent(targetUser);
+            const url = `https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTarget}/evaluation.json`;
+
+            let currentEvaluations = await fetchEvaluations(targetUser);
+            currentEvaluations = [...currentEvaluations]; // clone
+
+            // 查找是否存在当前用户的评价
+            const existingIndex = currentEvaluations.findIndex(item => item.ID === selfTag);
+
+            if (evaluationText.trim() !== '') {
+                // 更新或添加评价
+                if (existingIndex >= 0) {
+                    currentEvaluations[existingIndex].evaluation = evaluationText.trim();
+                } else {
+                    currentEvaluations.push({ ID: selfTag, evaluation: evaluationText.trim() });
+                }
+            } else {
+                // 删除评价
+                if (existingIndex >= 0) {
+                    currentEvaluations.splice(existingIndex, 1);
+                }
+            }
+
+            try {
+                const putRes = await fetch(url, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentEvaluations)
+                });
+
+                if (!putRes.ok) throw new Error('PUT failed');
+
+                // 更新缓存
+                evaluationCache.set(targetUser, currentEvaluations);
+                pendingEvaluations.delete(targetUser);
+                console.log(`✅ 成功提交评价给 ${targetUser}`);
+
+                // 生成签名文件
+                await generateEvaluationSignature(encodedTarget, currentEvaluations);
+
+                // 更新评价显示
+                updateEvaluationDisplay(targetUser);
+
+                // 显示成功提示
+                alert('评价提交成功！');
+
+                // 重新渲染评价列表以更新UI
+                const grid = document.getElementById('membersGrid');
+                if (grid) {
+                    const cards = grid.querySelectorAll('.member-card');
+                    for (const card of cards) {
+                        const idEl = card.querySelector('.member-id');
+                        if (idEl && idEl.textContent === targetUser) {
+                            renderEvaluationList(card, targetUser);
+                            break;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(`❌ 提交评价失败 (${targetUser}):`, err);
+                alert('评价提交失败，请稍后重试');
+            }
+        }
+
+        // 生成评价签名文件
+        async function generateEvaluationSignature(encodedTarget, evaluations) {
+            const jsonStr = JSON.stringify(evaluations, null, 2);
+
+            const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(jsonStr));
+            const fullHashArray = new Uint8Array(hashBuffer);
+            const halfHashArray = fullHashArray.slice(0, 16);
+            const fileHash = Array.from(halfHashArray).map(b => b.toString(16).padStart(2, '0')).join('');
+
+            const auth = getCookie('auth');
+            if (!auth || !auth.passwordHash) {
+                console.error('Cookie 中缺少 passwordHash 字段');
+                return;
+            }
+            const passwordHash = auth.passwordHash.toLowerCase();
+
+            const timestamp = Date.now();
+            const selfTag = getCookie('auth')?.battletag;
+            const signaturePayload = JSON.stringify({
+                ID: selfTag,
+                F: fileHash,
+                T: timestamp,
+                P: passwordHash
+            });
+
+            const encoder = new TextEncoder();
+            const payloadBytes = encoder.encode(signaturePayload);
+
+            if (payloadBytes.length > 190) {
+                console.error(`❌ 签名数据过长（${payloadBytes.length} 字节），最大允许 190 字节`);
+                return;
+            }
+
+            const publicKeyPem = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsoywmxv9e4Td4yp9g4bl
+KpfQvjBXc+Hp7/I+el7aSzozm1awUXssKoAzXvvI9O2SpZ/1I6qH8lm3+cRmuKfl
+nKbwdIWC0njlhJLVuNWWhGFZE3H+sD1Ntmv4F1LARFVe17LcO6GzfmFLFnBYeGnl
+wsheIlz6tSqq5pfExMCwkWR5vcltfYi1s1mF+i+69M3YzNOEpzkkXsvWrXSmpncA
+eeQ4cVYAxpWQMLbG4ozwxWSo6xLsM9a5TNKAYKVOuJVbBBfNvmbd/7wGbIkV4yPK
+Rslt7C0rskkC4qjr+AwYoo+DryivVhnMLnehGiUjcFn7FX4EvZmZb8OCLId8510g
+mQIDAQAB
+-----END PUBLIC KEY-----`;
+
+            let binaryDer;
+            try {
+                const pemHeader = "-----BEGIN PUBLIC KEY-----";
+                const pemFooter = "-----END PUBLIC KEY-----";
+                const pemContents = publicKeyPem
+                    .replace(pemHeader, '')
+                    .replace(pemFooter, '')
+                    .replace(/\s/g, '');
+                const binaryDerString = atob(pemContents);
+                binaryDer = new Uint8Array(binaryDerString.length);
+                for (let i = 0; i < binaryDerString.length; i++) {
+                    binaryDer[i] = binaryDerString.charCodeAt(i);
+                }
+            } catch (e) {
+                console.error('❌ 公钥解析失败', e);
+                return;
+            }
+
+            let publicKey;
+            try {
+                publicKey = await crypto.subtle.importKey(
+                    "spki",
+                    binaryDer.buffer,
+                    { name: "RSA-OAEP", hash: "SHA-256" },
+                    true,
+                    ["encrypt"]
+                );
+            } catch (e) {
+                console.error('❌ RSA 公钥导入失败：' + e.message);
+                return;
+            }
+
+            let encrypted;
+            try {
+                encrypted = await crypto.subtle.encrypt(
+                    { name: "RSA-OAEP", hash: "SHA-256" },
+                    publicKey,
+                    payloadBytes
+                );
+            } catch (e) {
+                console.error('❌ 签名加密失败：' + e.message);
+                return;
+            }
+
+            const encryptedArray = new Uint8Array(encrypted);
+            let binary = '';
+            for (let i = 0; i < encryptedArray.length; i++) {
+                binary += String.fromCharCode(encryptedArray[i]);
+            }
+            const signatureBase64 = btoa(binary);
+
+            try {
+                await fetch(`https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTarget}/evaluation.signature`, {
+                    method: 'PUT',
+                    body: signatureBase64,
+                    headers: { 'Content-Type': 'text/plain;charset=UTF-8' }
+                });
+            } catch (err) {
+                console.error('❌ 签名上传失败', err);
+                return;
+            }
+        }
+
+        // 处理评价点击（显示评价列表和输入框）
+        function handleEvaluationClick(card, targetUser) {
+            renderEvaluationList(card, targetUser);
+        }
+
+        async function renderEvaluationList(card, username) {
+            const selfTag = getCookie('auth')?.battletag;
+            const evaluations = await fetchEvaluations(username);
+
+            // 获取或创建 .evaluation-list 容器
+            let listContainer = card.querySelector('.evaluation-list');
+            if (!listContainer) {
+                listContainer = document.createElement('div');
+                listContainer.className = 'evaluation-list';
+                Object.assign(listContainer.style, {
+                    position: 'absolute',
+                    top: '100%',
+                    left: '0',
+                    right: '0',
+                    backgroundColor: 'rgba(0,0,0,0.85)',
+                    borderRadius: '0 0 8px 8px',
+                    padding: '8px 0',
+                    zIndex: '5',
+                    display: 'none',
+                    maxHeight: '300px',
+                    overflowY: 'auto'
+                });
+                card.style.position = 'relative';
+                card.appendChild(listContainer);
+            }
+
+            // 清空内容
+            listContainer.innerHTML = '';
+
+            // 显示现有评价
+            if (evaluations.length === 0) {
+                listContainer.innerHTML = '<div style="padding:6px;text-align:center;color:#aaa;">暂无评价</div>';
+            } else {
+                evaluations.forEach(item => {
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'evaluation-item';
+                    Object.assign(itemEl.style, {
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '4px 12px',
+                        borderBottom: '1px solid rgba(255,255,255,0.1)'
+                    });
+
+                    // 如果是当前用户自己的评价，显示编辑按钮
+                    if (selfTag && item.ID === selfTag) {
+                        itemEl.innerHTML = `
+                    <div class="evaluation-item-content">
+                        <span class="evaluation-item-id">${item.ID}:</span>
+                        <span class="evaluation-item-evaluation" id="eval-${item.ID}">${item.evaluation}</span>
+                    </div>
+                    <div class="evaluation-actions">
+                        <button class="evaluation-edit-btn" data-id="${item.ID}" data-username="${username}">修改</button>
+                    </div>
+                `;
+                    } else {
+                        // 非当前用户评价，不显示编辑按钮
+                        itemEl.innerHTML = `
+                    <div class="evaluation-item-content">
+                        <span class="evaluation-item-id">${item.ID}:</span>
+                        <span class="evaluation-item-evaluation">${item.evaluation}</span>
+                    </div>
+                    <div class="evaluation-actions">
+                        <span class="evaluation-read-only">只读</span>
+                    </div>
+                `;
+                    }
+                    listContainer.appendChild(itemEl);
+                });
+            }
+
+            // 添加评价输入框（仅对自己可见，且当前用户没有评价时）
+            if (selfTag) {
+                const existingEval = evaluations.find(item => item.ID === selfTag);
+                if (!existingEval) {
+                    const inputContainer = document.createElement('div');
+                    inputContainer.className = 'evaluation-input-container';
+                    inputContainer.style.padding = '8px';
+                    inputContainer.style.borderTop = '1px solid rgba(255,255,255,0.1)';
+
+                    inputContainer.innerHTML = `
+                    <textarea class="evaluation-input" placeholder="请输入评价（最多32字）" maxlength="32" rows="2"></textarea>
+                    <div class="evaluation-input-actions">
+                        <button class="evaluation-submit-btn" data-username="${username}">提交</button>
+                    </div>
+                `;
+
+                    listContainer.appendChild(inputContainer);
+
+                    const input = inputContainer.querySelector('.evaluation-input');
+                    const submitBtn = inputContainer.querySelector('.evaluation-submit-btn');
+
+                    submitBtn.addEventListener('click', () => {
+                        const evalText = input.value.trim();
+                        if (evalText === '') {
+                            if (confirm('评价内容为空，确定要提交吗？')) {
+                                submitEvaluation(username, evalText);
+                            }
+                        } else if (evalText.length > 32) {
+                            alert('评价不能超过32个字符！');
+                        } else {
+                            submitEvaluation(username, evalText);
+                        }
+                    });
+                }
+            }
+
+            // 关键逻辑：先关闭当前打开的列表（如果不是同一个）
+            if (currentOpenEvaluationList && currentOpenEvaluationList !== listContainer) {
+                currentOpenEvaluationList.style.display = 'none';
+            }
+
+            // 显示新列表
+            listContainer.style.display = 'block';
+            currentOpenEvaluationList = listContainer; // 更新当前打开的引用
+
+            // 绑定编辑按钮事件 - 使用事件委托，确保所有编辑按钮都能响应
+            if (selfTag) {
+                // 事件委托方式绑定编辑按钮事件
+                listContainer.addEventListener('click', function (event) {
+                    const editBtn = event.target.closest('.evaluation-edit-btn');
+                    if (editBtn) {
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        const id = editBtn.getAttribute('data-id');
+                        const username = editBtn.getAttribute('data-username');
+                        const evalTextElement = document.getElementById(`eval-${id}`);
+                        let originalText = evalTextElement.textContent || '';
+                        // 清理：移除换行符，压缩多个空格为一个，并 trim 首尾
+                        originalText = originalText.replace(/[\r\n]+/g, ' ') // 换行转空格
+                            .replace(/\s+/g, ' ')     // 多个空白合并
+                            .trim();
+
+                        // 转义 HTML 特殊字符，防止 XSS（虽然来源可信，但好习惯）
+                        const escapedText = originalText
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;')
+                            .replace(/'/g, '&#039;');
+
+                        evalTextElement.innerHTML = `<textarea class="evaluation-edit-input" maxlength="32" rows="2">${escapedText}</textarea>`;
+                        // 将按钮替换为提交和取消按钮
+                        const actionsContainer = editBtn.parentElement;
+                        actionsContainer.innerHTML = `
+                            <button class="evaluation-update-btn" data-id="${id}" data-username="${username}">提交</button>
+                            <button class="evaluation-cancel-btn" data-id="${id}" data-username="${username}">取消</button>
+                        `;
+
+                        // 绑定更新按钮事件
+                        const updateBtn = actionsContainer.querySelector('.evaluation-update-btn');
+                        updateBtn && updateBtn.addEventListener('click', function () {
+                            const newEvalText = evalTextElement.querySelector('.evaluation-edit-input').value.trim();
+                            if (newEvalText.length > 32) {
+                                alert('评价不能超过32个字符！');
+                                return;
+                            }
+                            submitEvaluation(username, newEvalText);
+                        });
+
+                        // 绑定取消按钮事件
+                        const cancelBtn = actionsContainer.querySelector('.evaluation-cancel-btn');
+                        cancelBtn && cancelBtn.addEventListener('click', function () {
+                            // 恢复原来的显示
+                            evalTextElement.textContent = originalText;
+                            actionsContainer.innerHTML = `
+                                <button class="evaluation-edit-btn" data-id="${id}" data-username="${username}">修改</button>
+                            `;
+                        });
+                    }
+
+                    // 处理更新按钮点击
+                    const updateBtn = event.target.closest('.evaluation-update-btn');
+                    if (updateBtn) {
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        const id = updateBtn.getAttribute('data-id');
+                        const username = updateBtn.getAttribute('data-username');
+                        const evalTextElement = document.getElementById(`eval-${id}`);
+                        const newEvalText = evalTextElement.querySelector('.evaluation-edit-input').value.trim();
+
+                        if (newEvalText.length > 32) {
+                            alert('评价不能超过32个字符！');
+                            return;
+                        }
+                        submitEvaluation(username, newEvalText);
+                    }
+
+                    // 处理取消按钮点击
+                    const cancelBtn = event.target.closest('.evaluation-cancel-btn');
+                    if (cancelBtn) {
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        const id = cancelBtn.getAttribute('data-id');
+                        const username = cancelBtn.getAttribute('data-username');
+                        const evalTextElement = document.getElementById(`eval-${id}`);
+                        const originalText = evalTextElement.textContent;
+
+                        // 恢复原来的显示
+                        evalTextElement.textContent = originalText;
+                        const actionsContainer = cancelBtn.parentElement;
+                        actionsContainer.innerHTML = `
+                            <button class="evaluation-edit-btn" data-id="${id}" data-username="${username}">修改</button>
+                        `;
+                    }
+                });
+            }
+        }
+
+        // 更新评价显示
+        function updateEvaluationDisplay(username) {
+            // 这里可以更新相关UI，如评价数量等
+            // 暂时留空，可根据需要扩展
+        }
+
         // ========== 点赞相关逻辑 ==========
         const likeCache = new Map(); // 缓存每个用户的点赞数据 { username => likeArray }
         const pendingLikes = new Map(); // 记录待提交的点赞增量 { targetUser => count }
@@ -195,7 +644,7 @@
                 if (!putRes.ok) throw new Error('PUT failed');
 
                 // 更新缓存
-                likeCache.set(targetUser, currentLikes);
+                likeCache.set(targetUser, currentEvaluations);
                 pendingLikes.delete(targetUser);
                 console.log(`✅ 成功提交 ${addCount} 个赞给 ${targetUser}`);
 
@@ -615,6 +1064,9 @@
                 // ✅ 关键：并行预加载所有用户的点赞数据（确保 likeCache 填充）
                 await Promise.all(allUsers.map(user => fetchLikes(user.username)));
 
+                // ✅ 关键：并行预加载所有用户的评价数据（确保 evaluationCache 填充）
+                await Promise.all(allUsers.map(user => fetchEvaluations(user.username)));
+
                 // ✅ 关键：排序（此时缓存已就绪）
                 const sortedUsers = sortMembersBySelfLike(allUsers);
 
@@ -692,12 +1144,37 @@
                     likeListPlaceholder.style.display = 'none';
                     card.appendChild(likeListPlaceholder);
 
+                    // 👇 添加评价按钮（右下角）
+                    const evaluationBtn = document.createElement('div');
+                    evaluationBtn.className = 'evaluation-button';
+                    evaluationBtn.innerHTML = '💬';
+                    evaluationBtn.style.position = 'absolute';
+                    evaluationBtn.style.bottom = '8px';
+                    evaluationBtn.style.right = '8px';
+                    evaluationBtn.style.cursor = 'pointer';
+                    evaluationBtn.style.fontSize = '18px';
+                    evaluationBtn.style.zIndex = '10';
+                    evaluationBtn.style.textShadow = '0 0 3px rgba(0,0,0,0.7)';
+
+                    evaluationBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        handleEvaluationClick(card, user.username);
+                    });
+
+                    card.appendChild(evaluationBtn);
+
+                    // 👇 添加空的 evaluation-list 占位（用于后续展开）
+                    const evaluationListPlaceholder = document.createElement('div');
+                    evaluationListPlaceholder.className = 'evaluation-list';
+                    evaluationListPlaceholder.style.display = 'none';
+                    card.appendChild(evaluationListPlaceholder);
+
                     // 👇 插入到网格
                     grid.appendChild(card);
                 }
 
                 if (sortedUsers.length === 0) {
-                    grid.innerHTML = '<p style="text-align:center;color:var(--accent);">📭 暂无成员</p>';
+                    grid.innerHTML = '<p style="text-align:center;color:var(--accent);">ostringstream</p>';
                 }
             } catch (err) {
                 console.error('加载成员名单失败:', err);
@@ -851,7 +1328,243 @@
                 return totalB - totalA; // 高赞在前
             });
         }
-        
+
+
+        // ========== 评价相关逻辑 ==========
+
+        // 清理文本函数
+        function cleanEvaluationText(text) {
+            return (text || '')
+                .replace(/[\r\n]+/g, ' ')  // 换行转空格
+                .replace(/\s+/g, ' ')       // 多个空格转一个
+                .trim();
+        }
+
+        // 转义 HTML 特殊字符（防 XSS）
+        function escapeHtml(text) {
+            if (typeof text !== 'string') return '';
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // 处理评价点击（显示评价列表和输入框）
+        function handleEvaluationClick(card, targetUser) {
+            renderEvaluationList(card, targetUser);
+        }
+
+        // 全局变量：记录当前打开的 evaluation-list 容器
+        let currentOpenEvaluationList = null;
+
+        // 渲染某个用户的评价列表（username = 被评价者）
+        async function renderEvaluationList(card, username) {
+            const selfTag = getCookie('auth')?.battletag;
+            const evaluations = await fetchEvaluations(username);
+
+            // 获取或创建 .evaluation-list 容器
+            let listContainer = card.querySelector('.evaluation-list');
+            if (!listContainer) {
+                listContainer = document.createElement('div');
+                listContainer.className = 'evaluation-list';
+                Object.assign(listContainer.style, {
+                    position: 'absolute',
+                    top: '100%',
+                    left: '0',
+                    right: '0',
+                    backgroundColor: 'rgba(0,0,0,0.85)',
+                    borderRadius: '0 0 8px 8px',
+                    padding: '8px 0',
+                    zIndex: '5',
+                    display: 'none',
+                    maxHeight: '300px',
+                    overflowY: 'auto'
+                });
+                card.style.position = 'relative';
+                card.appendChild(listContainer);
+            }
+
+            // 清空内容
+            listContainer.innerHTML = '';
+
+            // 显示现有评价
+            if (evaluations.length === 0) {
+                listContainer.innerHTML = '<div style="padding:6px;text-align:center;color:#aaa;">暂无评价</div>';
+            } else {
+                evaluations.forEach(item => {
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'evaluation-item';
+                    Object.assign(itemEl.style, {
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '4px 12px',
+                        borderBottom: '1px solid rgba(255,255,255,0.1)'
+                    });
+
+                    // ✅ 生成唯一 ID：eval-被评价者-评价者
+                    const uniqueId = `eval-${username}-${item.ID}`;
+
+                    // 如果是当前用户自己的评价，显示编辑按钮
+                    if (selfTag && item.ID === selfTag) {
+                        itemEl.innerHTML = `
+          <div class="evaluation-item-content">
+            <span class="evaluation-item-id">${item.ID}:</span>
+            <span class="evaluation-item-evaluation" id="${uniqueId}">${escapeHtml(item.evaluation)}</span>
+          </div>
+          <div class="evaluation-actions">
+            <button class="evaluation-edit-btn" data-id="${item.ID}" data-username="${username}">修改</button>
+          </div>
+        `;
+                    } else {
+                        // 非当前用户评价，不显示编辑按钮
+                        itemEl.innerHTML = `
+          <div class="evaluation-item-content">
+            <span class="evaluation-item-id">${item.ID}:</span>
+            <span class="evaluation-item-evaluation">${escapeHtml(item.evaluation)}</span>
+          </div>
+          <div class="evaluation-actions">
+            <span class="evaluation-read-only">只读</span>
+          </div>
+        `;
+                    }
+                    listContainer.appendChild(itemEl);
+                });
+            }
+
+            // 添加评价输入框（仅对自己可见，且当前用户没有评价时）
+            if (selfTag) {
+                const existingEval = evaluations.find(item => item.ID === selfTag);
+                if (!existingEval) {
+                    const inputContainer = document.createElement('div');
+                    inputContainer.className = 'evaluation-input-container';
+                    inputContainer.style.padding = '8px';
+                    inputContainer.style.borderTop = '1px solid rgba(255,255,255,0.1)';
+
+                    inputContainer.innerHTML = `
+        <textarea class="evaluation-input" placeholder="请输入评价（最多32字）" maxlength="32" rows="2"></textarea>
+        <div class="evaluation-input-actions">
+          <button class="evaluation-submit-btn" data-username="${username}">提交</button>
+        </div>
+      `;
+
+                    listContainer.appendChild(inputContainer);
+
+                    const input = inputContainer.querySelector('.evaluation-input');
+                    const submitBtn = inputContainer.querySelector('.evaluation-submit-btn');
+
+                    submitBtn.addEventListener('click', () => {
+                        const evalText = input.value.trim();
+                        if (evalText === '') {
+                            if (confirm('评价内容为空，确定要提交吗？')) {
+                                submitEvaluation(username, evalText);
+                            }
+                        } else if (evalText.length > 32) {
+                            alert('评价不能超过32个字符！');
+                        } else {
+                            submitEvaluation(username, evalText);
+                        }
+                    });
+                }
+            }
+
+            // 关键逻辑：先关闭当前打开的列表（如果不是同一个）
+            if (currentOpenEvaluationList && currentOpenEvaluationList !== listContainer) {
+                currentOpenEvaluationList.style.display = 'none';
+            }
+
+            // 显示新列表
+            listContainer.style.display = 'block';
+            currentOpenEvaluationList = listContainer; // 更新当前打开的引用
+
+            // ✅ 修正：为当前列表单独绑定事件（避免重复绑定）
+            // 先移除旧的监听器（如果存在）
+            const existingListener = listContainer._evaluationListener;
+            if (existingListener) {
+                listContainer.removeEventListener('click', existingListener);
+            }
+
+            // 创建新的事件监听器
+            const newListener = function (event) {
+                const editBtn = event.target.closest('.evaluation-edit-btn');
+                if (editBtn) {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const id = editBtn.getAttribute('data-id');
+                    const username = editBtn.getAttribute('data-username');
+                    // ✅ 使用唯一 ID 查找元素
+                    const evalTextElement = document.getElementById(`eval-${username}-${id}`);
+                    if (!evalTextElement) {
+                        console.error('未找到评价元素:', `eval-${username}-${id}`);
+                        return;
+                    }
+
+                    let originalText = evalTextElement.textContent || '';
+                    originalText = cleanEvaluationText(originalText);
+
+                    evalTextElement.innerHTML = `<textarea class="evaluation-edit-input" maxlength="32" rows="2">${escapeHtml(originalText)}</textarea>`;
+
+                    const actionsContainer = editBtn.parentElement;
+                    actionsContainer.innerHTML = `
+        <button class="evaluation-update-btn" data-id="${id}" data-username="${username}">提交</button>
+        <button class="evaluation-cancel-btn" data-id="${id}" data-username="${username}">取消</button>
+      `;
+                }
+
+                const updateBtn = event.target.closest('.evaluation-update-btn');
+                if (updateBtn) {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const id = updateBtn.getAttribute('data-id');
+                    const username = updateBtn.getAttribute('data-username');
+                    // ✅ 使用唯一 ID 查找元素
+                    const evalTextElement = document.getElementById(`eval-${username}-${id}`);
+                    if (!evalTextElement) return;
+
+                    const newEvalText = evalTextElement.querySelector('.evaluation-edit-input').value.trim();
+                    if (newEvalText.length > 32) {
+                        alert('评价不能超过32个字符！');
+                        return;
+                    }
+                    submitEvaluation(username, newEvalText);
+                }
+
+                const cancelBtn = event.target.closest('.evaluation-cancel-btn');
+                if (cancelBtn) {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    const id = cancelBtn.getAttribute('data-id');
+                    const username = cancelBtn.getAttribute('data-username');
+                    // ✅ 使用唯一 ID 查找元素
+                    const evalTextElement = document.getElementById(`eval-${username}-${id}`);
+                    if (!evalTextElement) return;
+
+                    const evaluations = evaluationCache.get(username) || [];
+                    const originalItem = evaluations.find(item => item.ID === id);
+                    const originalText = originalItem?.evaluation || '';
+
+                    evalTextElement.textContent = originalText;
+                    const actionsContainer = cancelBtn.parentElement;
+                    actionsContainer.innerHTML = `
+        <button class="evaluation-edit-btn" data-id="${id}" data-username="${username}">修改</button>
+      `;
+                }
+            };
+
+            // 绑定新监听器并保存引用
+            listContainer.addEventListener('click', newListener);
+            listContainer._evaluationListener = newListener;
+        }
+
+
+
+
+
         // ========== 启动流程 ==========
         document.addEventListener('DOMContentLoaded', async function () {
             const isValid = await verifyAuth();
