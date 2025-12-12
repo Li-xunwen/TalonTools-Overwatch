@@ -1,0 +1,35 @@
+name: Deploy to Tencent COS # 工作流名称
+on: # 触发条件：当代码推送到 main 分支时触发
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 检出仓库代码
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. （可选）构建项目。如果你的项目需要构建（如Vue/React），取消注释并修改命令
+      # - name: Build Project
+      #   run: |
+      #     npm install
+      #     npm run build
+
+      # 3. 配置并安装腾讯云 COS 命令行工具 coscmd
+      - name: Setup coscmd
+        run: |
+          pip install coscmd
+          # 使用之前保存在 GitHub Secrets 中的密钥进行配置
+          coscmd config -a ${{ secrets.TENCENT_SECRET_ID }} -s ${{ secrets.TENCENT_SECRET_KEY }} -b talontools-overwatch-1258609989 -r ap-beijing
+        # 请替换以下两个参数：
+        # -b your-bucket-appid: 你的存储桶名称，格式为 BucketName-APPID
+        # -r ap-shanghai: 你的存储桶所在地域，如 ap-beijing, ap-guangzhou 等
+
+      # 4. 上传文件到 COS
+      - name: Upload to COS
+        run: |
+          # 将当前目录下所有文件（或你指定的目录，如 dist/）同步到存储桶根目录，并删除桶内多余文件
+          coscmd upload -r ./ --delete /
+          # 如果只需上传而不删除，使用：coscmd upload -r ./

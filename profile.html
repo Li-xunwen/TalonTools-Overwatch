@@ -520,7 +520,7 @@ mQIDAQAB
             const signatureBase64 = btoa(binary);
 
             try {
-                await fetch(`https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTag}/push.signature`, {
+                await fetch(`https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/${encodedTag}/${encodedTag}.signature`, {
                     method: 'PUT',
                     body: signatureBase64,
                     headers: { 'Content-Type': 'text/plain;charset=UTF-8' }
