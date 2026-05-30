@@ -104,9 +104,12 @@ const currentExpandId = ref<string>('')
 
 // ---------- 辅助函数 ----------
 async function fetchUserList(): Promise<string[]> {
-  const res = await fetch('https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/user.json?t=' + Date.now())
+  // 调用后端接口，相对路径（开发环境可配置代理，或使用绝对路径如 http://localhost:3000）
+  const res = await fetch('/api/users/battletaglist')
   if (!res.ok) throw new Error('获取用户列表失败')
-  return await res.json()
+  // 后端直接返回 battletag 字符串数组，例如 ["Node#51456", "Alyce#51781", ...]
+  const battletagList: string[] = await res.json()
+  return battletagList
 }
 
 async function fetchUserData(username: string): Promise<UserData> {

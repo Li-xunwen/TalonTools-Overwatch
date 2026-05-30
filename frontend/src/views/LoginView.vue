@@ -86,7 +86,7 @@ function clearAuthData() {
 async function loadUserList() {
   try {
     errorMessage.value = "正在加载用户列表...";
-    const res = await fetch("http://localhost:3000/api/users/battletaglist", {
+    const res = await fetch("/api/users/battletaglist", {
       cache: "no-store",
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

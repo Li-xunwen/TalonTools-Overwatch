@@ -49,19 +49,6 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', message: 'Your TypeScript server is running!' });
 });
 
-// 返回所有用户的 battletag 列表
-app.get('/api/users/battletaglist', async (req, res) => {
-    try {
-        const [rows] = await pool.query<mysql.RowDataPacket[]>(
-            'SELECT battletag FROM users ORDER BY battletag'
-        );
-        const battletagList = rows.map(row => row.battletag);
-        res.json(battletagList);
-    } catch (error) {
-        console.error('Database error:', error);
-        res.status(500).json({ error: 'Failed to fetch battletag list' });
-    }
-});
 
 // 用户登录接口（JWT 认证）
 app.post('/api/login', async (req, res) => {
@@ -97,6 +84,47 @@ app.post('/api/login', async (req, res) => {
 
     // 4. 返回 token 和用户信息
     res.json({ token, battletag: user.battletag });
+});
+
+// 返回所有用户的 battletag 列表
+app.get('/api/users/battletaglist', async (req, res) => {
+    try {
+        const [rows] = await pool.query<mysql.RowDataPacket[]>(
+            'SELECT battletag FROM users ORDER BY battletag'
+        );
+        const battletagList = rows.map((row: any) => row.battletag);
+        res.json(battletagList);
+    } catch (error) {
+        console.error('Database error:', error);
+        res.status(500).json({ error: 'Failed to fetch battletag list' });
+    }
+});
+
+// 获取指定用户的信息（通过 battletag）
+app.get('/api/users/:battletag', async (req, res) => {
+    const { battletag } = req.params;
+
+    if (!battletag) {
+        return res.status(400).json({ error: '缺少 battletag 参数' });
+    }
+
+    try {
+        const [rows] = await pool.query<mysql.RowDataPacket[]>(
+            `SELECT id, battletag, role, rank_open_6v6, rank_tank_5v5, rank_dps_5v5, rank_support_5v5, created_at, updated_at
+             FROM users 
+             WHERE battletag = ?`,
+            [battletag]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: '用户不存在' });
+        }
+
+        res.json(rows[0]);
+    } catch (error) {
+        console.error('Database error:', error);
+        res.status(500).json({ error: '获取用户信息失败' });
+    }
 });
 
 // 获取当前登录用户自己的信息（需要 token）
