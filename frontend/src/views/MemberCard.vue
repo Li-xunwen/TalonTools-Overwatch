@@ -1,11 +1,11 @@
 <template>
   <div class="member-card" :data-is-self="user.username === selfTag">
     <div class="member-header">
-      <img
-        :src="`./imge/${encodeURIComponent(user.username)}.jpg`"
-        class="member-avatar"
-        @error="handleAvatarError"
-      />
+	<img
+	  :src="`/res/imge/${user.username.replace(/#/g, '-')}.jpg`"
+	  class="member-avatar"
+	  @error="handleAvatarError"
+	/>
       <div class="member-text">
         <div v-if="user.username === selfTag" class="member-greeting">{{ randomGreeting }}</div>
         <div class="member-id">{{ user.username }}</div>
@@ -14,14 +14,14 @@
 
     <div class="member-heroes">
       <div v-for="hero in topHeroes" :key="hero" class="member-hero-icon">
-        <img :src="`/src/imge/hero/${encodeURIComponent(hero)}.png`" :alt="hero" loading="lazy" />
+        <img :src="`/res/imge/hero/${encodeURIComponent(hero)}.png`" :alt="hero" loading="lazy" />
       </div>
     </div>
 
     <!-- 段位 + 点赞区域 -->
     <div class="like-button-container" @click.stop="onLikeClick">
       <div v-if="rankInfo" class="member-rank">
-        <img :src="`./imge/rank/${rankInfo.rank}.png`" :alt="rankInfo.rank" />
+        <img :src="`/res/imge/rank/${rankInfo.rank}.png`" :alt="rankInfo.rank" />
         <span class="rank-level">{{ rankInfo.level }}</span>
       </div>
       <span class="like-count">{{ displayLikeCount }}</span>
@@ -183,46 +183,66 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 卡片样式，与原 main.css 保持一致（可全局引用） */
-.fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
-.like-list, .evaluation-list {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: rgba(0,0,0,0.85);
-  border-radius: 0 0 8px 8px;
-  padding: 8px 0;
-  z-index: 20;
-  max-height: 200px;
-  overflow-y: auto;
+/* 过渡动画（Vue 专用） */
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.2s;
 }
-.like-item, .evaluation-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
 }
+
+/* 点赞列表 / 评价列表的容器内布局（全局只定义了外层框，内部细节由组件控制） */
+.like-item,
+.evaluation-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .evaluation-input-container {
-  padding: 8px;
-  border-top: 1px solid rgba(255,255,255,0.1);
+    padding: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
+
 .evaluation-input-container textarea {
-  width: 100%;
-  background: #222;
-  color: white;
-  border: 1px solid #555;
-  border-radius: 4px;
-  padding: 4px;
+    width: 100%;
+    background: #222;
+    color: white;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px;
 }
-.evaluation-submit-btn, .evaluation-edit-btn, .evaluation-update-btn, .evaluation-cancel-btn {
-  background: #007bff;
-  border: none;
-  color: white;
-  padding: 2px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  margin-left: 8px;
+
+.member-rank {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 32px;
+    height: 32px;
+    z-index: 10;
 }
+
+.member-rank img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.member-rank .rank-level {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    font-size: 10px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 0 2px #000;
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+    line-height: 1;
+}
+/* 按钮已经由全局 .evaluation-submit-btn 等控制，无需重复 */
 </style>
