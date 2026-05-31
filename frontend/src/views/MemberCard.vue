@@ -189,30 +189,126 @@ function onEvalClick() {
 }
 
 function startEdit(item: any) {
-  editingEval.value = { item, original: item.evaluation }
-  const span = document.getElementById(`eval-${props.user.username}-${item.ID}`)
-  if (span) {
-    span.innerHTML = `<textarea class="evaluation-edit-input" maxlength="32" rows="2">${escapeHtml(item.evaluation)}</textarea>`
-    const actions = span.parentElement?.parentElement?.querySelector('.evaluation-actions')
-    if (actions) {
-      actions.innerHTML = `
-        <button class="evaluation-update-btn" data-id="${item.ID}">提交</button>
-        <button class="evaluation-cancel-btn" data-id="${item.ID}">取消</button>
-      `
-      const updateBtn = actions.querySelector('.evaluation-update-btn')
-      const cancelBtn = actions.querySelector('.evaluation-cancel-btn')
-      updateBtn?.addEventListener('click', () => {
-        const newVal = (span.querySelector('textarea') as HTMLTextAreaElement).value.trim()
-        if (newVal.length > 32) alert('评价不能超过32个字符')
-        else emit('eval-submit', props.user.username, newVal)
-      })
-      cancelBtn?.addEventListener('click', () => {
-        span.textContent = editingEval.value!.original
-        actions.innerHTML = `<button class="evaluation-edit-btn">修改</button>`
-        editingEval.value = null
-      })
-    }
+  editingEval.value = {
+    item,
+    original: item.evaluation
   }
+
+  const span = document.getElementById(
+    `eval-${props.user.username}-${item.ID}`
+  )
+
+  if (!span) return
+
+  span.innerHTML = `
+    <textarea
+      class="evaluation-edit-input"
+      maxlength="32"
+      rows="2"
+    >${escapeHtml(item.evaluation)}</textarea>
+  `
+
+  const actions =
+    span.parentElement?.parentElement?.querySelector(
+      '.evaluation-actions'
+    )
+
+  if (!actions) return
+
+  actions.innerHTML = `
+    <button class="evaluation-update-btn">
+      提交
+    </button>
+    <button class="evaluation-cancel-btn">
+      取消
+    </button>
+  `
+
+  const restoreEditButton = () => {
+    actions.innerHTML = `
+      <button class="evaluation-edit-btn">
+        修改
+      </button>
+    `
+
+    const editBtn =
+      actions.querySelector('.evaluation-edit-btn')
+
+    editBtn?.addEventListener('click', () => {
+      const currentItem = evalList.value.find(
+        e => e.ID === props.selfTag
+      )
+
+      if (currentItem) {
+        startEdit(currentItem)
+      }
+    })
+  }
+
+  const updateBtn =
+    actions.querySelector('.evaluation-update-btn')
+
+  const cancelBtn =
+    actions.querySelector('.evaluation-cancel-btn')
+
+  updateBtn?.addEventListener('click', async () => {
+    const textarea =
+      span.querySelector(
+        'textarea'
+      ) as HTMLTextAreaElement
+
+    const newVal = textarea.value.trim()
+
+    if (newVal.length > 32) {
+      alert('评价不能超过32个字符')
+      return
+    }
+
+    try {
+      emit(
+        'eval-submit',
+        props.user.username,
+        newVal
+      )
+
+      // 等待父组件完成提交
+      await new Promise(resolve =>
+        setTimeout(resolve, 500)
+      )
+
+      // 重新拉取评价
+      const latest =
+        await props.fetchEvaluations(
+          props.user.username
+        )
+
+      evalList.value = latest
+
+      // 找到自己的最新评价
+      const current = latest.find(
+        e => e.ID === props.selfTag
+      )
+
+      span.textContent =
+        current?.evaluation ?? newVal
+
+      restoreEditButton()
+
+      editingEval.value = null
+    } catch (err) {
+      console.error(err)
+      alert('提交失败')
+    }
+  })
+
+  cancelBtn?.addEventListener('click', () => {
+    span.textContent =
+      editingEval.value?.original ?? ''
+
+    restoreEditButton()
+
+    editingEval.value = null
+  })
 }
 
 function submitNewEval() {
