@@ -149,7 +149,7 @@ app.get('/api/:battletag/rank_hero', authenticateToken, async (req: AuthRequest,
 });
 
 // 获取指定用户的被点赞信息（需要 token 认证）
-app.get('/api/:battletag/likes', authenticateToken, async (req: AuthRequest, res) => {
+app.get('/api/:battletag/likelist', authenticateToken, async (req: AuthRequest, res) => {
     let battletag = req.params.battletag as string;
     battletag = decodeURIComponent(battletag);
     if (!battletag) {
@@ -200,6 +200,125 @@ app.get('/api/users/me', authenticateToken, async (req: AuthRequest, res) => {
         res.status(500).json({ error: '服务器错误' });
     }
 });
+
+
+/**
+ * POST /api/:battletag/like
+ * 功能：当前登录用户为目标用户点赞（每次只能增加 1 个赞，需要 token 认证）
+ * 
+ * 限制规则（基于 updated_at 秒数）：
+ *   - 对于每一对 (from_user_id, to_user_id) 记录，updated_at 字段的**秒数**用于存储「当天已经给该目标用户点赞的次数」。
+ *   - 每次点赞时，先判断 updated_at 中的日期是否为今天：
+ *       如果是今天，则取出秒数作为已点赞次数；如果不是今天，则视为 0 次。
+ *   - 如果已点赞次数 < 20，则允许点赞（增加 1 次），并将秒数 +1，同时将 updated_at 的小时和分钟设为当前时间（保留秒数作为计数）。
+ *   - 如果已点赞次数 >= 20，则返回 429 错误。
+ *   - 每个用户每天最多能对同一个目标用户点赞 20 次。
+ * 
+ * 注意：此设计会丢失原始的 updated_at 秒数（原本是真实秒数），但满足功能需求。
+ * 
+ * 并发安全：使用 SELECT ... FOR UPDATE 锁定行，防止超限。
+ */
+app.post('/api/:battletag/like', authenticateToken, async (req: AuthRequest, res) => {
+    // 1. 获取当前登录用户信息
+    const currentUserId = req.user?.userId;
+    const currentUserTag = req.user?.battletag;
+    if (!currentUserId || !currentUserTag) {
+        return res.status(401).json({ error: '未授权' });
+    }
+
+    // 2. 获取目标用户 battletag 并解码
+    let targetTag = req.params.battletag as string;
+    targetTag = decodeURIComponent(targetTag);
+    if (!targetTag) {
+        return res.status(400).json({ error: '缺少 battletag 参数' });
+    }
+
+    // 3. 禁止给自己点赞
+    if (targetTag === currentUserTag) {
+        return res.status(400).json({ error: '不能给自己点赞' });
+    }
+
+    // 4. 查询目标用户是否存在
+    const [targetRows] = await pool.query<mysql.RowDataPacket[]>(
+        'SELECT id FROM users WHERE battletag = ?',
+        [targetTag]
+    );
+    if (targetRows.length === 0) {
+        return res.status(404).json({ error: '目标用户不存在' });
+    }
+    const targetUserId = targetRows[0].id;
+
+    // 5. 开启事务，使用行锁防止并发
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+        // 查询记录并加锁（FOR UPDATE）
+        let [rows] = await connection.query<mysql.RowDataPacket[]>(
+            'SELECT id, like_count, updated_at FROM likes WHERE from_user_id = ? AND to_user_id = ? FOR UPDATE',
+            [currentUserId, targetUserId]
+        );
+        let recordId: number;
+        let currentLikeCount: number;
+        let currentUpdatedAt: Date;
+
+        if (rows.length === 0) {
+            // 不存在则插入一条初始记录（like_count=0, updated_at 秒数=0）
+            const now = new Date();
+            now.setSeconds(0, 0);
+            await connection.query(
+                `INSERT INTO likes (from_user_id, to_user_id, like_count, updated_at) VALUES (?, ?, 0, ?)`,
+                [currentUserId, targetUserId, now]
+            );
+            // 重新查询获取新记录的 id
+            [rows] = await connection.query<mysql.RowDataPacket[]>(
+                'SELECT id, like_count, updated_at FROM likes WHERE from_user_id = ? AND to_user_id = ?',
+                [currentUserId, targetUserId]
+            );
+            recordId = rows[0].id;
+            currentLikeCount = rows[0].like_count;
+            currentUpdatedAt = new Date(rows[0].updated_at);
+        } else {
+            recordId = rows[0].id;
+            currentLikeCount = rows[0].like_count;
+            currentUpdatedAt = new Date(rows[0].updated_at);
+        }
+
+        const nowDate = new Date();
+        const isToday = currentUpdatedAt.toDateString() === nowDate.toDateString();
+        let todayCount = isToday ? currentUpdatedAt.getSeconds() : 0;
+
+        // 检查今日是否已达上限
+        if (todayCount >= 20) {
+            await connection.rollback();
+            connection.release();
+            return res.status(429).json({ error: `今日已对 ${targetTag} 点赞 ${todayCount} 次，已达上限（20次/天）` });
+        }
+
+        // 本次只能增加 1 个赞
+        const actualIncrement = 1;
+        const newLikeCount = currentLikeCount + actualIncrement;
+        // 更新 updated_at: 日期为今天，时分为当前时间，秒数为 todayCount + 1
+        const newUpdatedAt = new Date(nowDate);
+        newUpdatedAt.setSeconds(todayCount + actualIncrement);
+
+        await connection.query(
+            `UPDATE likes SET like_count = ?, updated_at = ? WHERE id = ?`,
+            [newLikeCount, newUpdatedAt, recordId]
+        );
+
+        await connection.commit();
+        connection.release();
+
+        res.json({ message: '点赞成功', likeCount: newLikeCount, addedCount: actualIncrement });
+    } catch (error) {
+        await connection.rollback();
+        connection.release();
+        console.error('点赞失败:', error);
+        res.status(500).json({ error: '点赞失败，请稍后重试' });
+    }
+});
+
 
 // 启动服务器
 app.listen(port, () => {

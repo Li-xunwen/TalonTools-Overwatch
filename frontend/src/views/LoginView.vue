@@ -34,6 +34,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import ThemeToggle from "@/components/ThemeToggle.vue";
 import { useTheme } from "@/composables/useTheme";
+//import VConsole from 'vconsole';
 
 const router = useRouter();
 const { initTheme } = useTheme();
@@ -102,7 +103,6 @@ async function loadUserList() {
   }
 }
 
-// ---------- 登录（使用后端 JWT）----------
 async function handleLogin() {
   errorMessage.value = "";
 
@@ -121,7 +121,8 @@ async function handleLogin() {
 
   loading.value = true;
   try {
-    const res = await fetch("http://localhost:3000/api/login", {
+    // 使用相对路径，让 Vite 代理转发到后端
+    const res = await fetch("/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ battletag: tag, password: pwd }),
@@ -133,13 +134,17 @@ async function handleLogin() {
     const token = data.token;
     if (!token) throw new Error("服务器未返回令牌");
 
-    // 使用新的 LocalStorage 方式保存
     saveAuthData(token);
     console.log("登录成功，Token 已存入 LocalStorage");
     router.push("/main");
   } catch (err: any) {
-    console.error(err);
-    errorMessage.value = err.message || "登录过程中发生错误";
+    console.error("登录网络错误详情:", err);
+    // 显示更详细的错误信息
+    let errorMsg = err.message || "登录过程中发生错误";
+    if (err instanceof TypeError && err.message === "Failed to fetch") {
+      errorMsg = "网络请求失败，请检查手机与电脑是否在同一WiFi，且后端服务已启动并监听0.0.0.0";
+    }
+    errorMessage.value = errorMsg;
   } finally {
     loading.value = false;
   }
@@ -220,6 +225,11 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener("click", handleClickOutside);
 });
+
+
+ window.addEventListener('load', () => {
+    //var vConsole = new VConsole();
+  });
 </script>
 
 <style scoped>

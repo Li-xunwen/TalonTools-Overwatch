@@ -1,6 +1,6 @@
 <template>
   <div class="member-card" :data-is-self="user.username === selfTag">
-    <!-- 内部容器：包裹主要内容（头像、名字、段位、擅长英雄、评论按钮） -->
+    <!-- 内部容器：包裹主要内容 -->
     <div class="card-content">
       <!-- 头部：头像 + 名字 -->
       <div class="member-header">
@@ -15,7 +15,7 @@
         </div>
       </div>
 
-      <!-- 段位区域（名字下方） -->
+      <!-- 段位区域 -->
       <div class="ranks-container" v-if="hasAnyRank">
         <div class="rank-item" v-for="rank in rankList" :key="rank.type">
           <div class="rank-icon-wrapper">
@@ -33,11 +33,11 @@
         </div>
       </div>
 
-      <!-- 评价按钮（放在容器左下角） -->
+      <!-- 评价按钮 -->
       <div class="evaluation-button" @click.stop="onEvalClick">💬</div>
     </div>
 
-    <!-- 点赞区域（右上角，独立于内部容器） -->
+    <!-- 点赞区域（右上角） -->
     <div class="like-button-container" @click.stop="onLikeClick">
       <span class="like-count">{{ displayLikeCount }}</span>
       <span class="heart">❤️</span>
@@ -49,7 +49,7 @@
         <div v-if="likeList.length === 0" class="empty-tip">暂无点赞</div>
         <div v-for="item in likeList.slice(0, 10)" :key="item.ID" class="like-item">
           <span class="like-item-id">{{ item.ID }}</span>
-          <span class="like-item-like">❤️{{ item.Like + (item.ID === selfTag ? (tempLikeMap.get(user.username) || 0) : 0) }}</span>
+          <span class="like-item-like">❤️{{ item.Like }}</span>
         </div>
       </div>
     </Transition>
@@ -79,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 
 const props = defineProps<{
   user: {
@@ -92,10 +92,8 @@ const props = defineProps<{
   }
   selfTag: string | null
   currentExpandId: string
-  likeCache: Map<string, any[]>
+  likeCache: Record<string, any[]>   // 响应式对象
   evalCache: Map<string, any[]>
-  tempLikeMap: Map<string, number>
-  getTotalLikes: (username: string) => number
   fetchEvaluations: (username: string) => Promise<any[]>
 }>()
 
@@ -104,6 +102,7 @@ const emit = defineEmits<{
   (e: 'expand-eval', username: string): void
   (e: 'like-click', username: string): void
   (e: 'eval-submit', username: string, text: string): void
+  (e: 'close-float'): void   // 关闭当前浮层（用于自动关闭）
 }>()
 
 const randomGreeting = ref('')
@@ -113,10 +112,9 @@ const editingEval = ref<{ item: any; original: string } | null>(null)
 // 擅长英雄（最多5个）
 const topHeroes = computed(() => (props.user.hero || []).slice(0, 5))
 
-// 处理段位列表（过滤非空，并添加中文标签）
+// 段位列表
 const rankList = computed(() => {
   const ranks: { type: string; label: string; rank: string; level: number }[] = []
-  console.log(props.user)
   const rankMap = [
     { field: 'rank_open_6v6', label: '6v6' },
     { field: 'rank_tank_5v5', label: '坦克' },
@@ -126,41 +124,63 @@ const rankList = computed(() => {
   for (const r of rankMap) {
     const data = props.user[r.field as keyof typeof props.user] as { rank: string; level: number } | null | undefined
     if (data && data.rank && data.level >= 1 && data.level <= 5) {
-      ranks.push({
-        type: r.field,
-        label: r.label,
-        rank: data.rank,
-        level: data.level
-      })
+      ranks.push({ type: r.field, label: r.label, rank: data.rank, level: data.level })
     }
   }
   return ranks
 })
 const hasAnyRank = computed(() => rankList.value.length > 0)
 
-// 点赞数量显示
+// 点赞显示数字
 const displayLikeCount = computed(() => {
-  const base = props.getTotalLikes(props.user.username)
-  const temp = props.tempLikeMap.get(props.user.username) || 0
-  return base + temp
+  const likes = props.likeCache[props.user.username] || []
+  const selfLike = likes.find(item => item.ID === props.selfTag)?.Like || 0
+  return selfLike
 })
 
-const likeList = computed(() => props.likeCache.get(props.user.username) || [])
+// 点赞列表（供浮层使用）
+const likeList = computed(() => props.likeCache[props.user.username] || [])
 const evalList = ref<any[]>([])
 const hasSelfEval = computed(() => evalList.value.some(item => item.ID === props.selfTag))
 
 const expandLike = computed(() => props.currentExpandId === `like-${props.user.username}`)
 const expandEval = computed(() => props.currentExpandId === `eval-${props.user.username}`)
 
+// 自动关闭定时器
+let autoCloseTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(expandLike, (newVal) => {
+  if (newVal) {
+    if (autoCloseTimer) clearTimeout(autoCloseTimer)
+    autoCloseTimer = setTimeout(() => {
+      emit('close-float')
+      autoCloseTimer = null
+    }, 10000)
+  } else {
+    if (autoCloseTimer) {
+      clearTimeout(autoCloseTimer)
+      autoCloseTimer = null
+    }
+  }
+})
+
+onUnmounted(() => {
+  if (autoCloseTimer) clearTimeout(autoCloseTimer)
+})
+
 function handleAvatarError(e: Event) {
   (e.target as HTMLImageElement).style.opacity = '0.4'
 }
 
+// 点赞按钮：只打开浮层（如果已打开则保持不变），并发送点赞请求
 function onLikeClick() {
   emit('like-click', props.user.username)
-  emit('expand-like', props.user.username)
+  if (!expandLike.value) {
+    emit('expand-like', props.user.username)
+  }
 }
 
+// 评价按钮：切换浮层
 function onEvalClick() {
   emit('expand-eval', props.user.username)
   props.fetchEvaluations(props.user.username).then(data => {
@@ -226,7 +246,7 @@ onMounted(() => {
 .member-card {
   background: var(--card-bg);
   border-radius: 16px;
-  padding: 20px;
+  padding: 10px;
   box-shadow: 0 6px 16px var(--shadow-color);
   transition: transform 0.3s, box-shadow 0.3s;
   position: relative;
@@ -240,7 +260,6 @@ onMounted(() => {
 /* 内部容器：用于包裹主要内容，并作为评论按钮的定位参考 */
 .card-content {
   position: relative;
-  /* 为评论按钮留出底部空间，避免覆盖英雄图标 */
   padding-bottom: 30px;
 }
 
@@ -281,7 +300,7 @@ onMounted(() => {
   gap: 4px;
 }
 
-/* 段位容器（名字下方） */
+/* 段位容器 */
 .ranks-container {
   display: flex;
   flex-wrap: wrap;
@@ -326,7 +345,7 @@ onMounted(() => {
   opacity: 0.8;
 }
 
-/* 擅长英雄区域 */
+/* 擅长英雄 */
 .member-heroes {
   display: flex;
   justify-content: center;
@@ -351,7 +370,7 @@ onMounted(() => {
   object-fit: contain;
 }
 
-/* 评论按钮（位于内部容器的左下角） */
+/* 评价按钮 */
 .evaluation-button {
   position: absolute;
   bottom: 0px;
@@ -361,7 +380,7 @@ onMounted(() => {
   z-index: 10;
 }
 
-/* 点赞容器（右上角，独立于内部容器） */
+/* 点赞区域 */
 .like-button-container {
   position: absolute;
   top: 8px;
@@ -382,7 +401,7 @@ onMounted(() => {
   font-size: 14px;
 }
 
-/* 浮层样式（保持不变） */
+/* 浮层样式 */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s;
@@ -391,7 +410,6 @@ onMounted(() => {
 .fade-leave-to {
   opacity: 0;
 }
-
 .like-item,
 .evaluation-item {
   display: flex;
