@@ -154,7 +154,6 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function autoLogin() {
   const { token, isValid } = getAuthData();
-  
   if (!token || !isValid) {
     return;
   }
@@ -164,7 +163,7 @@ async function autoLogin() {
   let loginSuccess = false;
 
   try {
-    const res = await fetch("http://localhost:3000/api/users/me", {
+    const res = await fetch('/api/users/me', {
       headers: { Authorization: `Bearer ${token}` },
     });
 
