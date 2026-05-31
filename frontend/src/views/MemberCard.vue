@@ -1,29 +1,38 @@
 <template>
   <div class="member-card" :data-is-self="user.username === selfTag">
+    <!-- 头部：头像 + 名字（置顶） -->
     <div class="member-header">
-	<img
-	  :src="`/res/imge/${user.username.replace(/#/g, '-')}.jpg`"
-	  class="member-avatar"
-	  @error="handleAvatarError"
-	/>
+      <img
+        :src="`/res/imge/${user.username.replace(/#/g, '-')}.jpg`"
+        class="member-avatar"
+        @error="handleAvatarError"
+      />
       <div class="member-text">
         <div v-if="user.username === selfTag" class="member-greeting">{{ randomGreeting }}</div>
         <div class="member-id">{{ user.username }}</div>
       </div>
     </div>
 
+    <!-- 段位区域（名字下方） -->
+    <div class="ranks-container" v-if="hasAnyRank">
+      <div class="rank-item" v-for="rank in rankList" :key="rank.type">
+        <div class="rank-icon-wrapper">
+          <img :src="`/res/imge/rank/${rank.rank}.png`" :alt="rank.rank" class="rank-icon" />
+          <span class="rank-level-badge">{{ rank.level }}</span>
+        </div>
+        <div class="rank-label">{{ rank.label }}</div>
+      </div>
+    </div>
+
+    <!-- 擅长英雄 -->
     <div class="member-heroes">
       <div v-for="hero in topHeroes" :key="hero" class="member-hero-icon">
         <img :src="`/res/imge/hero/${encodeURIComponent(hero)}.png`" :alt="hero" loading="lazy" />
       </div>
     </div>
 
-    <!-- 段位 + 点赞区域 -->
+    <!-- 点赞区域（右上角，仅包含点赞数和心形） -->
     <div class="like-button-container" @click.stop="onLikeClick">
-      <div v-if="rankInfo" class="member-rank">
-        <img :src="`/res/imge/rank/${rankInfo.rank}.png`" :alt="rankInfo.rank" />
-        <span class="rank-level">{{ rankInfo.level }}</span>
-      </div>
       <span class="like-count">{{ displayLikeCount }}</span>
       <span class="heart">❤️</span>
     </div>
@@ -39,7 +48,7 @@
       </div>
     </Transition>
 
-    <!-- 评价按钮 -->
+    <!-- 评价按钮（右下角） -->
     <div class="evaluation-button" @click.stop="onEvalClick">💬</div>
 
     <!-- 评价列表浮层 -->
@@ -70,10 +79,16 @@
 import { ref, computed, onMounted } from 'vue'
 
 const props = defineProps<{
-  user: { username: string; hero?: string[]; Rank?: { rank: string; level: number } }
+  user: { 
+    username: string
+    hero?: string[]
+    rank_open_6v6?: { rank: string; level: number } | null
+    rank_tank_5v5?: { rank: string; level: number } | null
+    rank_dps_5v5?: { rank: string; level: number } | null
+    rank_support_5v5?: { rank: string; level: number } | null
+  }
   selfTag: string | null
   currentExpandId: string
-  // 以下数据从父组件通过 props 传递（避免使用 inject）
   likeCache: Map<string, any[]>
   evalCache: Map<string, any[]>
   tempLikeMap: Map<string, number>
@@ -92,14 +107,35 @@ const randomGreeting = ref('')
 const newEvalText = ref('')
 const editingEval = ref<{ item: any; original: string } | null>(null)
 
+// 擅长英雄（最多5个）
 const topHeroes = computed(() => (props.user.hero || []).slice(0, 5))
 
-const rankInfo = computed(() => {
-  const r = props.user.Rank
-  if (r && r.rank && r.level >= 1 && r.level <= 5) return r
-  return null
+// 处理段位列表（过滤非空，并添加中文标签）
+const rankList = computed(() => {
+  const ranks: { type: string; label: string; rank: string; level: number }[] = []
+  const rankMap = [
+    { field: 'rank_open_6v6', label: '6v6' },
+    { field: 'rank_tank_5v5', label: '坦克' },
+    { field: 'rank_dps_5v5', label: '输出' },
+    { field: 'rank_support_5v5', label: '支援' }
+  ]
+  console.log(props.user);
+  for (const r of rankMap) {
+    const data = props.user[r.field as keyof typeof props.user] as { rank: string; level: number } | null | undefined
+    if (data && data.rank && data.level >= 1 && data.level <= 5) {
+      ranks.push({
+        type: r.field,
+        label: r.label,
+        rank: data.rank,
+        level: data.level
+      })
+    }
+  }
+  return ranks
 })
+const hasAnyRank = computed(() => rankList.value.length > 0)
 
+// 点赞数量显示
 const displayLikeCount = computed(() => {
   const base = props.getTotalLikes(props.user.username)
   const temp = props.tempLikeMap.get(props.user.username) || 0
@@ -183,66 +219,198 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 过渡动画（Vue 专用） */
+/* 卡片基础样式 */
+.member-card {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 6px 16px var(--shadow-color);
+  transition: transform 0.3s, box-shadow 0.3s;
+  position: relative;
+  overflow: visible;
+}
+.member-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px var(--shadow-color);
+}
+
+/* 头部：头像 + 名字 */
+.member-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.member-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--accent);
+  border: 2px solid var(--text-primary);
+  flex-shrink: 0;
+}
+.member-id {
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+.member-greeting {
+  font-size: 14px;
+  color: var(--text-primary);
+  opacity: 0.7;
+  margin-bottom: 4px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+.member-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 4px;
+}
+
+/* 段位容器（名字下方） */
+.ranks-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.rank-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 56px;
+}
+.rank-icon-wrapper {
+  position: relative;
+  width: 28px;
+  height: 28px;
+}
+.rank-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.rank-level-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -6px;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 0 3px;
+  border-radius: 8px;
+  line-height: 1.2;
+}
+.rank-label {
+  font-size: 8px;
+  color: var(--text-primary);
+  margin-top: 4px;
+  text-align: center;
+  opacity: 0.8;
+}
+
+/* 擅长英雄区域 */
+.member-heroes {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  height: 48px;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.member-hero-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.member-hero-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* 点赞容器（右上角，仅数量+心形） */
+.like-button-container {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 10;
+  cursor: pointer;
+}
+.like-count {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: bold;
+}
+.heart {
+  color: #ff4d6d;
+  font-size: 14px;
+}
+
+/* 评论按钮（右下角） */
+.evaluation-button {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  cursor: pointer;
+  font-size: 20px;
+  z-index: 10;
+}
+
+/* 浮层样式（保持不变） */
 .fade-enter-active,
 .fade-leave-active {
-    transition: opacity 0.2s;
+  transition: opacity 0.2s;
 }
 .fade-enter-from,
 .fade-leave-to {
-    opacity: 0;
+  opacity: 0;
 }
 
-/* 点赞列表 / 评价列表的容器内布局（全局只定义了外层框，内部细节由组件控制） */
 .like-item,
 .evaluation-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 4px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
-
 .evaluation-input-container {
-    padding: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
-
 .evaluation-input-container textarea {
-    width: 100%;
-    background: #222;
-    color: white;
-    border: 1px solid #555;
-    border-radius: 4px;
-    padding: 4px;
+  width: 100%;
+  background: #222;
+  color: white;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 4px;
+}
+.like-list,
+.evaluation-list {
+  top: 100%;
+  left: 0;
+  right: 0;
+  border-radius: 0 0 8px 8px;
+  padding: 8px 0;
+  z-index: 20;
+  max-height: 200px;
+  overflow-y: auto;
 }
 
-.member-rank {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 32px;
-    height: 32px;
-    z-index: 10;
-}
-
-.member-rank img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-}
-
-.member-rank .rank-level {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    font-size: 10px;
-    font-weight: bold;
-    color: #fff;
-    text-shadow: 0 0 2px #000;
-    background: transparent;
-    border-radius: 0;
-    padding: 0;
-    line-height: 1;
-}
-/* 按钮已经由全局 .evaluation-submit-btn 等控制，无需重复 */
+/* 确保其他原有样式不受影响 */
 </style>

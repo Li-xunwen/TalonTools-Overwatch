@@ -100,27 +100,48 @@ app.get('/api/users/battletaglist', async (req, res) => {
     }
 });
 
-// 获取指定用户的信息（通过 battletag）
-app.get('/api/users/:battletag', async (req, res) => {
-    const { battletag } = req.params;
 
+// 获取指定用户的段位信息和擅长英雄列表（需要 token 认证）
+app.get('/api/rank_hero/:battletag', authenticateToken, async (req: AuthRequest, res) => {
+    let battletag = req.params.battletag as string;
+    battletag = decodeURIComponent(battletag);
     if (!battletag) {
         return res.status(400).json({ error: '缺少 battletag 参数' });
     }
 
     try {
-        const [rows] = await pool.query<mysql.RowDataPacket[]>(
+        // 1. 查询用户基本信息（包含段位字段）
+        const [userRows] = await pool.query<mysql.RowDataPacket[]>(
             `SELECT id, battletag, role, rank_open_6v6, rank_tank_5v5, rank_dps_5v5, rank_support_5v5, created_at, updated_at
              FROM users 
              WHERE battletag = ?`,
             [battletag]
         );
 
-        if (rows.length === 0) {
+        if (userRows.length === 0) {
             return res.status(404).json({ error: '用户不存在' });
         }
 
-        res.json(rows[0]);
+        const userInfo = userRows[0];
+        const userId = userInfo.id;
+
+        // 2. 查询用户擅长的英雄（按 sort_order 升序）
+        const [heroRows] = await pool.query<mysql.RowDataPacket[]>(
+            `SELECT h.name
+             FROM user_favorite_heroes ufh
+             JOIN heroes h ON ufh.hero_id = h.id
+             WHERE ufh.user_id = ?
+             ORDER BY ufh.sort_order ASC`,
+            [userId]
+        );
+
+        const heroes = heroRows.map(row => row.name);
+
+        // 3. 返回合并后的数据
+        res.json({
+            ...userInfo,
+            heroes
+        });
     } catch (error) {
         console.error('Database error:', error);
         res.status(500).json({ error: '获取用户信息失败' });

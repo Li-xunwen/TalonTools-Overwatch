@@ -74,7 +74,10 @@ import PosterHeroes from '@/components/PosterHeroes.vue'
 interface UserData {
   username: string
   hero?: string[]
-  Rank?: { rank: string; level: number }
+  rank_open_6v6?: { rank: string; level: number } | null
+  rank_tank_5v5?: { rank: string; level: number } | null
+  rank_dps_5v5?: { rank: string; level: number } | null
+  rank_support_5v5?: { rank: string; level: number } | null
   error?: boolean
 }
 
@@ -113,15 +116,27 @@ async function fetchUserList(): Promise<string[]> {
 }
 
 async function fetchUserData(username: string): Promise<UserData> {
-  const encoded = encodeURIComponent(username)
-  const url = `https://talon-admin-1258609989.cos.ap-chongqing.myqcloud.com/${encoded}/${encoded}.json?t=${Date.now()}`
+  const encoded = encodeURIComponent(username);
+  const url = `/api/rank_hero/${encoded}`;
+  const token = localStorage.getItem('authToken');
   try {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    return { username, hero: data.hero || [], Rank: data.Rank }
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    console.log('data:', data);
+    // 后端返回字段：battletag, rank_open_6v6, rank_tank_5v5, rank_dps_5v5, rank_support_5v5, ...
+    return {
+      username: data.battletag,
+      hero: data.heroes,   // 英雄数据暂缺，可从 COS 补充或留空
+      rank_open_6v6: data.rank_open_6v6,
+      rank_tank_5v5: data.rank_tank_5v5,
+      rank_dps_5v5: data.rank_dps_5v5,
+      rank_support_5v5: data.rank_support_5v5
+    };
   } catch {
-    return { username, hero: [], error: true }
+    return { username, hero: [], error: true };
   }
 }
 
@@ -316,5 +331,12 @@ onUnmounted(() => {
     width: 100%;
     /* 保持宽高比，防止塌陷 */
     aspect-ratio: 2 / 1; 
+}
+
+.members-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 25px;
+    margin-top: 20px;
 }
 </style>
