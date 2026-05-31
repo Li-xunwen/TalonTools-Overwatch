@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, reactive } from 'vue'
+import { ref, computed, onMounted, onUnmounted, reactive, nextTick } from 'vue'
 import MemberCard from './MemberCard.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import PosterHeroes from '@/components/PosterHeroes.vue'
@@ -276,10 +276,24 @@ function handleExpandEval(username: string) {
   currentExpandId.value = currentExpandId.value === id ? '' : id
 }
 
-// 每次点击立即调用 submitLike
+// 滚动到指定卡片（使其在视口中垂直居中，平滑动画）
+function scrollToCard(username: string) {
+  const cards = document.querySelectorAll('.member-card')
+  for (const card of cards) {
+    const idEl = card.querySelector('.member-id')
+    if (idEl && idEl.textContent === username) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      break
+    }
+  }
+}
+
+// 点赞点击：先发送请求，等待 DOM 更新，再滚动到卡片
 async function handleLikeClick(targetUser: string) {
-  await submitLike(targetUser)
-  // 注意：likeCache 已更新，视图会自动刷新，无需手动重新赋值 members
+  await submitLike(targetUser)   // 等待点赞完成（包括 likeCache 更新）
+  await nextTick()               // 等待 Vue 重新渲染 DOM
+  // 微延迟确保布局完全稳定，避免滚动抖动
+  setTimeout(() => scrollToCard(targetUser), 60)
 }
 
 async function handleEvalSubmit(targetUser: string, newText: string) {
@@ -302,11 +316,19 @@ async function handleEvalSubmit(targetUser: string, newText: string) {
 // ---------- 加载成员数据 ----------
 async function loadMembers() {
   const usernames = await fetchUserList()
-  const userPromises = usernames.map(username => fetchUserData(username))
-  const rawUsers = await Promise.all(userPromises)
-  const validUsers = rawUsers.filter(u => u.username)
-  await Promise.all(validUsers.map(u => fetchLikes(u.username)))
-  members.value = validUsers
+  // 清空现有列表（避免重复）
+  members.value = []
+  // 逐个加载用户数据
+  for (const username of usernames) {
+    // 获取用户基本信息（段位、英雄等）
+    const userData = await fetchUserData(username)
+    if (userData.username) {
+      // 获取该用户的点赞数据（缓存到 likeCache）
+      await fetchLikes(username)
+      // 添加到列表末尾，触发视图更新
+      members.value.push(userData)
+    }
+  }
 }
 
 // ---------- 排序 ----------
