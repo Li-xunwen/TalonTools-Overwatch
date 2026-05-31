@@ -319,6 +319,118 @@ app.post('/api/:battletag/like', authenticateToken, async (req: AuthRequest, res
     }
 });
 
+// ========== 评价相关接口（数据库版本） ==========
+// 获取指定用户收到的所有评价（需要 token 认证）
+app.get('/api/:battletag/evaluations', authenticateToken, async (req: AuthRequest, res) => {
+    let battletag = req.params.battletag as string;
+    battletag = decodeURIComponent(battletag);
+    if (!battletag) {
+        return res.status(400).json({ error: '缺少 battletag 参数' });
+    }
+
+    try {
+        // 1. 查询目标用户是否存在，获取其 id
+        const [userRows] = await pool.query<mysql.RowDataPacket[]>(
+            'SELECT id FROM users WHERE battletag = ?',
+            [battletag]
+        );
+        if (userRows.length === 0) {
+            return res.status(404).json({ error: '用户不存在' });
+        }
+        const targetUserId = userRows[0].id;
+
+        // 2. 查询评价信息：评价者战网ID、评价内容，按创建时间升序
+        const [ratingRows] = await pool.query<mysql.RowDataPacket[]>(
+            `SELECT u.battletag AS ID, r.content AS evaluation
+             FROM ratings r
+             JOIN users u ON r.from_user_id = u.id
+             WHERE r.to_user_id = ?
+             ORDER BY r.created_at ASC`,
+            [targetUserId]
+        );
+
+        res.json(ratingRows);
+    } catch (error) {
+        console.error('Database error:', error);
+        res.status(500).json({ error: '获取评价信息失败' });
+    }
+});
+
+/**
+ * PUT /api/:battletag/evaluation
+ * 功能：当前登录用户为目标用户提交评价（需要 token 认证）
+ * 请求体：{ "evaluation": "评价内容" }，内容为空字符串时表示删除评价
+ * 规则：
+ *   - 评价内容长度不超过 32 字符（由前端限制，后端也做校验）
+ *   - 如果评价内容非空且用户对目标用户的评价记录已存在，则更新内容；
+ *   - 如果评价内容非空且记录不存在，则插入新记录；
+ *   - 如果评价内容为空字符串，则删除该用户对目标用户的评价记录。
+ * 返回：成功时返回 { message: "评价提交成功" } 或 { message: "评价删除成功" }
+ */
+app.put('/api/:battletag/evaluation', authenticateToken, async (req: AuthRequest, res) => {
+    // 1. 获取当前登录用户信息
+    const currentUserId = req.user?.userId;
+    const currentUserTag = req.user?.battletag;
+    if (!currentUserId || !currentUserTag) {
+        return res.status(401).json({ error: '未授权' });
+    }
+
+    // 2. 获取目标用户 battletag 并解码
+    let targetTag = req.params.battletag as string;
+    targetTag = decodeURIComponent(targetTag);
+    if (!targetTag) {
+        return res.status(400).json({ error: '缺少 battletag 参数' });
+    }
+
+    // 3. 获取评价内容
+    const { evaluation } = req.body;
+    if (evaluation === undefined || typeof evaluation !== 'string') {
+        return res.status(400).json({ error: '缺少 evaluation 字段或类型错误' });
+    }
+    // 长度限制（与前端一致，32字符）
+    if (evaluation.length > 32) {
+        return res.status(400).json({ error: '评价内容不能超过32个字符' });
+    }
+
+    // 4. 查询目标用户是否存在
+    const [targetRows] = await pool.query<mysql.RowDataPacket[]>(
+        'SELECT id FROM users WHERE battletag = ?',
+        [targetTag]
+    );
+    if (targetRows.length === 0) {
+        return res.status(404).json({ error: '目标用户不存在' });
+    }
+    const targetUserId = targetRows[0].id;
+
+    const trimmed = evaluation.trim();
+    try {
+        if (trimmed === '') {
+            // 删除评价：使用 ResultSetHeader 类型获取 affectedRows
+            const [result] = await pool.query<mysql.ResultSetHeader>(
+                'DELETE FROM ratings WHERE from_user_id = ? AND to_user_id = ?',
+                [currentUserId, targetUserId]
+            );
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ error: '没有找到可删除的评价' });
+            }
+            res.json({ message: '评价删除成功' });
+        } else {
+            // 插入或更新评价（UPSERT），同样使用 ResultSetHeader（可选）
+            await pool.query<mysql.ResultSetHeader>(
+                `INSERT INTO ratings (from_user_id, to_user_id, content, updated_at)
+                 VALUES (?, ?, ?, NOW())
+                 ON DUPLICATE KEY UPDATE
+                     content = VALUES(content),
+                     updated_at = NOW()`,
+                [currentUserId, targetUserId, trimmed]
+            );
+            res.json({ message: '评价提交成功' });
+        }
+    } catch (error) {
+        console.error('评价操作失败:', error);
+        res.status(500).json({ error: '评价操作失败，请稍后重试' });
+    }
+});
 
 // 启动服务器
 app.listen(port, () => {

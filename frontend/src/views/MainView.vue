@@ -98,13 +98,10 @@ interface EvalItem {
 const token = localStorage.getItem('authToken')
 const selfTag = ref<string | null>(null)
 const members = ref<UserData[]>([])
-// 将 likeCache 改为响应式对象，以便 Vue 检测变化
 const likeCache = reactive<Record<string, LikeItem[]>>({})
 const evalCache = new Map<string, EvalItem[]>()
 const toastMessage = ref('')
 const currentExpandId = ref<string>('')
-
-// 防止短时间内重复点赞（简单锁）
 const likePending = new Map<string, boolean>()
 
 // ---------- 辅助函数 ----------
@@ -171,17 +168,10 @@ async function fetchLikes(username: string): Promise<LikeItem[]> {
   }
 }
 
-function getTotalLikes(username: string): number {
-  const likes = likeCache[username] || []
-  return likes.reduce((sum, item) => sum + (item.Like || 0), 0)
-}
-
-// 每次点击立即发送一次点赞请求（不再累积）
+// 每次点击立即发送一次点赞请求
 async function submitLike(targetUser: string) {
   const self = selfTag.value
   if (!self) return
-
-  // 防止重复请求（对同一个目标用户，上一个请求未完成时忽略新点击）
   if (likePending.get(targetUser)) return
   likePending.set(targetUser, true)
 
@@ -195,9 +185,7 @@ async function submitLike(targetUser: string) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       }
-      // 不再发送 increment 字段，后端默认加 1
     })
-
     const data = await res.json()
     if (!res.ok) {
       let errorMsg = ''
@@ -211,9 +199,7 @@ async function submitLike(targetUser: string) {
       throw new Error(data.error)
     }
 
-    const newTotalLike = data.likeCount // 当前用户给目标用户的累计总赞数
-
-    // 更新 likeCache[targetUser] 中当前用户自己的 Like 值
+    const newTotalLike = data.likeCount
     const currentLikes = [...(likeCache[targetUser] || [])]
     const existingIndex = currentLikes.findIndex(item => item.ID === self)
     if (existingIndex >= 0) {
@@ -222,7 +208,6 @@ async function submitLike(targetUser: string) {
       currentLikes.push({ ID: self, Like: newTotalLike })
     }
     currentLikes.sort((a, b) => b.Like - a.Like)
-    // 直接赋值触发响应式更新
     likeCache[targetUser] = currentLikes
   } catch (err) {
     console.error('点赞失败:', err)
@@ -231,13 +216,15 @@ async function submitLike(targetUser: string) {
   }
 }
 
-// ---------- 评价数据 ----------
+// ---------- 评价数据（新接口） ----------
 async function fetchEvaluations(username: string): Promise<EvalItem[]> {
   if (evalCache.has(username)) return evalCache.get(username)!
   const encoded = encodeURIComponent(username)
-  const url = `https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/${encoded}/evaluation.json?t=${Date.now()}`
+  const url = `/api/${encoded}/evaluations`
   try {
-    const res = await fetch(url)
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
     if (!res.ok) return []
     const data = await res.json()
     if (Array.isArray(data)) {
@@ -250,19 +237,23 @@ async function fetchEvaluations(username: string): Promise<EvalItem[]> {
   }
 }
 
-async function saveEvaluations(username: string, evaluations: EvalItem[]) {
-  const encoded = encodeURIComponent(username)
-  const url = `https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/${encoded}/evaluation.json`
+async function saveEvaluation(targetUser: string, content: string) {
+  const encoded = encodeURIComponent(targetUser)
+  const url = `/api/${encoded}/evaluation`
   const res = await fetch(url, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(evaluations)
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ evaluation: content })
   })
-  if (res.ok) {
-    evalCache.set(username, evaluations)
-  } else {
-    throw new Error('保存评价失败')
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error || '保存评价失败')
   }
+  // 清除缓存，下次获取时会重新拉取
+  evalCache.delete(targetUser)
 }
 
 // ---------- 事件处理 ----------
@@ -276,7 +267,6 @@ function handleExpandEval(username: string) {
   currentExpandId.value = currentExpandId.value === id ? '' : id
 }
 
-// 滚动到指定卡片（使其在视口中垂直居中，平滑动画）
 function scrollToCard(username: string) {
   const cards = document.querySelectorAll('.member-card')
   for (const card of cards) {
@@ -288,44 +278,38 @@ function scrollToCard(username: string) {
   }
 }
 
-// 点赞点击：先发送请求，等待 DOM 更新，再滚动到卡片
 async function handleLikeClick(targetUser: string) {
-  await submitLike(targetUser)   // 等待点赞完成（包括 likeCache 更新）
-  await nextTick()               // 等待 Vue 重新渲染 DOM
-  // 微延迟确保布局完全稳定，避免滚动抖动
+  await submitLike(targetUser)
+  await nextTick()
   setTimeout(() => scrollToCard(targetUser), 60)
 }
 
+// 修改评价处理：直接调用 saveEvaluation，然后刷新当前评价列表（通过清除缓存并重新获取）
 async function handleEvalSubmit(targetUser: string, newText: string) {
   const self = selfTag.value
   if (!self) return
-  let evals = await fetchEvaluations(targetUser)
-  const existing = evals.find(item => item.ID === self)
-  if (newText.trim() === '') {
-    if (existing) evals = evals.filter(item => item.ID !== self)
-  } else {
-    if (existing) existing.evaluation = newText.trim()
-    else evals.push({ ID: self, evaluation: newText.trim() })
+  try {
+    await saveEvaluation(targetUser, newText)
+    // 清除当前用户对该目标用户的评价缓存，以便重新加载
+    evalCache.delete(targetUser)
+    await fetchEvaluations(targetUser)
+    // 重新排序成员列表以触发界面更新（如果有需要）
+    members.value = [...members.value]
+  } catch (err: any) {
+    console.error('评价提交失败:', err)
+    toastMessage.value = err.message || '评价提交失败'
+    setTimeout(() => { toastMessage.value = '' }, 3000)
   }
-  await saveEvaluations(targetUser, evals)
-  evalCache.delete(targetUser)
-  await fetchEvaluations(targetUser)
-  members.value = [...members.value]
 }
 
 // ---------- 加载成员数据 ----------
 async function loadMembers() {
   const usernames = await fetchUserList()
-  // 清空现有列表（避免重复）
   members.value = []
-  // 逐个加载用户数据
   for (const username of usernames) {
-    // 获取用户基本信息（段位、英雄等）
     const userData = await fetchUserData(username)
     if (userData.username) {
-      // 获取该用户的点赞数据（缓存到 likeCache）
-      await fetchLikes(username)
-      // 添加到列表末尾，触发视图更新
+      await fetchLikes(username)      // 预加载点赞数据（可选）
       members.value.push(userData)
     }
   }
@@ -349,7 +333,6 @@ const sortedMembers = computed(() => {
   })
 })
 
-// ---------- 全局点击处理 ----------
 function handleGlobalClick(e: MouseEvent) {
   const target = e.target as HTMLElement
   if (!target.closest('.member-card')) {
