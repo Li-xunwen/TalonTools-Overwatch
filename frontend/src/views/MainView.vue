@@ -125,14 +125,28 @@ async function fetchUserData(username: string): Promise<UserData> {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    // 后端返回字段：battletag, rank_open_6v6, rank_tank_5v5, rank_dps_5v5, rank_support_5v5, ...
+
+    // 辅助函数：解析段位字段（字符串 -> 对象，若为 null 或解析失败则返回 null）
+    const parseRank = (raw: any): { rank: string; level: number } | null => {
+      if (!raw) return null;
+      if (typeof raw === 'object') return raw; // 已经是对象
+      if (typeof raw === 'string') {
+        try {
+          return JSON.parse(raw);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    };
+
     return {
       username: data.battletag,
-      hero: data.heroes,   // 英雄数据暂缺，可从 COS 补充或留空
-      rank_open_6v6: data.rank_open_6v6,
-      rank_tank_5v5: data.rank_tank_5v5,
-      rank_dps_5v5: data.rank_dps_5v5,
-      rank_support_5v5: data.rank_support_5v5
+      hero: data.heroes,  
+      rank_open_6v6: parseRank(data.rank_open_6v6),
+      rank_tank_5v5: parseRank(data.rank_tank_5v5),
+      rank_dps_5v5: parseRank(data.rank_dps_5v5),
+      rank_support_5v5: parseRank(data.rank_support_5v5)
     };
   } catch {
     return { username, hero: [], error: true };

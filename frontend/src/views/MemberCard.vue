@@ -1,37 +1,43 @@
 <template>
   <div class="member-card" :data-is-self="user.username === selfTag">
-    <!-- 头部：头像 + 名字（置顶） -->
-    <div class="member-header">
-      <img
-        :src="`/res/imge/${user.username.replace(/#/g, '-')}.jpg`"
-        class="member-avatar"
-        @error="handleAvatarError"
-      />
-      <div class="member-text">
-        <div v-if="user.username === selfTag" class="member-greeting">{{ randomGreeting }}</div>
-        <div class="member-id">{{ user.username }}</div>
-      </div>
-    </div>
-
-    <!-- 段位区域（名字下方） -->
-    <div class="ranks-container" v-if="hasAnyRank">
-      <div class="rank-item" v-for="rank in rankList" :key="rank.type">
-        <div class="rank-icon-wrapper">
-          <img :src="`/res/imge/rank/${rank.rank}.png`" :alt="rank.rank" class="rank-icon" />
-          <span class="rank-level-badge">{{ rank.level }}</span>
+    <!-- 内部容器：包裹主要内容（头像、名字、段位、擅长英雄、评论按钮） -->
+    <div class="card-content">
+      <!-- 头部：头像 + 名字 -->
+      <div class="member-header">
+        <img
+          :src="`/res/imge/${user.username.replace(/#/g, '-')}.jpg`"
+          class="member-avatar"
+          @error="handleAvatarError"
+        />
+        <div class="member-text">
+          <div v-if="user.username === selfTag" class="member-greeting">{{ randomGreeting }}</div>
+          <div class="member-id">{{ user.username }}</div>
         </div>
-        <div class="rank-label">{{ rank.label }}</div>
       </div>
+
+      <!-- 段位区域（名字下方） -->
+      <div class="ranks-container" v-if="hasAnyRank">
+        <div class="rank-item" v-for="rank in rankList" :key="rank.type">
+          <div class="rank-icon-wrapper">
+            <img :src="`/res/imge/rank/${rank.rank}.png`" :alt="rank.rank" class="rank-icon" />
+            <span class="rank-level-badge">{{ rank.level }}</span>
+          </div>
+          <div class="rank-label">{{ rank.label }}</div>
+        </div>
+      </div>
+
+      <!-- 擅长英雄 -->
+      <div class="member-heroes">
+        <div v-for="hero in topHeroes" :key="hero" class="member-hero-icon">
+          <img :src="`/res/imge/hero/${encodeURIComponent(hero)}.png`" :alt="hero" loading="lazy" />
+        </div>
+      </div>
+
+      <!-- 评价按钮（放在容器左下角） -->
+      <div class="evaluation-button" @click.stop="onEvalClick">💬</div>
     </div>
 
-    <!-- 擅长英雄 -->
-    <div class="member-heroes">
-      <div v-for="hero in topHeroes" :key="hero" class="member-hero-icon">
-        <img :src="`/res/imge/hero/${encodeURIComponent(hero)}.png`" :alt="hero" loading="lazy" />
-      </div>
-    </div>
-
-    <!-- 点赞区域（右上角，仅包含点赞数和心形） -->
+    <!-- 点赞区域（右上角，独立于内部容器） -->
     <div class="like-button-container" @click.stop="onLikeClick">
       <span class="like-count">{{ displayLikeCount }}</span>
       <span class="heart">❤️</span>
@@ -47,9 +53,6 @@
         </div>
       </div>
     </Transition>
-
-    <!-- 评价按钮（右下角） -->
-    <div class="evaluation-button" @click.stop="onEvalClick">💬</div>
 
     <!-- 评价列表浮层 -->
     <Transition name="fade">
@@ -79,7 +82,7 @@
 import { ref, computed, onMounted } from 'vue'
 
 const props = defineProps<{
-  user: { 
+  user: {
     username: string
     hero?: string[]
     rank_open_6v6?: { rank: string; level: number } | null
@@ -113,6 +116,7 @@ const topHeroes = computed(() => (props.user.hero || []).slice(0, 5))
 // 处理段位列表（过滤非空，并添加中文标签）
 const rankList = computed(() => {
   const ranks: { type: string; label: string; rank: string; level: number }[] = []
+  console.log(props.user)
   const rankMap = [
     { field: 'rank_open_6v6', label: '6v6' },
     { field: 'rank_tank_5v5', label: '坦克' },
@@ -233,6 +237,13 @@ onMounted(() => {
   box-shadow: 0 10px 25px var(--shadow-color);
 }
 
+/* 内部容器：用于包裹主要内容，并作为评论按钮的定位参考 */
+.card-content {
+  position: relative;
+  /* 为评论按钮留出底部空间，避免覆盖英雄图标 */
+  padding-bottom: 30px;
+}
+
 /* 头部：头像 + 名字 */
 .member-header {
   display: flex;
@@ -282,7 +293,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 56px;
+  width: 64px;
 }
 .rank-icon-wrapper {
   position: relative;
@@ -297,14 +308,15 @@ onMounted(() => {
 .rank-level-badge {
   position: absolute;
   bottom: -2px;
-  right: -6px;
-  background: rgba(0,0,0,0.7);
+  right: 0px;
+  background: transparent;
+  border-radius: 0;
   color: white;
-  font-size: 10px;
+  font-size: 8px;
   font-weight: bold;
-  padding: 0 3px;
-  border-radius: 8px;
-  line-height: 1.2;
+  padding: 0;
+  line-height: 1;
+  text-shadow: 0 0 2px #000;
 }
 .rank-label {
   font-size: 8px;
@@ -339,7 +351,17 @@ onMounted(() => {
   object-fit: contain;
 }
 
-/* 点赞容器（右上角，仅数量+心形） */
+/* 评论按钮（位于内部容器的左下角） */
+.evaluation-button {
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  cursor: pointer;
+  font-size: 20px;
+  z-index: 10;
+}
+
+/* 点赞容器（右上角，独立于内部容器） */
 .like-button-container {
   position: absolute;
   top: 8px;
@@ -358,16 +380,6 @@ onMounted(() => {
 .heart {
   color: #ff4d6d;
   font-size: 14px;
-}
-
-/* 评论按钮（右下角） */
-.evaluation-button {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  cursor: pointer;
-  font-size: 20px;
-  z-index: 10;
 }
 
 /* 浮层样式（保持不变） */
@@ -410,6 +422,4 @@ onMounted(() => {
   max-height: 200px;
   overflow-y: auto;
 }
-
-/* 确保其他原有样式不受影响 */
 </style>
