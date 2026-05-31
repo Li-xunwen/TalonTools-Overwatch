@@ -11,6 +11,8 @@ export default defineConfig({
     }
   },
    server: {
+    host: '0.0.0.0',   // 默认是 'localhost'
+    port: 80,        // 默认是 5173
     proxy: {
       '/api': {
         target: 'http://localhost:3000',

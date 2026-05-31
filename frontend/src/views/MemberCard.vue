@@ -119,7 +119,6 @@ const rankList = computed(() => {
     { field: 'rank_dps_5v5', label: '输出' },
     { field: 'rank_support_5v5', label: '支援' }
   ]
-  console.log(props.user);
   for (const r of rankMap) {
     const data = props.user[r.field as keyof typeof props.user] as { rank: string; level: number } | null | undefined
     if (data && data.rank && data.level >= 1 && data.level <= 5) {

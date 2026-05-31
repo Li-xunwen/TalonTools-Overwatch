@@ -102,7 +102,7 @@ app.get('/api/users/battletaglist', async (req, res) => {
 
 
 // 获取指定用户的段位信息和擅长英雄列表（需要 token 认证）
-app.get('/api/rank_hero/:battletag', authenticateToken, async (req: AuthRequest, res) => {
+app.get('/api/:battletag/rank_hero', authenticateToken, async (req: AuthRequest, res) => {
     let battletag = req.params.battletag as string;
     battletag = decodeURIComponent(battletag);
     if (!battletag) {
@@ -145,6 +145,42 @@ app.get('/api/rank_hero/:battletag', authenticateToken, async (req: AuthRequest,
     } catch (error) {
         console.error('Database error:', error);
         res.status(500).json({ error: '获取用户信息失败' });
+    }
+});
+
+// 获取指定用户的被点赞信息（需要 token 认证）
+app.get('/api/:battletag/likes', authenticateToken, async (req: AuthRequest, res) => {
+    let battletag = req.params.battletag as string;
+    battletag = decodeURIComponent(battletag);
+    if (!battletag) {
+        return res.status(400).json({ error: '缺少 battletag 参数' });
+    }
+
+    try {
+        // 1. 查询目标用户是否存在，获取其 id
+        const [userRows] = await pool.query<mysql.RowDataPacket[]>(
+            'SELECT id FROM users WHERE battletag = ?',
+            [battletag]
+        );
+        if (userRows.length === 0) {
+            return res.status(404).json({ error: '用户不存在' });
+        }
+        const targetUserId = userRows[0].id;
+
+        // 2. 查询点赞信息：点赞者战网ID、累计点赞次数，按 like_count 降序排列
+        const [likeRows] = await pool.query<mysql.RowDataPacket[]>(
+            `SELECT u.battletag AS ID, l.like_count AS \`Like\`
+             FROM likes l
+             JOIN users u ON l.from_user_id = u.id
+             WHERE l.to_user_id = ?
+             ORDER BY l.like_count DESC`,
+            [targetUserId]
+        );
+
+        res.json(likeRows);
+    } catch (error) {
+        console.error('Database error:', error);
+        res.status(500).json({ error: '获取点赞信息失败' });
     }
 });
 
