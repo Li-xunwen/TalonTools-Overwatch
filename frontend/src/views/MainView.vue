@@ -1,26 +1,29 @@
 <template>
   <div class="join-play">
-    <!-- 使用主题切换组件 -->
     <ThemeToggle />
-
-    <!-- 内容区域 -->
     <div class="content-area">
       <div class="top-tip-text">这个未来值得为之奋战</div>
-
-      <!-- 头图海报区域 -->
       <div class="poster-wrapper">
         <PosterHeroes />
       </div>
-
-      <!-- 成员列表 -->
+      <Toast :message="toastMessage" :duration="3000" />
       <div class="section">
         <h2 class="section-title">成员名单</h2>
         <div class="members-grid">
-          <MemberCard v-for="member in sortedMembers" :key="member.username" :user="member" :self-tag="selfTag"
-            :current-expand-id="currentExpandId" :like-cache="likeCache" :eval-cache="evalCache"
-            :temp-like-map="tempLikeMap" :get-total-likes="getTotalLikes" :fetch-evaluations="fetchEvaluations"
-            @expand-like="handleExpandLike" @expand-eval="handleExpandEval" @like-click="handleLikeClick"
-            @eval-submit="handleEvalSubmit" />
+          <MemberCard
+            v-for="member in sortedMembers"
+            :key="member.username"
+            :user="member"
+            :self-tag="selfTag"
+            :current-expand-id="currentExpandId"
+            :like-cache="likeCache"
+            :eval-cache="evalCache"
+            :fetch-evaluations="fetchEvaluations"
+            @expand-like="handleExpandLike"
+            @expand-eval="handleExpandEval"
+            @like-click="handleLikeClick"
+            @eval-submit="handleEvalSubmit"
+          />
         </div>
       </div>
 
@@ -49,7 +52,6 @@
       </div>
     </div>
 
-    <!-- 底部导航栏 (建议替换为 router-link) -->
     <div class="fixed-bottom-nav">
       <router-link to="/news" class="nav-tab" active-class="active">
         <div>黑爪动态</div>
@@ -65,10 +67,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, reactive } from 'vue'
 import MemberCard from './MemberCard.vue'
-import ThemeToggle from '@/components/ThemeToggle.vue' // 确保导入
+import ThemeToggle from '@/components/ThemeToggle.vue'
 import PosterHeroes from '@/components/PosterHeroes.vue'
+import Toast from '@/components/Toast.vue'
 
 // ---------- 类型定义 ----------
 interface UserData {
@@ -92,130 +95,139 @@ interface EvalItem {
 }
 
 // ---------- 全局状态 ----------
-// 移除了 currentTheme 相关逻辑，由 useTheme 统一管理
-const token = localStorage.getItem('authToken');
+const token = localStorage.getItem('authToken')
 const selfTag = ref<string | null>(null)
 const members = ref<UserData[]>([])
-const likeCache = new Map<string, LikeItem[]>()
+// 将 likeCache 改为响应式对象，以便 Vue 检测变化
+const likeCache = reactive<Record<string, LikeItem[]>>({})
 const evalCache = new Map<string, EvalItem[]>()
-
-// 临时点赞增量及防抖定时器
-const tempLikeMap = new Map<string, number>()
-const likeDebounceMap = new Map<string, ReturnType<typeof setTimeout>>()
-
-// 当前展开的浮层 ID
+const toastMessage = ref('')
 const currentExpandId = ref<string>('')
+
+// 防止短时间内重复点赞（简单锁）
+const likePending = new Map<string, boolean>()
 
 // ---------- 辅助函数 ----------
 async function fetchUserList(): Promise<string[]> {
-  // 调用后端接口，相对路径（开发环境可配置代理，或使用绝对路径如 http://localhost:3000）
   const res = await fetch('/api/users/battletaglist')
   if (!res.ok) throw new Error('获取用户列表失败')
-  // 后端直接返回 battletag 字符串数组，例如 ["Node#51456", "Alyce#51781", ...]
+  selfTag.value = await fetch('/api/users/me', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+    .then(res => res.json())
+    .then(data => data.battletag)
   const battletagList: string[] = await res.json()
   return battletagList
 }
 
 async function fetchUserData(username: string): Promise<UserData> {
-  const encoded = encodeURIComponent(username);
+  const encoded = encodeURIComponent(username)
   const url = `/api/${encoded}/rank_hero`
   try {
     const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-
-    // 辅助函数：解析段位字段（字符串 -> 对象，若为 null 或解析失败则返回 null）
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
     const parseRank = (raw: any): { rank: string; level: number } | null => {
-      if (!raw) return null;
-      if (typeof raw === 'object') return raw; // 已经是对象
+      if (!raw) return null
+      if (typeof raw === 'object') return raw
       if (typeof raw === 'string') {
-        try {
-          return JSON.parse(raw);
-        } catch {
-          return null;
-        }
+        try { return JSON.parse(raw) } catch { return null }
       }
-      return null;
-    };
-
+      return null
+    }
     return {
       username: data.battletag,
-      hero: data.heroes,  
+      hero: data.heroes,
       rank_open_6v6: parseRank(data.rank_open_6v6),
       rank_tank_5v5: parseRank(data.rank_tank_5v5),
       rank_dps_5v5: parseRank(data.rank_dps_5v5),
       rank_support_5v5: parseRank(data.rank_support_5v5)
-    };
+    }
   } catch {
-    return { username, hero: [], error: true };
+    return { username, hero: [], error: true }
   }
 }
 
 // ---------- 点赞数据 ----------
 async function fetchLikes(username: string): Promise<LikeItem[]> {
-  if (likeCache.has(username)) return likeCache.get(username)!;
-  const encoded = encodeURIComponent(username);
-  const url = `/api/${encoded}/likes`;  // 后端接口
-
+  if (likeCache[username]) return likeCache[username]
+  const encoded = encodeURIComponent(username)
+  const url = `/api/${encoded}/likelist`
   try {
     const res = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (!res.ok) return []
+    const data = await res.json()
     if (Array.isArray(data)) {
-      // 后端返回格式为 [{ID: "xxx", Like: number}, ...]，与 LikeItem 兼容
-      likeCache.set(username, data);
-      return data;
+      likeCache[username] = data
+      return data
     }
-    return [];
+    return []
   } catch {
-    return [];
+    return []
   }
 }
 
 function getTotalLikes(username: string): number {
-  const likes = likeCache.get(username) || []
+  const likes = likeCache[username] || []
   return likes.reduce((sum, item) => sum + (item.Like || 0), 0)
 }
 
-async function submitLikes(targetUser: string) {
+// 每次点击立即发送一次点赞请求（不再累积）
+async function submitLike(targetUser: string) {
   const self = selfTag.value
   if (!self) return
-  const pending = tempLikeMap.get(targetUser) || 0
-  if (pending <= 0) return
 
-  const currentLikes = [...(likeCache.get(targetUser) || [])]
-  const existing = currentLikes.find(item => item.ID === self)
-  if (existing) {
-    existing.Like += pending
-  } else {
-    currentLikes.push({ ID: self, Like: pending })
-  }
-  currentLikes.sort((a, b) => b.Like - a.Like)
+  // 防止重复请求（对同一个目标用户，上一个请求未完成时忽略新点击）
+  if (likePending.get(targetUser)) return
+  likePending.set(targetUser, true)
 
   const encoded = encodeURIComponent(targetUser)
-  const url = `https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/like/${encoded}.json`
+  const url = `/api/${encoded}/like`
+
   try {
     const res = await fetch(url, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(currentLikes)
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+      // 不再发送 increment 字段，后端默认加 1
     })
-    if (res.ok) {
-      likeCache.set(targetUser, currentLikes)
-      tempLikeMap.delete(targetUser)
-    } else {
-      console.error('点赞提交失败')
+
+    const data = await res.json()
+    if (!res.ok) {
+      let errorMsg = ''
+      if (res.status === 429) {
+        errorMsg = data.error || '今日点赞已达上限'
+      } else {
+        errorMsg = data.error || '点赞失败，请稍后重试'
+      }
+      toastMessage.value = ''
+      setTimeout(() => { toastMessage.value = errorMsg }, 0)
+      throw new Error(data.error)
     }
+
+    const newTotalLike = data.likeCount // 当前用户给目标用户的累计总赞数
+
+    // 更新 likeCache[targetUser] 中当前用户自己的 Like 值
+    const currentLikes = [...(likeCache[targetUser] || [])]
+    const existingIndex = currentLikes.findIndex(item => item.ID === self)
+    if (existingIndex >= 0) {
+      currentLikes[existingIndex].Like = newTotalLike
+    } else {
+      currentLikes.push({ ID: self, Like: newTotalLike })
+    }
+    currentLikes.sort((a, b) => b.Like - a.Like)
+    // 直接赋值触发响应式更新
+    likeCache[targetUser] = currentLikes
   } catch (err) {
-    console.error(err)
+    console.error('点赞失败:', err)
   } finally {
-    likeDebounceMap.delete(targetUser)
+    likePending.delete(targetUser)
   }
 }
 
@@ -264,14 +276,10 @@ function handleExpandEval(username: string) {
   currentExpandId.value = currentExpandId.value === id ? '' : id
 }
 
+// 每次点击立即调用 submitLike
 async function handleLikeClick(targetUser: string) {
-  const self = selfTag.value
-  if (!self) return
-  const cur = tempLikeMap.get(targetUser) || 0
-  tempLikeMap.set(targetUser, cur + 1)
-  if (likeDebounceMap.has(targetUser)) clearTimeout(likeDebounceMap.get(targetUser))
-  likeDebounceMap.set(targetUser, setTimeout(() => submitLikes(targetUser), 1200))
-  members.value = [...members.value] // 触发重新排序
+  await submitLike(targetUser)
+  // 注意：likeCache 已更新，视图会自动刷新，无需手动重新赋值 members
 }
 
 async function handleEvalSubmit(targetUser: string, newText: string) {
@@ -296,7 +304,6 @@ async function loadMembers() {
   const usernames = await fetchUserList()
   const userPromises = usernames.map(username => fetchUserData(username))
   const rawUsers = await Promise.all(userPromises)
-  // 过滤掉无效用户（没有 username 的情况）
   const validUsers = rawUsers.filter(u => u.username)
   await Promise.all(validUsers.map(u => fetchLikes(u.username)))
   members.value = validUsers
@@ -310,13 +317,11 @@ const sortedMembers = computed(() => {
     if (a.username === self && b.username !== self) return -1
     if (a.username !== self && b.username === self) return 1
     if (a.username !== self && b.username !== self) {
-      const likesA = likeCache.get(a.username) || []
-      const likesB = likeCache.get(b.username) || []
+      const likesA = likeCache[a.username] || []
+      const likesB = likeCache[b.username] || []
       const countA = likesA.find(item => item.ID === self)?.Like || 0
       const countB = likesB.find(item => item.ID === self)?.Like || 0
-      const tempA = tempLikeMap.get(a.username) || 0
-      const tempB = tempLikeMap.get(b.username) || 0
-      return (countB + tempB) - (countA + tempA)
+      return countB - countA
     }
     return 0
   })
@@ -330,10 +335,8 @@ function handleGlobalClick(e: MouseEvent) {
   }
 }
 
-// ---------- 生命周期 ----------
 onMounted(async () => {
   await loadMembers()
-  
   document.addEventListener('click', handleGlobalClick)
 })
 
@@ -343,19 +346,15 @@ onUnmounted(() => {
 </script>
 
 <style>
-/* 导入全局样式 */
 @import '../style/main.css';
-/* === 头图海报容器 === */
 .poster-wrapper {
-    width: 100%;
-    /* 保持宽高比，防止塌陷 */
-    aspect-ratio: 2 / 1; 
+  width: 100%;
+  aspect-ratio: 2 / 1;
 }
-
 .members-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 25px;
-    margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 25px;
+  margin-top: 20px;
 }
 </style>
