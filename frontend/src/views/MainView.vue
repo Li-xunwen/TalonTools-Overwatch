@@ -93,6 +93,7 @@ interface EvalItem {
 
 // ---------- 全局状态 ----------
 // 移除了 currentTheme 相关逻辑，由 useTheme 统一管理
+const token = localStorage.getItem('authToken');
 const selfTag = ref<string | null>(null)
 const members = ref<UserData[]>([])
 const likeCache = new Map<string, LikeItem[]>()
@@ -117,15 +118,13 @@ async function fetchUserList(): Promise<string[]> {
 
 async function fetchUserData(username: string): Promise<UserData> {
   const encoded = encodeURIComponent(username);
-  const url = `/api/rank_hero/${encoded}`;
-  const token = localStorage.getItem('authToken');
+  const url = `/api/${encoded}/rank_hero`
   try {
     const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    console.log('data:', data);
     // 后端返回字段：battletag, rank_open_6v6, rank_tank_5v5, rank_dps_5v5, rank_support_5v5, ...
     return {
       username: data.battletag,
@@ -142,20 +141,26 @@ async function fetchUserData(username: string): Promise<UserData> {
 
 // ---------- 点赞数据 ----------
 async function fetchLikes(username: string): Promise<LikeItem[]> {
-  if (likeCache.has(username)) return likeCache.get(username)!
-  const encoded = encodeURIComponent(username)
-  const url = `https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/like/${encoded}.json?t=${Date.now()}`
+  if (likeCache.has(username)) return likeCache.get(username)!;
+  const encoded = encodeURIComponent(username);
+  const url = `/api/${encoded}/likes`;  // 后端接口
+
   try {
-    const res = await fetch(url)
-    if (!res.ok) return []
-    const data = await res.json()
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
     if (Array.isArray(data)) {
-      likeCache.set(username, data)
-      return data
+      // 后端返回格式为 [{ID: "xxx", Like: number}, ...]，与 LikeItem 兼容
+      likeCache.set(username, data);
+      return data;
     }
-    return []
+    return [];
   } catch {
-    return []
+    return [];
   }
 }
 
