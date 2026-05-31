@@ -1,95 +1,81 @@
-<script setup lang="ts">
-import { ref } from 'vue'
-import viteLogo from '../assets/vite.svg'
-import heroImg from '../assets/hero.png'
-import vueLogo from '../assets/vue.svg'
+<template>
+  <div class="join-play news-page">
+    <ThemeToggle />
+    <div class="content-area">
+      <div class="top-tip-text">快马加鞭修复中...</div>
+      <div class="section coming-soon-section">
+        <h2 class="section-title">你给了Node一鞭，Node正在拼命修复该页</h2>
+      </div>
+    </div>
+    <div class="fixed-bottom-nav">
+      <router-link to="/news" class="nav-tab" active-class="active">
+        <div>黑爪动态</div>
+      </router-link>
+      <router-link to="/main" class="nav-tab" active-class="active">
+        <div>主页</div>
+      </router-link>
+      <router-link to="/profile" class="nav-tab" active-class="active">
+        <div>我的</div>
+      </router-link>
+    </div>
+  </div>
+</template>
 
-const count = ref(0)
+<script setup lang="ts">
+import ThemeToggle from '@/components/ThemeToggle.vue'
 </script>
 
-<template>
-  <section id="center">
-    <div class="hero">
-      <img :src="heroImg" class="base" width="170" height="179" alt="" />
-      <img :src="vueLogo" class="framework" alt="Vue logo" />
-      <img :src="viteLogo" class="vite" alt="Vite logo" />
-    </div>
-    <div>
-      <h1>Get started</h1>
-      <p>Edit <code>src/App.vue</code> and save to test <code>HMR</code></p>
-    </div>
-    <button type="button" class="counter" @click="count++">
-      Count is {{ count }}
-    </button>
-  </section>
-
-  <div class="ticks"></div>
-
-  <section id="next-steps">
-    <div id="docs">
-      <svg class="icon" role="presentation" aria-hidden="true">
-        <use href="/icons.svg#documentation-icon"></use>
-      </svg>
-      <h2>Documentation</h2>
-      <p>Your questions, answered</p>
-      <ul>
-        <li>
-          <a href="https://vite.dev/" target="_blank">
-            <img class="logo" :src="viteLogo" alt="" />
-            Explore Vite
-          </a>
-        </li>
-        <li>
-          <a href="https://vuejs.org/" target="_blank">
-            <img class="button-icon" :src="vueLogo" alt="" />
-            Learn more
-          </a>
-        </li>
-      </ul>
-    </div>
-    <div id="social">
-      <svg class="icon" role="presentation" aria-hidden="true">
-        <use href="/icons.svg#social-icon"></use>
-      </svg>
-      <h2>Connect with us</h2>
-      <p>Join the Vite community</p>
-      <ul>
-        <li>
-          <a href="https://github.com/vitejs/vite" target="_blank">
-            <svg class="button-icon" role="presentation" aria-hidden="true">
-              <use href="/icons.svg#github-icon"></use>
-            </svg>
-            GitHub
-          </a>
-        </li>
-        <li>
-          <a href="https://chat.vite.dev/" target="_blank">
-            <svg class="button-icon" role="presentation" aria-hidden="true">
-              <use href="/icons.svg#discord-icon"></use>
-            </svg>
-            Discord
-          </a>
-        </li>
-        <li>
-          <a href="https://x.com/vite_js" target="_blank">
-            <svg class="button-icon" role="presentation" aria-hidden="true">
-              <use href="/icons.svg#x-icon"></use>
-            </svg>
-            X.com
-          </a>
-        </li>
-        <li>
-          <a href="https://bsky.app/profile/vite.dev" target="_blank">
-            <svg class="button-icon" role="presentation" aria-hidden="true">
-              <use href="/icons.svg#bluesky-icon"></use>
-            </svg>
-            Bluesky
-          </a>
-        </li>
-      </ul>
-    </div>
-  </section>
-
-  <div class="ticks"></div>
-  <section id="spacer"></section>
-</template>
+<style scoped>
+@import '../style/main.css';
+.news-page .content-area {
+  padding-top: 20px;
+}
+.coming-soon-section {
+  text-align: center;
+  background: var(--card-bg);
+  border-radius: 24px;
+  padding: 40px 20px;
+  margin: 20px 0;
+}
+.coming-soon-content {
+  font-size: 18px;
+  line-height: 1.8;
+  color: var(--text-primary);
+  margin: 30px 0;
+}
+.placeholder-icon {
+  font-size: 64px;
+  opacity: 0.7;
+  margin-top: 20px;
+}
+.test-elements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+.test-element {
+  height: 100px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 18px;
+  box-shadow: 0 5px 15px var(--shadow-color);
+  transition: all 0.3s ease;
+}
+.test-element:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px var(--shadow-color);
+}
+.top-tip-text {
+  font-size: clamp(20px, 5vw, 36px);
+  text-align: center;
+  padding: 20px 0 10px;
+  font-weight: bold;
+  color: var(--text-primary);
+}
+</style>
