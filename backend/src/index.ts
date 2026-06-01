@@ -432,6 +432,142 @@ app.put('/api/:battletag/evaluation', authenticateToken, async (req: AuthRequest
     }
 });
 
+/**
+ * PUT /api/user/rank
+ * 功能：修改当前登录用户的段位信息（需要 token 认证）
+ * 请求体示例：
+ * {
+ *   "rank_open_6v6": { "rank": "gold", "level": 5 },
+ *   "rank_tank_5v5": null,
+ *   "rank_dps_5v5": { "rank": "platinum", "level": 2 }
+ * }
+ * 说明：只更新请求体中提供的字段，未提供的字段保持不变。
+ *      每个段位值必须是合法的对象 { rank: string, level: number } 或 null。
+ *      如果值为 null，表示清除该段位。
+ */
+app.put('/api/user/rank', authenticateToken, async (req: AuthRequest, res) => {
+    const userId = req.user?.userId;
+    if (!userId) {
+        return res.status(401).json({ error: '未授权' });
+    }
+
+    const allowedFields = ['rank_open_6v6', 'rank_tank_5v5', 'rank_dps_5v5', 'rank_support_5v5'];
+    const updates: any = {};
+    let hasUpdate = false;
+
+    for (const field of allowedFields) {
+        if (req.body.hasOwnProperty(field)) {
+            const value = req.body[field];
+            // 校验值：必须是 null 或 { rank: string, level: number }
+            if (value !== null && (typeof value !== 'object' || !value.rank || typeof value.level !== 'number')) {
+                return res.status(400).json({ error: `${field} 格式错误，应为 { rank: string, level: number } 或 null` });
+            }
+            updates[field] = value;
+            hasUpdate = true;
+        }
+    }
+
+    if (!hasUpdate) {
+        return res.status(400).json({ error: '未提供任何段位字段' });
+    }
+
+    try {
+        // 构建动态 SET 子句
+        const setClauses: string[] = [];
+        const values: any[] = [];
+        for (const field of allowedFields) {
+            if (updates.hasOwnProperty(field)) {
+                setClauses.push(`${field} = ?`);
+                values.push(updates[field] === null ? null : JSON.stringify(updates[field]));
+            }
+        }
+        values.push(userId);
+        const query = `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`;
+        await pool.query(query, values);
+
+        res.json({ message: '段位信息更新成功' });
+    } catch (error) {
+        console.error('更新段位失败:', error);
+        res.status(500).json({ error: '服务器错误，请稍后重试' });
+    }
+});
+
+
+/**
+ * PUT /api/user/heroes
+ * 功能：修改当前登录用户的擅长英雄列表（需要 token 认证）
+ * 请求体示例：
+ * {
+ *   "heroes": ["genji", "tracer", "mercy"]
+ * }
+ * 说明：
+ *   - heroes 数组长度为 0~5，元素为英雄英文名（必须存在于 heroes 表中）。
+ *   - 数组顺序即为擅长顺序（sort_order 从 1 开始）。
+ *   - 如果 heroes 为空数组，则删除该用户的所有擅长记录。
+ */
+app.put('/api/user/heroes', authenticateToken, async (req: AuthRequest, res) => {
+    const userId = req.user?.userId;
+    if (!userId) {
+        return res.status(401).json({ error: '未授权' });
+    }
+
+    let { heroes } = req.body;
+    if (!Array.isArray(heroes)) {
+        return res.status(400).json({ error: 'heroes 必须是一个数组' });
+    }
+    if (heroes.length > 5) {
+        return res.status(400).json({ error: '擅长英雄不能超过5个' });
+    }
+
+    // 去重并保留顺序
+    heroes = [...new Map(heroes.map((name, idx) => [name, idx])).keys()];
+    if (heroes.length > 5) {
+        return res.status(400).json({ error: '去重后超过5个英雄' });
+    }
+
+    // 批量查询英雄是否存在于 heroes 表
+    let heroIds: number[] = [];
+    if (heroes.length > 0) {
+        const placeholders = heroes.map(() => '?').join(',');
+        const [rows] = await pool.query<mysql.RowDataPacket[]>(
+            `SELECT id, name FROM heroes WHERE name IN (${placeholders})`,
+            heroes
+        );
+        const foundMap = new Map(rows.map(row => [row.name, row.id]));
+        const notFound = heroes.filter((name: string) => !foundMap.has(name));
+        if (notFound.length > 0) {
+            return res.status(400).json({ error: `以下英雄不存在：${notFound.join(', ')}` });
+        }
+        heroIds = heroes.map((name: string) => foundMap.get(name)!);
+    }
+
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+    try {
+        // 1. 删除用户原有的擅长记录
+        await connection.query('DELETE FROM user_favorite_heroes WHERE user_id = ?', [userId]);
+
+        // 2. 插入新的擅长记录
+        if (heroIds.length > 0) {
+            const insertValues: any[] = [];
+            for (let i = 0; i < heroIds.length; i++) {
+                insertValues.push(userId, heroIds[i], i + 1);
+            }
+            const insertSql = `INSERT INTO user_favorite_heroes (user_id, hero_id, sort_order) VALUES ${insertValues.map(() => '(?, ?, ?)').join(', ')}`;
+            await connection.query(insertSql, insertValues);
+        }
+
+        await connection.commit();
+        res.json({ message: '擅长英雄更新成功', heroes });
+    } catch (error) {
+        await connection.rollback();
+        console.error('更新擅长英雄失败:', error);
+        res.status(500).json({ error: '服务器错误，请稍后重试' });
+    } finally {
+        connection.release();
+    }
+});
+
 // 启动服务器
 app.listen(port, () => {
     console.log(`🚀 Server is running at http://localhost:${port}`);
