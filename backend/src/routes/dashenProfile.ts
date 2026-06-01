@@ -8,9 +8,6 @@ const BACKEND_BASE = 'http://127.0.0.1:8080/api/v2';
 
 async function proxyAndCache(req: any, res: any) {
   const body = req.body;
-  if (!body.bnet_id || !body.mode) {
-    return res.status(400).json({ error: '缺少必要参数: bnet_id, mode' });
-  }
 
   // 动态构造目标 URL
   let targetPath = '';
