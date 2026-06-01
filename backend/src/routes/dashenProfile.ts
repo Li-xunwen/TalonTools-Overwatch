@@ -60,6 +60,6 @@ async function proxyAndCache(
 
 router.post('/dashen-profile', (req, res) => proxyAndCache(req, res, false));
 router.post('/dashen-profile/image', (req, res) => proxyAndCache(req, res, true));
-router.post('/api/v2/dashen-summary/today', (req, res) => proxyAndCache(req, res, true));
-router.post('/api/v2/dashen-summary/today/image', (req, res) => proxyAndCache(req, res, true));
+router.post('/dashen-summary/today', (req, res) => proxyAndCache(req, res, true));
+router.post('/dashen-summary/today/image', (req, res) => proxyAndCache(req, res, true));
 export default router;
