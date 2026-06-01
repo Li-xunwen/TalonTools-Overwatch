@@ -6,6 +6,7 @@ import mysql from 'mysql2/promise';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { authenticateToken, AuthRequest } from './middleware/auth';
+import dashenProfileRouter from './routes/dashenProfile';
 
 dotenv.config();
 
@@ -582,6 +583,8 @@ app.put('/api/user/heroes', authenticateToken, async (req: AuthRequest, res) => 
         connection.release();
     }
 });
+
+app.use('/api/v2', dashenProfileRouter);
 
 // 启动服务器
 app.listen(port, () => {
