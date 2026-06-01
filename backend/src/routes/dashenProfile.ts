@@ -4,21 +4,32 @@ import { getRedisClient } from '../services/redisClient';
 import { getCacheKey } from '../utils/cacheHelpers';
 
 const router = Router();
+const BACKEND_BASE = 'http://127.0.0.1:8080/api/v2';
 
-const TARGET_BASE = 'http://127.0.0.1:8080/api/v2/dashen-profile';
-
-async function proxyAndCache(
-  req: any,
-  res: any,
-  isImage: boolean
-) {
+async function proxyAndCache(req: any, res: any) {
   const body = req.body;
   if (!body.bnet_id || !body.mode) {
     return res.status(400).json({ error: '缺少必要参数: bnet_id, mode' });
   }
 
+  // 动态构造目标 URL
+  let targetPath = '';
+  if (req.path === '/dashen-profile') {
+    targetPath = '/dashen-profile/';
+  } else if (req.path === '/dashen-profile/image') {
+    targetPath = '/dashen-profile/image';
+  } else if (req.path === '/dashen-summary/today') {
+    targetPath = '/dashen-summary/today';
+  } else if (req.path === '/dashen-summary/today/image') {
+    targetPath = '/dashen-summary/today/image';
+  } else {
+    return res.status(404).json({ error: '未知的路由' });
+  }
+
+  const targetUrl = `${BACKEND_BASE}${targetPath}`;
+  const isImage = targetPath.endsWith('/image');
   const cacheKey = getCacheKey(body);
-  const targetUrl = `${TARGET_BASE}${isImage ? '/image' : ''}`;
+
   const redis = await getRedisClient();
 
   // 尝试读取缓存
@@ -58,8 +69,10 @@ async function proxyAndCache(
   }
 }
 
-router.post('/dashen-profile', (req, res) => proxyAndCache(req, res, false));
-router.post('/dashen-profile/image', (req, res) => proxyAndCache(req, res, true));
-router.post('/dashen-summary/today', (req, res) => proxyAndCache(req, res, true));
-router.post('/dashen-summary/today/image', (req, res) => proxyAndCache(req, res, true));
+// 定义路由
+router.post('/dashen-profile', proxyAndCache);
+router.post('/dashen-profile/image', proxyAndCache);
+router.post('/dashen-summary/today', proxyAndCache);
+router.post('/dashen-summary/today/image', proxyAndCache);
+
 export default router;
