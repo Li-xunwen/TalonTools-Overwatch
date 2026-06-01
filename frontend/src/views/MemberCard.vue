@@ -34,11 +34,11 @@
       <div class="evaluation-button" @click.stop="onEvalClick">💬</div>
 
       <!-- 生涯查询按钮（左下角） -->
-    <div class="career-button" @click.stop="onCareerClick">📊</div>
-    
+      <div class="career-button" @click.stop="onCareerClick">🏆</div>
+
     </div>
 
-    
+
 
     <!-- 点赞区域（右上角） -->
     <div class="like-button-container" @click.stop="onLikeClick">
@@ -79,7 +79,7 @@
       </div>
     </Transition>
 
-        
+
     <!-- 生涯浮层 -->
     <Transition name="fade">
       <div v-if="expandCareer" class="career-list" @click.stop>
@@ -87,16 +87,19 @@
           <div class="loading-spinner"></div>
           <span>加载中...</span>
         </div>
-        <img v-else-if="careerImageUrl" :src="careerImageUrl" class="career-image" />
+        <img v-else-if="careerImageUrl" :src="careerImageUrl" class="career-image"
+          @click="openImageViewer(careerImageUrl)" />
         <div v-else-if="careerError" class="career-error">加载失败</div>
       </div>
     </Transition>
-    
+
   </div>
+  <ImageViewer v-model:visible="showImageViewer" :src="currentCareerImageUrl" />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
+import ImageViewer from '@/components/ImageViewer.vue'
 
 const props = defineProps<{
   user: {
@@ -175,6 +178,11 @@ const hasSelfEval = computed(() => evalList.value.some(item => item.ID === props
 const expandLike = computed(() => props.currentExpandId === `like-${props.user.username}`)
 const expandEval = computed(() => props.currentExpandId === `eval-${props.user.username}`)
 
+
+const showImageViewer = ref(false)
+const currentCareerImageUrl = ref('')
+
+
 // 自动关闭定时器
 let autoCloseTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -193,9 +201,6 @@ watch(expandLike, (newVal) => {
   }
 })
 
-onUnmounted(() => {
-  if (autoCloseTimer) clearTimeout(autoCloseTimer)
-})
 
 function handleAvatarError(e: Event) {
   (e.target as HTMLImageElement).style.opacity = '0.4'
@@ -362,6 +367,11 @@ function escapeHtml(str: string) {
 
 // 请求生涯图片
 async function fetchCareerImage() {
+  // 释放之前的 blob URL（如果有）
+  if (careerImageUrl.value && careerImageUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(careerImageUrl.value)
+    careerImageUrl.value = ''
+  }
   careerLoading.value = true
   careerError.value = false
   const token = localStorage.getItem('authToken')
@@ -399,9 +409,21 @@ function onCareerClick() {
   }
 }
 
+function openImageViewer(url: string) {
+  currentCareerImageUrl.value = url
+  showImageViewer.value = true
+}
+
 onMounted(() => {
   const greetings = ['别来无恙~', '好久不见！', '欢迎你，特工', '近来可好？', '黑爪需要你', '又见面了！']
   randomGreeting.value = greetings[Math.floor(Math.random() * greetings.length)]
+})
+
+onUnmounted(() => {
+  if (careerImageUrl.value && careerImageUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(careerImageUrl.value)
+  }
+  if (autoCloseTimer) clearTimeout(autoCloseTimer)
 })
 </script>
 
@@ -632,9 +654,10 @@ onMounted(() => {
   bottom: 0px;
   left: 0px;
   cursor: pointer;
-  font-size: 20px;
+  font-size: 15px;
   z-index: 10;
 }
+
 .career-list {
   top: 100%;
   left: 0;
@@ -645,6 +668,7 @@ onMounted(() => {
   max-height: 200px;
   overflow-y: auto;
 }
+
 .career-loading {
   display: flex;
   flex-direction: column;
@@ -652,22 +676,28 @@ onMounted(() => {
   gap: 8px;
   color: white;
 }
+
 .loading-spinner {
   width: 30px;
   height: 30px;
-  border: 3px solid rgba(255,255,255,0.3);
+  border: 3px solid rgba(255, 255, 255, 0.3);
   border-top-color: white;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
+
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
+
 .career-image {
   max-width: 100%;
   height: auto;
   border-radius: 8px;
 }
+
 .career-error {
   color: #ff6666;
 }
