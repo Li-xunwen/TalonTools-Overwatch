@@ -32,22 +32,14 @@
 
       <!-- 评价按钮 -->
       <div class="evaluation-button" @click.stop="onEvalClick">💬</div>
+
+      <!-- 生涯查询按钮（左下角） -->
+    <div class="career-button" @click.stop="onCareerClick">📊</div>
+    
     </div>
 
-    <!-- 生涯查询按钮（左下角） -->
-    <div class="career-button" @click.stop="onCareerClick">📊</div>
+    
 
-    <!-- 生涯浮层 -->
-    <Transition name="fade">
-      <div v-if="expandCareer" class="career-list" @click.stop>
-        <div v-if="careerLoading" class="career-loading">
-          <div class="loading-spinner"></div>
-          <span>加载中...</span>
-        </div>
-        <img v-else-if="careerImageUrl" :src="careerImageUrl" class="career-image" />
-        <div v-else-if="careerError" class="career-error">加载失败</div>
-      </div>
-    </Transition>
     <!-- 点赞区域（右上角） -->
     <div class="like-button-container" @click.stop="onLikeClick">
       <span class="like-count">{{ displayLikeCount }}</span>
@@ -86,6 +78,20 @@
         </div>
       </div>
     </Transition>
+
+        
+    <!-- 生涯浮层 -->
+    <Transition name="fade">
+      <div v-if="expandCareer" class="career-list" @click.stop>
+        <div v-if="careerLoading" class="career-loading">
+          <div class="loading-spinner"></div>
+          <span>加载中...</span>
+        </div>
+        <img v-else-if="careerImageUrl" :src="careerImageUrl" class="career-image" />
+        <div v-else-if="careerError" class="career-error">加载失败</div>
+      </div>
+    </Transition>
+    
   </div>
 </template>
 
@@ -630,17 +636,14 @@ onMounted(() => {
   z-index: 10;
 }
 .career-list {
-  position: absolute;
   top: 100%;
   left: 0;
   right: 0;
-  background: rgba(0,0,0,0.85);
   border-radius: 0 0 8px 8px;
-  padding: 12px;
+  padding: 8px 0;
   z-index: 20;
-  max-height: 300px;
+  max-height: 200px;
   overflow-y: auto;
-  text-align: center;
 }
 .career-loading {
   display: flex;
