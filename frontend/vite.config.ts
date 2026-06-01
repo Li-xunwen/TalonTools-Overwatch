@@ -15,7 +15,7 @@ export default defineConfig({
     port: 80,        // 默认是 5173
     proxy: {
       '/api': {
-        target: 'http://47.116.35.79:3000/',
+        target: 'http://localhost:3000',
         changeOrigin: true,
         // rewrite: (path) => path, // 不需要重写，直接转发 /api/xxx
       },

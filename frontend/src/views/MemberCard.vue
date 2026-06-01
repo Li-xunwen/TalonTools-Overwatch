@@ -33,8 +33,16 @@
       <!-- 评价按钮 -->
       <div class="evaluation-button" @click.stop="onEvalClick">💬</div>
 
-      <!-- 生涯查询按钮（左下角） -->
-      <div class="career-button" @click.stop="onCareerClick">🏆</div>
+      <div class="action-buttons">
+        <div class="action-btn" @click.stop="onCareerClick">
+          <div class="btn-icon">🏆</div>
+          <div class="btn-label">生涯</div>
+        </div>
+        <div class="action-btn" @click.stop="onSummaryClick">
+          <div class="btn-icon">📅</div>
+          <div class="btn-label">今日总结</div>
+        </div>
+      </div>
 
     </div>
 
@@ -93,6 +101,19 @@
       </div>
     </Transition>
 
+    <!-- 今日总结浮层 -->
+    <Transition name="fade">
+      <div v-if="expandSummary" class="summary-list" @click.stop>
+        <div v-if="summaryLoading" class="summary-loading">
+          <div class="loading-spinner"></div>
+          <span>加载中...</span>
+        </div>
+        <img v-else-if="summaryImageUrl" :src="summaryImageUrl" class="summary-image"
+          @click="openImageViewer(summaryImageUrl)" />
+        <div v-else-if="summaryError" class="summary-error">加载失败</div>
+      </div>
+    </Transition>
+
   </div>
   <ImageViewer v-model:visible="showImageViewer" :src="currentCareerImageUrl" />
 </template>
@@ -122,7 +143,8 @@ const emit = defineEmits<{
   (e: 'expand-eval', username: string): void
   (e: 'like-click', username: string): void
   (e: 'eval-submit', username: string, text: string): void
-  (e: 'expand-career', username: string): void   // 展开/折叠生涯浮层
+  (e: 'expand-career', username: string): void
+  (e: 'expand-summary', username: string): void
   (e: 'close-float'): void   // 关闭当前浮层（用于自动关闭）
 }>()
 
@@ -138,6 +160,12 @@ const expandCareer = computed(() => props.currentExpandId === `career-${props.us
 const careerLoading = ref(false)
 const careerImageUrl = ref('')
 const careerError = ref(false)
+
+// 今日总结相关状态
+const expandSummary = computed(() => props.currentExpandId === `summary-${props.user.username}`)
+const summaryLoading = ref(false)
+const summaryImageUrl = ref('')
+const summaryError = ref(false)
 
 // 段位列表
 const rankList = computed(() => {
@@ -409,6 +437,48 @@ function onCareerClick() {
   }
 }
 
+// 请求今日总结图片
+async function fetchSummaryImage() {
+  if (summaryImageUrl.value && summaryImageUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(summaryImageUrl.value)
+    summaryImageUrl.value = ''
+  }
+  summaryLoading.value = true
+  summaryError.value = false
+  const token = localStorage.getItem('authToken')
+  const body = {
+    bnet_id: props.user.username
+  }
+  try {
+    const res = await fetch('/api/v2/dashen-summary/today/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(body)
+    })
+    if (!res.ok) throw new Error('请求失败')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    summaryImageUrl.value = url
+  } catch (err) {
+    console.error(err)
+    summaryError.value = true
+  } finally {
+    summaryLoading.value = false
+  }
+}
+
+// 点击今日总结按钮
+function onSummaryClick() {
+  emit('expand-summary', props.user.username)
+  if (!expandSummary.value) {
+    fetchSummaryImage()
+  }
+}
+
+
 function openImageViewer(url: string) {
   currentCareerImageUrl.value = url
   showImageViewer.value = true
@@ -433,6 +503,7 @@ onUnmounted(() => {
   background: var(--card-bg);
   border-radius: 16px;
   padding: 10px;
+  width: 260px;
   box-shadow: 0 6px 16px var(--shadow-color);
   transition: transform 0.3s, box-shadow 0.3s;
   position: relative;
@@ -649,14 +720,6 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
-.career-button {
-  position: absolute;
-  bottom: 0px;
-  left: 0px;
-  cursor: pointer;
-  font-size: 15px;
-  z-index: 10;
-}
 
 .career-list {
   top: 100%;
@@ -684,6 +747,79 @@ onUnmounted(() => {
   border-top-color: white;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+/* 底部按钮组容器 */
+.action-buttons {
+  position: absolute;
+  bottom: 0px;
+  left: 0px;
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+/* 单个按钮样式 */
+.action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+.action-btn:hover {
+  opacity: 1;
+}
+
+/* 按钮图标（保留原有大小和圆角可选） */
+.btn-icon {
+  font-size: 18px;
+  background: rgba(0,0,0,0.4);
+  width: 25px;
+  height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  margin-bottom: 4px;
+}
+
+/* 按钮文字 */
+.btn-label {
+  font-size: 8px;
+  color: var(--text-primary);
+  opacity: 0.7;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* 今日总结浮层样式 */
+.summary-list {
+  top: 100%;
+  left: 0;
+  right: 0;
+  border-radius: 0 0 8px 8px;
+  padding: 8px 0;
+  z-index: 20;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.summary-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: white;
+}
+.summary-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.summary-error {
+  color: #ff6666;
+  text-align: center;
 }
 
 @keyframes spin {

@@ -54,7 +54,7 @@ body {
     z-index: 3;
     padding: 50px 20px;
     width: 100%;
-    max-width: 1200px;
+    max-width: 1800px;
     margin: 0 auto;
     background: var(--bg-secondary);
     
@@ -119,66 +119,3 @@ body {
     background: var(--bg-secondary);
 }
 
-
-
-/* 评价相关样式 (保持固定深色或适配变量，这里适配变量以支持切换) */
-.evaluation-input {
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 0.9rem;
-    border: 1px solid var(--accent);
-    background-color: var(--bg-secondary);
-    color: var(--text-primary);
-}
-
-.evaluation-submit-btn,
-.evaluation-edit-btn,
-.evaluation-update-btn,
-.evaluation-cancel-btn {
-    border-radius: 8px;
-    padding: 6px 14px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: none;
-    cursor: pointer;
-    transition: opacity 0.2s ease;
-    white-space: nowrap;
-    flex-shrink: 0;
-    box-sizing: border-box;
-    background-color: var(--accent);
-    color: var(--bg-primary);
-}
-
-.evaluation-submit-btn:hover,
-.evaluation-edit-btn:hover,
-.evaluation-update-btn:hover,
-.evaluation-cancel-btn:hover {
-    opacity: 0.92;
-}
-
-
-/* === 头图海报容器 === */
-.poster-wrapper {
-    width: 100%;
-    /* 保持宽高比，防止塌陷 */
-    aspect-ratio: 2 / 1; 
-    margin: 0 auto;
-    position: relative;
-    border-radius: 15px;
-    overflow: hidden;
-    box-shadow: 0 0 30px var(--shadow-color);
-    margin-top: 0;
-    margin-bottom: 10px;
-    background: var(--bg-secondary); /* 使用主题背景色作为占位 */
-    padding: 0 10px;
-    z-index: 1;
-}
-
-.poster-container {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}

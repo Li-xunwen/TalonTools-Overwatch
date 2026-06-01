@@ -23,7 +23,8 @@
             @expand-eval="handleExpandEval"
             @like-click="handleLikeClick"
             @eval-submit="handleEvalSubmit"
-            @expand-career="handleExpandCareer"   
+            @expand-career="handleExpandCareer" 
+            @expand-summary="handleExpandSummary"  
           />
         </div>
       </div>
@@ -337,6 +338,11 @@ function handleExpandCareer(username: string) {
   currentExpandId.value = currentExpandId.value === id ? '' : id
 }
 
+function handleExpandSummary(username: string) {
+  const id = `summary-${username}`
+  currentExpandId.value = currentExpandId.value === id ? '' : id
+}
+
 onMounted(async () => {
   await loadMembers()
   document.addEventListener('click', handleGlobalClick)
@@ -350,13 +356,24 @@ onUnmounted(() => {
 <style>
 @import '../style/main.css';
 .poster-wrapper {
-  width: 100%;
-  aspect-ratio: 2 / 1;
+    width: 100%;
+    /* 保持宽高比，防止塌陷 */
+    aspect-ratio: 2 / 1; 
+    margin: 0 auto;
+    position: relative;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 0 30px var(--shadow-color);
+    margin-top: 0;
+    margin-bottom: 10px;
+    background: var(--bg-secondary); /* 使用主题背景色作为占位 */
+    padding: 0 10px;
+    z-index: 1;
 }
 .members-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 25px;
+  gap: 20px 0px;
   margin-top: 20px;
 }
 </style>
