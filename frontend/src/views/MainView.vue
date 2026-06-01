@@ -23,6 +23,7 @@
             @expand-eval="handleExpandEval"
             @like-click="handleLikeClick"
             @eval-submit="handleEvalSubmit"
+            @expand-career="handleExpandCareer"   
           />
         </div>
       </div>
@@ -329,6 +330,11 @@ function handleGlobalClick(e: MouseEvent) {
   if (!target.closest('.member-card')) {
     currentExpandId.value = ''
   }
+}
+
+function handleExpandCareer(username: string) {
+  const id = `career-${username}`
+  currentExpandId.value = currentExpandId.value === id ? '' : id
 }
 
 onMounted(async () => {

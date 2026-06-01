@@ -4,11 +4,8 @@
     <div class="card-content">
       <!-- 头部：头像 + 名字 -->
       <div class="member-header">
-        <img
-          :src="`/res/imge/${user.username.replace(/#/g, '-')}.jpg`"
-          class="member-avatar"
-          @error="handleAvatarError"
-        />
+        <img :src="`/res/imge/${user.username.replace(/#/g, '-')}.jpg`" class="member-avatar"
+          @error="handleAvatarError" />
         <div class="member-text">
           <div v-if="user.username === selfTag" class="member-greeting">{{ randomGreeting }}</div>
           <div class="member-id">{{ user.username }}</div>
@@ -37,6 +34,20 @@
       <div class="evaluation-button" @click.stop="onEvalClick">💬</div>
     </div>
 
+    <!-- 生涯查询按钮（左下角） -->
+    <div class="career-button" @click.stop="onCareerClick">📊</div>
+
+    <!-- 生涯浮层 -->
+    <Transition name="fade">
+      <div v-if="expandCareer" class="career-list" @click.stop>
+        <div v-if="careerLoading" class="career-loading">
+          <div class="loading-spinner"></div>
+          <span>加载中...</span>
+        </div>
+        <img v-else-if="careerImageUrl" :src="careerImageUrl" class="career-image" />
+        <div v-else-if="careerError" class="career-error">加载失败</div>
+      </div>
+    </Transition>
     <!-- 点赞区域（右上角） -->
     <div class="like-button-container" @click.stop="onLikeClick">
       <span class="like-count">{{ displayLikeCount }}</span>
@@ -102,6 +113,7 @@ const emit = defineEmits<{
   (e: 'expand-eval', username: string): void
   (e: 'like-click', username: string): void
   (e: 'eval-submit', username: string, text: string): void
+  (e: 'expand-career', username: string): void   // 展开/折叠生涯浮层
   (e: 'close-float'): void   // 关闭当前浮层（用于自动关闭）
 }>()
 
@@ -111,6 +123,12 @@ const editingEval = ref<{ item: any; original: string } | null>(null)
 
 // 擅长英雄（最多5个）
 const topHeroes = computed(() => (props.user.hero || []).slice(0, 5))
+
+// 生涯相关状态
+const expandCareer = computed(() => props.currentExpandId === `career-${props.user.username}`)
+const careerLoading = ref(false)
+const careerImageUrl = ref('')
+const careerError = ref(false)
 
 // 段位列表
 const rankList = computed(() => {
@@ -328,12 +346,51 @@ function submitNewEval() {
 }
 
 function escapeHtml(str: string) {
-  return str.replace(/[&<>]/g, function(m) {
+  return str.replace(/[&<>]/g, function (m) {
     if (m === '&') return '&amp;'
     if (m === '<') return '&lt;'
     if (m === '>') return '&gt;'
     return m
   })
+}
+
+// 请求生涯图片
+async function fetchCareerImage() {
+  careerLoading.value = true
+  careerError.value = false
+  const token = localStorage.getItem('authToken')
+  const body = {
+    include_previous_season: true,
+    mode: 'quick',
+    bnet_id: props.user.username
+  }
+  try {
+    const res = await fetch('/api/v2/dashen-profile/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(body)
+    })
+    if (!res.ok) throw new Error('请求失败')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    careerImageUrl.value = url
+  } catch (err) {
+    console.error(err)
+    careerError.value = true
+  } finally {
+    careerLoading.value = false
+  }
+}
+
+// 点击生涯按钮
+function onCareerClick() {
+  emit('expand-career', props.user.username)
+  if (!expandCareer.value) {
+    fetchCareerImage()  // 只有展开时才请求（避免重复请求）
+  }
 }
 
 onMounted(() => {
@@ -353,6 +410,7 @@ onMounted(() => {
   position: relative;
   overflow: visible;
 }
+
 .member-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 10px 25px var(--shadow-color);
@@ -371,6 +429,7 @@ onMounted(() => {
   gap: 16px;
   margin-bottom: 16px;
 }
+
 .member-avatar {
   width: 60px;
   height: 60px;
@@ -380,12 +439,14 @@ onMounted(() => {
   border: 2px solid var(--text-primary);
   flex-shrink: 0;
 }
+
 .member-id {
   font-size: 16px;
   font-weight: bold;
   color: var(--text-primary);
   word-break: break-all;
 }
+
 .member-greeting {
   font-size: 14px;
   color: var(--text-primary);
@@ -394,6 +455,7 @@ onMounted(() => {
   font-weight: 500;
   line-height: 1.3;
 }
+
 .member-text {
   display: flex;
   flex-direction: column;
@@ -409,22 +471,26 @@ onMounted(() => {
   justify-content: center;
   margin-bottom: 16px;
 }
+
 .rank-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   width: 50px;
 }
+
 .rank-icon-wrapper {
   position: relative;
   width: 32px;
   height: 32px;
 }
+
 .rank-icon {
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
+
 .rank-level-badge {
   position: absolute;
   bottom: 2px;
@@ -441,6 +507,7 @@ onMounted(() => {
 .dark-theme .rank-level-badge {
   color: #fff;
 }
+
 .rank-label {
   font-size: 8px;
   color: var(--text-primary);
@@ -458,6 +525,7 @@ onMounted(() => {
   gap: 10px;
   margin-bottom: 8px;
 }
+
 .member-hero-icon {
   width: 40px;
   height: 40px;
@@ -468,6 +536,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
 }
+
 .member-hero-icon img {
   width: 100%;
   height: 100%;
@@ -495,11 +564,13 @@ onMounted(() => {
   z-index: 10;
   cursor: pointer;
 }
+
 .like-count {
   color: #ffffff;
   font-size: 14px;
   font-weight: bold;
 }
+
 .heart {
   color: #ff4d6d;
   font-size: 14px;
@@ -510,10 +581,12 @@ onMounted(() => {
 .fade-leave-active {
   transition: opacity 0.2s;
 }
+
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
 }
+
 .like-item,
 .evaluation-item {
   display: flex;
@@ -521,10 +594,12 @@ onMounted(() => {
   padding: 4px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
+
 .evaluation-input-container {
   padding: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
+
 .evaluation-input-container textarea {
   width: 100%;
   background: #222;
@@ -533,6 +608,7 @@ onMounted(() => {
   border-radius: 4px;
   padding: 4px;
 }
+
 .like-list,
 .evaluation-list {
   top: 100%;
@@ -543,5 +619,53 @@ onMounted(() => {
   z-index: 20;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.career-button {
+  position: absolute;
+  bottom: 0px;
+  left: 0px;
+  cursor: pointer;
+  font-size: 20px;
+  z-index: 10;
+}
+.career-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: rgba(0,0,0,0.85);
+  border-radius: 0 0 8px 8px;
+  padding: 12px;
+  z-index: 20;
+  max-height: 300px;
+  overflow-y: auto;
+  text-align: center;
+}
+.career-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: white;
+}
+.loading-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.career-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.career-error {
+  color: #ff6666;
 }
 </style>

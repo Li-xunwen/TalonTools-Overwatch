@@ -5,7 +5,7 @@ import { getCacheKey } from '../utils/cacheHelpers';
 
 const router = Router();
 
-const TARGET_BASE = 'http://47.116.35.79:8080/api/v2/dashen-profile';
+const TARGET_BASE = 'http://127.0.0.1:8080/api/v2/dashen-profile';
 
 async function proxyAndCache(
   req: any,
