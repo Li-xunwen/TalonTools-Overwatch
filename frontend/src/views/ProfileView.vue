@@ -469,33 +469,8 @@
       v-if="showHeroPicker || showRankPicker"
       class="picker-mask"
       @click="closeAllPicker"
-    />
-
-    <!-- 底部导航 -->
-    <div class="fixed-bottom-nav">
-
-      <router-link
-        to="/news"
-        class="nav-tab"
-      >
-        黑爪动态
-      </router-link>
-
-      <router-link
-        to="/main"
-        class="nav-tab"
-      >
-        主页
-      </router-link>
-
-      <router-link
-        to="/profile"
-        class="nav-tab active"
-      >
-        我的
-      </router-link>
-
-    </div>
+    ></div>
+    <BottomNav />
 
   </div>
 </template>
@@ -504,7 +479,7 @@ import { ref, computed, onMounted } from 'vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import Toast from '@/components/Toast.vue'
 import { authFetch } from '@/utils/request'
-
+import BottomNav from '@/components/BottomNav.vue'  
 /* =========================
    类型定义
 ========================= */
@@ -1044,11 +1019,22 @@ onMounted(() => {
   border-radius: 10px;
   padding: 10px 16px;
   cursor: pointer;
-  background: var(--accent);
-  color: #fff;
   font-size: 14px;
+  color: #000;
+  /* 浅色模式默认背景（深蓝色，确保对比度） */
+  background: #2c6bff47;
 }
 
+/* 深色模式下按钮背景（亮蓝色） */
+.dark-theme .edit-btn {
+  background: #2c6bff47;
+  color: #fff;
+}
+
+/* 如果你使用 data-theme 属性，则改为 */
+[data-theme="dark"] .edit-btn {
+  background: #2c6bff47;
+}
 /* =========================
    头像
 ========================= */
@@ -1087,7 +1073,7 @@ onMounted(() => {
 .rank-section {
   background: var(--surface);
   border-radius: 16px;
-  padding: 24px;
+  padding: 0px;
   margin-bottom: 24px;
 }
 
@@ -1098,7 +1084,7 @@ onMounted(() => {
 .rank-list {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  gap: 16px;
 }
 
 .rank-card {
@@ -1108,13 +1094,13 @@ onMounted(() => {
 }
 
 .rank-title {
-  font-size: 14px;
-  margin-bottom: 10px;
+  font-size: 12px;
+  margin-bottom: 0px;
 }
 
 .profile-rank {
-  width: 80px;
-  height: 80px;
+  width: 60px;
+  height: 60px;
   position: relative;
   cursor: pointer;
 }
@@ -1127,18 +1113,21 @@ onMounted(() => {
 
 .rank-level {
   position: absolute;
-  bottom: -4px;
-  right: -4px;
-  background: rgba(0,0,0,.75);
-  color: white;
-  padding: 2px 7px;
-  border-radius: 8px;
+  bottom: 5px;
+  right: 5px;
+  color: #222;
+  padding: 2px 2x;
   font-size: 12px;
 }
 
+/* 深色模式 */
+.dark-theme .rank-level {
+  color: #fff;
+}
+
 .empty-rank {
-  width: 80px;
-  height: 80px;
+  width: 50px;
+  height: 50px;
   border: 2px dashed #888;
   border-radius: 14px;
 
@@ -1168,13 +1157,13 @@ onMounted(() => {
 .profile-heroes {
   display: flex;
   justify-content: center;
-  gap: 16px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .hero-slot {
-  width: 80px;
-  height: 80px;
+  width: 50px;
+  height: 50px;
   position: relative;
 }
 
@@ -1207,8 +1196,8 @@ onMounted(() => {
 }
 
 .empty-slot {
-  width: 80px;
-  height: 80px;
+  width: 50px;
+  height: 50px;
 
   border: 2px dashed #888;
   border-radius: 12px;
@@ -1426,51 +1415,16 @@ onMounted(() => {
   cursor: pointer;
 }
 
-/* =========================
-   底部导航
-========================= */
 
-.fixed-bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
 
-  height: 64px;
 
-  display: flex;
-
-  background: var(--surface);
-
-  border-top: 1px solid var(--border);
-
-  z-index: 999;
-}
-
-.nav-tab {
-  flex: 1;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  text-decoration: none;
-  color: var(--text-primary);
-}
-
-.nav-tab.active {
-  color: var(--accent);
-  font-weight: bold;
-}
 
 /* =========================
    手机适配
 ========================= */
 
 @media (max-width: 768px) {
-  .rank-list {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  /* .rank-list 保持默认的 4 列布局，不再强制改为 2 列 */
 
   .hero-groups {
     flex-direction: column;

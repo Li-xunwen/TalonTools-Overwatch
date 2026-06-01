@@ -413,7 +413,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 64px;
+  width: 50px;
 }
 .rank-icon-wrapper {
   position: relative;
@@ -427,16 +427,19 @@ onMounted(() => {
 }
 .rank-level-badge {
   position: absolute;
-  bottom: -2px;
-  right: 0px;
+  bottom: 2px;
+  right: 2px;
   background: transparent;
   border-radius: 0;
-  color: white;
+  color: #222;
   font-size: 8px;
   font-weight: bold;
   padding: 0;
   line-height: 1;
-  text-shadow: 0 0 2px #000;
+}
+
+.dark-theme .rank-level-badge {
+  color: #fff;
 }
 .rank-label {
   font-size: 8px;

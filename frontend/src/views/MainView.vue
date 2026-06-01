@@ -52,17 +52,8 @@
       </div>
     </div>
 
-    <div class="fixed-bottom-nav">
-      <router-link to="/news" class="nav-tab" active-class="active">
-        <div>黑爪动态</div>
-      </router-link>
-      <router-link to="/main" class="nav-tab" active-class="active">
-        <div>主页</div>
-      </router-link>
-      <router-link to="/profile" class="nav-tab" active-class="active">
-        <div>我的</div>
-      </router-link>
-    </div>
+    <!-- 使用底部导航栏组件 -->
+    <BottomNav />
   </div>
 </template>
 
@@ -72,7 +63,7 @@ import MemberCard from './MemberCard.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import PosterHeroes from '@/components/PosterHeroes.vue'
 import Toast from '@/components/Toast.vue'
-
+import BottomNav from '@/components/BottomNav.vue'   
 // ---------- 类型定义 ----------
 interface UserData {
   username: string
