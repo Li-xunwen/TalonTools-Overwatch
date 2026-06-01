@@ -61,8 +61,18 @@ async function proxyAndCache(req: any, res: any) {
       res.json(jsonData);
     }
   } catch (error: any) {
-    console.error('代理请求失败:', error.message);
-    res.status(502).json(error.response.data);
+    console.error('代理请求失败:', error);
+    // 检查是否有来自上游服务的响应
+    if (error.response) {
+      const status = error.response.status;
+      const headers = error.response.headers;
+      const data = error.response.data;
+      res.status(status).set(headers).send(data);
+    } else {
+      res.status(502).json({ 
+        error: 'Bad Gateway', 
+        detail: error.message 
+      });
   }
 }
 
