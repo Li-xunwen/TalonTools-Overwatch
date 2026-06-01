@@ -458,7 +458,7 @@ async function fetchSummaryImage() {
       },
       body: JSON.stringify(body)
     })
-    if (!res.ok) throw new Error('请求失败')
+    if (!res.ok) throw new Error(res.statusText)//显示错误信息
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     summaryImageUrl.value = url

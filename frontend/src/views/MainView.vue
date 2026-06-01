@@ -372,8 +372,9 @@ onUnmounted(() => {
 }
 .members-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 20px 0px;
   margin-top: 20px;
+  justify-content: center;  /* 添加此行：使列在容器中居中 */
 }
 </style>

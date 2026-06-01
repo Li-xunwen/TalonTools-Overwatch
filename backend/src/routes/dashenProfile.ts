@@ -62,7 +62,7 @@ async function proxyAndCache(req: any, res: any) {
     }
   } catch (error: any) {
     console.error('代理请求失败:', error.message);
-    res.status(502).json({ error: '上游服务请求失败', detail: error.message });
+    res.status(502).json(error.response.data);
   }
 }
 
