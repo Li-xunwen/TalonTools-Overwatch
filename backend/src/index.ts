@@ -549,12 +549,27 @@ app.put('/api/user/heroes', authenticateToken, async (req: AuthRequest, res) => 
 
         // 2. 插入新的擅长记录
         if (heroIds.length > 0) {
-            const insertValues: any[] = [];
-            for (let i = 0; i < heroIds.length; i++) {
-                insertValues.push(userId, heroIds[i], i + 1);
-            }
-            const insertSql = `INSERT INTO user_favorite_heroes (user_id, hero_id, sort_order) VALUES ${insertValues.map(() => '(?, ?, ?)').join(', ')}`;
-            await connection.query(insertSql, insertValues);
+
+            const rows = heroIds.map(
+                (heroId, index) => [
+                    userId,
+                    heroId,
+                    index + 1
+                ]
+            );
+
+            await connection.query(
+                `
+        INSERT INTO user_favorite_heroes
+        (
+            user_id,
+            hero_id,
+            sort_order
+        )
+        VALUES ?
+        `,
+                [rows]
+            );
         }
 
         await connection.commit();
