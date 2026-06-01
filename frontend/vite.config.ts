@@ -11,13 +11,13 @@ export default defineConfig({
     }
   },
    server: {
-    host: '0.0.0.0',   // 默认是 'localhost'
-    port: 80,        // 默认是 5173
+    host: '0.0.0.0',  
+    port: 80,        
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000/',
         changeOrigin: true,
-        // rewrite: (path) => path, // 不需要重写，直接转发 /api/xxx
+        // rewrite: (path) => path,
       },
     },
   },
