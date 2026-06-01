@@ -61,21 +61,14 @@ async function proxyAndCache(req: any, res: any) {
       res.json(jsonData);
     }
   } catch (error: any) {
-    console.error('代理请求失败:', error.message);
+    console.error('代理请求失败:', error);
      // 检查是否有来自上游服务的响应
     if (error.response) {
-      // 1. 获取上游的状态码
       const status = error.response.status;
-      // 2. 获取上游的响应头（可选，通常只需要 Content-Type）
       const headers = error.response.headers;
-      // 3. 获取上游的响应数据
       const data = error.response.data;
-
-      // 原样转发状态码和数据
       res.status(status).set(headers).send(data);
     } else {
-      // 如果没有 response，说明是网络错误或服务器未启动
-      // 这种情况下只能返回一个通用的 502 或 500 错误
       res.status(502).json({ 
         error: 'Bad Gateway', 
         detail: error.message 

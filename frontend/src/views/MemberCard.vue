@@ -97,7 +97,9 @@
         </div>
         <img v-else-if="careerImageUrl" :src="careerImageUrl" class="career-image"
           @click="openImageViewer(careerImageUrl)" />
-        <div v-else-if="careerError" class="career-error">加载失败</div>
+        <div v-else-if="careerError" class="career-error">
+          {{ careerError }}
+        </div>
       </div>
     </Transition>
 
@@ -110,7 +112,9 @@
         </div>
         <img v-else-if="summaryImageUrl" :src="summaryImageUrl" class="summary-image"
           @click="openImageViewer(summaryImageUrl)" />
-        <div v-else-if="summaryError" class="summary-error">加载失败</div>
+        <div v-else-if="summaryError" class="career-error">
+          {{ summaryError }}
+        </div>
       </div>
     </Transition>
 
@@ -159,13 +163,13 @@ const topHeroes = computed(() => (props.user.hero || []).slice(0, 5))
 const expandCareer = computed(() => props.currentExpandId === `career-${props.user.username}`)
 const careerLoading = ref(false)
 const careerImageUrl = ref('')
-const careerError = ref(false)
+const careerError = ref<string | null>(null)
 
 // 今日总结相关状态
 const expandSummary = computed(() => props.currentExpandId === `summary-${props.user.username}`)
 const summaryLoading = ref(false)
 const summaryImageUrl = ref('')
-const summaryError = ref(false)
+const summaryError = ref<string | null>(null)
 
 // 段位列表
 const rankList = computed(() => {
@@ -395,13 +399,12 @@ function escapeHtml(str: string) {
 
 // 请求生涯图片
 async function fetchCareerImage() {
-  // 释放之前的 blob URL（如果有）
   if (careerImageUrl.value && careerImageUrl.value.startsWith('blob:')) {
     URL.revokeObjectURL(careerImageUrl.value)
     careerImageUrl.value = ''
   }
   careerLoading.value = true
-  careerError.value = false
+  careerError.value = null
   const token = localStorage.getItem('authToken')
   const body = {
     include_previous_season: true,
@@ -417,13 +420,26 @@ async function fetchCareerImage() {
       },
       body: JSON.stringify(body)
     })
-    if (!res.ok) throw new Error('请求失败')
+
+    if (!res.ok) {
+      // 尝试获取错误详情
+      let errMsg = `请求失败: ${res.status}`
+      try {
+        const errData = await res.json()
+        errMsg = errData.message || errData.error || '服务错误'
+      } catch (e) {
+        // 如果返回的不是JSON，使用状态码文本
+        errMsg = res.statusText || errMsg
+      }
+      throw new Error(errMsg)
+    }
+
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     careerImageUrl.value = url
-  } catch (err) {
+  } catch (err: any) {
     console.error(err)
-    careerError.value = true
+    careerError.value = err.message || '加载失败'
   } finally {
     careerLoading.value = false
   }
@@ -444,7 +460,7 @@ async function fetchSummaryImage() {
     summaryImageUrl.value = ''
   }
   summaryLoading.value = true
-  summaryError.value = false
+  summaryError.value = null
   const token = localStorage.getItem('authToken')
   const body = {
     bnet_id: props.user.username
@@ -458,13 +474,25 @@ async function fetchSummaryImage() {
       },
       body: JSON.stringify(body)
     })
-    if (!res.ok) throw new Error(res.statusText)//显示错误信息
+
+    const contentType = res.headers.get('content-type') || ''
+    // 如果返回的是 JSON，说明是业务错误（如无数据）
+    if (contentType.includes('application/json')) {
+      const errData = await res.json()
+      const errMsg = errData.message || errData.error || '服务错误'
+      throw new Error(errMsg)
+    }
+
+    if (!res.ok) {
+      throw new Error(`请求失败: ${res.status} ${res.statusText}`)
+    }
+
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     summaryImageUrl.value = url
-  } catch (err) {
+  } catch (err: any) {
     console.error(err)
-    summaryError.value = true
+    summaryError.value = err.message || '加载失败'
   } finally {
     summaryLoading.value = false
   }
@@ -768,6 +796,7 @@ onUnmounted(() => {
   opacity: 0.8;
   transition: opacity 0.2s;
 }
+
 .action-btn:hover {
   opacity: 1;
 }
@@ -775,7 +804,7 @@ onUnmounted(() => {
 /* 按钮图标（保留原有大小和圆角可选） */
 .btn-icon {
   font-size: 18px;
-  background: rgba(0,0,0,0.4);
+  background: rgba(0, 0, 0, 0.4);
   width: 25px;
   height: 25px;
   display: flex;
@@ -805,6 +834,7 @@ onUnmounted(() => {
   max-height: 200px;
   overflow-y: auto;
 }
+
 .summary-loading {
   display: flex;
   flex-direction: column;
@@ -812,11 +842,13 @@ onUnmounted(() => {
   gap: 8px;
   color: white;
 }
+
 .summary-image {
   max-width: 100%;
   height: auto;
   border-radius: 8px;
 }
+
 .summary-error {
   color: #ff6666;
   text-align: center;
