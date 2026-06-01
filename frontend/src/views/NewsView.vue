@@ -22,22 +22,14 @@
         </div>
       </div>
     </div>
-    <div class="fixed-bottom-nav">
-      <router-link to="/news" class="nav-tab" active-class="active">
-        <div>黑爪动态</div>
-      </router-link>
-      <router-link to="/main" class="nav-tab" active-class="active">
-        <div>主页</div>
-      </router-link>
-      <router-link to="/profile" class="nav-tab" active-class="active">
-        <div>我的</div>
-      </router-link>
-    </div>
+
   </div>
+    <BottomNav />
 </template>
 
 <script setup lang="ts">
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import BottomNav from '@/components/BottomNav.vue'   
 </script>
 
 <style scoped>
