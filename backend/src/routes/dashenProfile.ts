@@ -44,12 +44,12 @@ async function proxyAndCache(
     if (isImage) {
       const buffer = response.data;
       const base64 = buffer.toString('base64');
-      await redis.setEx(cacheKey, 3600, base64);
+      await redis.setEx(cacheKey, 36000, base64);
       res.set('Content-Type', response.headers['content-type'] || 'image/png');
       res.send(buffer);
     } else {
       const jsonData = response.data;
-      await redis.setEx(cacheKey, 3600, JSON.stringify(jsonData));
+      await redis.setEx(cacheKey, 36000, JSON.stringify(jsonData));
       res.json(jsonData);
     }
   } catch (error: any) {
