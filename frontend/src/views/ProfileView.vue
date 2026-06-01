@@ -66,7 +66,7 @@
           <div class="rank-card">
 
             <div class="rank-title">
-              开放职责 6v6
+              开放6v6
             </div>
 
             <div

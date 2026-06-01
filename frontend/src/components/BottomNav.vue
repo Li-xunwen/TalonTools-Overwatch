@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-const isActive = (path: string) => window.location.pathname === path
+//const isActive = (path: string) => window.location.pathname === path
 </script>
 
 <style scoped>
