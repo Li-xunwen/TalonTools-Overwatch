@@ -43,7 +43,7 @@ async function proxyAndCache(req: any, res: any) {
       res.json(jsonData);
     }
   } catch (error: any) {
-    console.error('代理请求失败:', error);
+    console.error('代理请求失败:', error.massage);
     if (error.response) {
       const status = error.response.status;
       const headers = error.response.headers;
