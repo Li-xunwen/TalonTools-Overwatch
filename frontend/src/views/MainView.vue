@@ -7,11 +7,22 @@
         <PosterHeroes />
       </div>
       <Toast :message="toastMessage" :duration="3000" />
+            <!-- 搜索栏 -->
+      <div class="search-bar">
+        <input
+          type="text"
+          v-model="searchKeyword"
+          placeholder="搜索战网ID..."
+          class="search-input"
+          @input="handleSearch"
+        />
+      <button v-if="searchKeyword" class="search-clear" @click="clearSearch">✕</button>
+</div>
       <div class="section">
         <h2 class="section-title">成员名单</h2>
         <div class="members-grid">
           <MemberCard
-            v-for="member in sortedMembers"
+            v-for="member in filteredMembers"
             :key="member.username"
             :user="member"
             :self-tag="selfTag"
@@ -98,6 +109,7 @@ const toastMessage = ref('')
 const currentExpandId = ref<string>('')
 const likePending = new Map<string, boolean>()
 const selfRole = ref<string | null>(null)
+const searchKeyword = ref('')
 // ---------- 辅助函数 ----------
 async function fetchUserList(): Promise<string[]> {
     const res = await fetch('/api/users/battletaglist')
@@ -345,6 +357,28 @@ function handleExpandSummary(username: string) {
   currentExpandId.value = currentExpandId.value === id ? '' : id
 }
 
+// 过滤后的成员列表（基于 sortedMembers 并按战网ID匹配）
+const filteredMembers = computed(() => {
+  if (!searchKeyword.value.trim()) {
+    return sortedMembers.value
+  }
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  return sortedMembers.value.filter(member =>
+    member.username.toLowerCase().includes(keyword)
+  )
+})
+
+// 处理搜索输入（可选，防抖优化）
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+function handleSearch() {
+  if (searchTimer) clearTimeout(searchTimer)
+  // 可添加防抖，避免频繁渲染（可选）
+}
+
+function clearSearch() {
+  searchKeyword.value = ''
+}
+
 onMounted(async () => {
   await loadMembers()
   document.addEventListener('click', handleGlobalClick)
@@ -378,5 +412,43 @@ onUnmounted(() => {
   gap: 20px 10px;
   margin-top: 20px;
   justify-content: center;  /* 添加此行：使列在容器中居中 */
+}
+
+/* 搜索栏样式 */
+.search-bar {
+  position: relative;
+  max-width: 400px;
+  margin: 20px auto;
+  padding: 0 16px;
+}
+.search-input {
+  width: 100%;
+  padding: 10px 36px 10px 16px;
+  border-radius: 30px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s;
+}
+.search-input:focus {
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 2px rgba(24,119,242,0.2);
+}
+.search-clear {
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 16px;
+  opacity: 0.6;
+}
+.search-clear:hover {
+  opacity: 1;
 }
 </style>
