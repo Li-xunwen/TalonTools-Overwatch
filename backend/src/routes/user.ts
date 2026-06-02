@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { pool } from '../utils/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { userEventLogger } from '../utils/db';
 
 const router = Router();
 
@@ -191,4 +192,77 @@ router.get('/users/me', async (req: AuthRequest, res) => {
     }
 });
 
+
+/**
+ * POST /api/users/:battletag/change-password
+ * 修改指定用户的密码（不需要旧密码）
+ * 权限：
+ *   - 普通用户只能修改自己的密码
+ *   - 角色为 MODERATOR 或 ADMIN 的用户可以修改任何用户的密码
+ * 请求体：{ "newPassword": "新密码" }
+ */
+import bcrypt from 'bcrypt';
+
+router.post('/users/:battletag/change-password', authenticateToken, async (req: AuthRequest, res) => {
+    const currentUserId = req.user?.userId;
+    if (!currentUserId) {
+        return res.status(401).json({ error: '未授权' });
+    }
+
+    const targetBattletag = decodeURIComponent(req.params.battletag as string);
+    const { newPassword } = req.body;
+
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 4) {
+        return res.status(400).json({ error: '新密码长度不能少于4位' });
+    }
+
+    try {
+        // 1. 查询当前用户的角色（从数据库获取真实角色）
+        const [currentUserRows] = await pool.query<any[]>(
+            'SELECT role FROM users WHERE id = ?',
+            [currentUserId]
+        );
+        if (currentUserRows.length === 0) {
+            return res.status(404).json({ error: '当前用户不存在' });
+        }
+        const currentRole = currentUserRows[0].role;
+
+        // 2. 查询目标用户是否存在，获取其 id
+        const [targetUserRows] = await pool.query<any[]>(
+            'SELECT id FROM users WHERE battletag = ?',
+            [targetBattletag]
+        );
+        if (targetUserRows.length === 0) {
+            return res.status(404).json({ error: '目标用户不存在' });
+        }
+        const targetUserId = targetUserRows[0].id;
+
+        // 3. 权限校验：本人或管理员
+        const isSelf = (currentUserId === targetUserId);
+        const isAdmin = (currentRole === 'MODERATOR' || currentRole === 'ADMIN');
+        if (!isSelf && !isAdmin) {
+            return res.status(403).json({ error: '权限不足，只能修改自己的密码' });
+        }
+
+        // 4. 更新密码
+        const newHash = await bcrypt.hash(newPassword, 10);
+        await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, targetUserId]);
+
+        //5. 可选：记录事件日志（如果已初始化 userEventLogger）
+        if (userEventLogger) {
+            userEventLogger.logEvent({
+                userId: currentUserId,
+                eventType: 'change_password',
+                targetUserId: isSelf ? undefined : targetUserId,
+                eventData: { changedByAdmin: !isSelf },
+                ipAddress: req.ip
+            }).catch(console.error);
+        }
+
+        res.json({ message: '密码修改成功' });
+    } catch (error) {
+        console.error('修改密码失败:', error);
+        res.status(500).json({ error: '服务器错误，请稍后重试' });
+    }
+});
 export default router;

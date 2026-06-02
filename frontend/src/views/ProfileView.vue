@@ -3,25 +3,20 @@
 
     <!-- 主题切换 -->
     <ThemeToggle />
-
     <!-- Toast -->
     <Toast :message="toastMessage" :duration="3000" />
-
     <!-- 编辑按钮 -->
     <div class="top-actions">
       <button class="edit-btn" @click="toggleEdit">
         {{ isEditing ? '取消编辑' : '编辑资料' }}
       </button>
     </div>
-
     <!-- Loading -->
     <div v-if="loading" class="loading">
       加载中...
     </div>
-
     <!-- 主体 -->
     <div v-else class="profile-container">
-
       <!-- 用户头像 -->
       <div class="profile-header">
         <div class="avatar-wrapper">
@@ -32,11 +27,9 @@
             <input type="file" accept="image/*" hidden @change="handleAvatarChange" />
           </label>
         </div>
-
         <div class="profile-greeting">
           欢迎回来
         </div>
-
         <div class="profile-id">
           {{ profile.battletag }}
         </div>
@@ -44,78 +37,54 @@
 
       <!-- 段位区域 -->
       <section class="rank-section">
-
         <h3 class="section-title">
           我的段位
         </h3>
-
         <div class="rank-list">
-
           <!-- 开放职责 -->
           <div class="rank-card">
-
             <div class="rank-title">
               开放6v6
             </div>
-
             <div class="profile-rank" @click="openRankPicker('rank_open_6v6')">
-
               <template v-if="profile.rank_open_6v6">
-
                 <img :src="getRankImage(profile.rank_open_6v6.rank)">
-
                 <div class="rank-level">
                   {{ profile.rank_open_6v6.level }}
                 </div>
 
               </template>
-
               <div v-else class="empty-rank">
                 +
               </div>
-
             </div>
-
           </div>
 
           <!-- 重装 -->
           <div class="rank-card">
-
             <div class="rank-title">
               重装
             </div>
-
             <div class="profile-rank" @click="openRankPicker('rank_tank_5v5')">
-
               <template v-if="profile.rank_tank_5v5">
-
                 <img :src="getRankImage(profile.rank_tank_5v5.rank)">
-
                 <div class="rank-level">
                   {{ profile.rank_tank_5v5.level }}
                 </div>
-
               </template>
-
               <div v-else class="empty-rank">
                 +
               </div>
-
             </div>
-
           </div>
 
           <!-- 输出 -->
           <div class="rank-card">
-
             <div class="rank-title">
               输出
             </div>
-
             <div class="profile-rank" @click="openRankPicker('rank_dps_5v5')">
-
               <template v-if="profile.rank_dps_5v5">
-
                 <img :src="getRankImage(profile.rank_dps_5v5.rank)">
 
                 <div class="rank-level">
@@ -123,44 +92,30 @@
                 </div>
 
               </template>
-
               <div v-else class="empty-rank">
                 +
               </div>
-
             </div>
-
           </div>
 
           <!-- 辅助 -->
           <div class="rank-card">
-
             <div class="rank-title">
               辅助
             </div>
-
             <div class="profile-rank" @click="openRankPicker('rank_support_5v5')">
-
               <template v-if="profile.rank_support_5v5">
-
                 <img :src="getRankImage(profile.rank_support_5v5.rank)">
-
                 <div class="rank-level">
                   {{ profile.rank_support_5v5.level }}
                 </div>
-
               </template>
-
               <div v-else class="empty-rank">
                 +
               </div>
-
             </div>
-
           </div>
-
         </div>
-
       </section>
 
       <!-- 擅长英雄 -->
@@ -171,56 +126,52 @@
         </h3>
 
         <div class="profile-heroes">
-
           <div v-for="(hero, index) in profile.heroes" :key="hero + index" class="hero-slot">
-
             <div class="profile-hero-icon">
-
               <img :src="getHeroImage(hero)" :alt="hero">
-
               <button v-if="isEditing" class="remove-hero" @click="removeHero(index)">
                 ×
               </button>
-
             </div>
-
           </div>
 
           <!-- 添加英雄 -->
           <div v-if="isEditing && profile.heroes.length < 5" class="hero-slot">
-
             <div class="empty-slot" @click="showHeroPicker = true">
               +
             </div>
-
           </div>
-
         </div>
-
       </section>
-
       <!-- 保存 -->
       <div v-if="isEditing" class="edit-actions">
-
         <button class="btn-save" @click="saveProfile">
           保存资料
         </button>
-
         <button class="btn-cancel" @click="cancelEdit">
           放弃修改
         </button>
-
       </div>
-
+      <!-- 修改密码区域 -->
+      <div class="change-password-section">
+        <button v-if="!isChangingPassword" class="change-pwd-btn" @click="startChangePassword">
+          修改密码
+        </button>
+        <div v-else class="password-edit-form">
+          <input type="password" v-model="newPassword" placeholder="新密码（至少6位）" class="pwd-input" />
+          <input type="password" v-model="confirmPassword" placeholder="确认新密码" class="pwd-input" />
+          <div class="pwd-actions">
+            <button class="pwd-submit" @click="submitPasswordChange">提交</button>
+            <button class="pwd-cancel" @click="cancelPasswordChange">取消</button>
+          </div>
+        </div>
+      </div>
       <!-- 登出 -->
       <div class="logout-section">
-
         <button class="logout-btn" @click="logout">
           退出登录
         </button>
-
       </div>
-
     </div>
 
     <!-- Hero Picker -->
@@ -229,119 +180,77 @@
       <button class="picker-close" @click="showHeroPicker = false">
         ×
       </button>
-
       <div class="picker-title">
         选择英雄
       </div>
-
       <div class="hero-groups">
-
         <!-- Tank -->
         <div class="hero-group">
-
           <div class="group-title">
             重装
           </div>
-
           <div class="hero-grid">
-
             <div v-for="hero in tankHeroes" :key="hero" class="hero-picker-item" @click="selectHero(hero)">
-
               <img :src="getHeroImage(hero)">
-
               <div class="hero-name">
                 {{ hero }}
               </div>
-
             </div>
-
           </div>
-
         </div>
-
         <!-- DPS -->
         <div class="hero-group">
-
           <div class="group-title">
             输出
           </div>
-
           <div class="hero-grid">
-
             <div v-for="hero in dpsHeroes" :key="hero" class="hero-picker-item" @click="selectHero(hero)">
-
               <img :src="getHeroImage(hero)">
-
               <div class="hero-name">
                 {{ hero }}
               </div>
-
             </div>
-
           </div>
-
         </div>
 
         <!-- Support -->
         <div class="hero-group">
-
           <div class="group-title">
             辅助
           </div>
-
           <div class="hero-grid">
-
             <div v-for="hero in supportHeroes" :key="hero" class="hero-picker-item" @click="selectHero(hero)">
-
               <img :src="getHeroImage(hero)">
-
               <div class="hero-name">
                 {{ hero }}
               </div>
-
             </div>
-
           </div>
-
         </div>
-
       </div>
-
     </div>
 
     <!-- Rank Picker -->
     <div v-if="showRankPicker" class="rank-picker">
-
       <button class="picker-close" @click="closeRankPicker">
         ×
       </button>
-
       <div class="picker-title">
         选择段位
       </div>
-
       <div class="rank-grid">
-
         <div v-for="rank in ranks" :key="rank" class="rank-item" @click="selectRank(rank)">
-
           <img :src="getRankImage(rank)">
-
           <span>
             {{ rank }}
           </span>
-
         </div>
-
       </div>
-
       <div v-if="selectedRank" class="rank-level-grid">
-
         <button v-for="level in [1, 2, 3, 4, 5]" :key="level" class="rank-level-btn" @click="selectRankLevel(level)">
           {{ level }}
         </button>
-
       </div>
-
     </div>
 
     <!-- 遮罩 -->
@@ -394,6 +303,11 @@ const showRankPicker = ref(false)
 
 const selectedRank = ref('')
 const selectedField = ref('')
+
+// 修改密码相关状态
+const isChangingPassword = ref(false)
+const newPassword = ref('')
+const confirmPassword = ref('')
 
 /* =========================
    用户资料
@@ -840,9 +754,9 @@ const avatarUrl = computed(() => {
 async function handleAvatarChange(event: Event) {
   const target = event.target as HTMLInputElement
   const file = target.files?.[0]
-  
+
   if (!file) return
-  
+
   // 简单校验文件大小 (5MB)
   if (file.size > 5 * 1024 * 1024) {
     showToast('头像大小不能超过 5MB')
@@ -875,9 +789,9 @@ async function handleAvatarChange(event: Event) {
     // 上传成功，更新时间戳以刷新图片显示
     avatarTimestamp.value = Date.now()
     showToast('头像更新成功')
-    
+
     // 清空 input，允许重复选择同一文件
-    target.value = '' 
+    target.value = ''
   } catch (err: any) {
     console.error(err)
     showToast(err.message || '头像上传出错')
@@ -895,6 +809,64 @@ function logout() {
   )
 
   location.href = '/'
+}
+
+
+/* =========================
+   修改密码
+========================= */
+
+function startChangePassword() {
+  isChangingPassword.value = true
+  newPassword.value = ''
+  confirmPassword.value = ''
+}
+
+function cancelPasswordChange() {
+  isChangingPassword.value = false
+  newPassword.value = ''
+  confirmPassword.value = ''
+}
+
+async function submitPasswordChange() {
+  const pwd = newPassword.value.trim()
+  if (!pwd || pwd.length < 6) {
+    showToast('新密码长度不能少于6位')
+    return
+  }
+  if (pwd !== confirmPassword.value.trim()) {
+    showToast('两次输入的密码不一致')
+    return
+  }
+
+  try {
+    const token = localStorage.getItem('authToken')
+    const encodedBattletag = encodeURIComponent(profile.value.battletag)
+    const url = `/api/users/${encodedBattletag}/change-password`
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ newPassword: pwd })
+    })
+
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '修改失败')
+
+    showToast('密码修改成功，请重新登录')
+    // 可选：自动退出登录或清空token强制重新登录
+    setTimeout(() => {
+      logout()
+    }, 1500)
+  } catch (err: any) {
+    console.error(err)
+    showToast(err.message || '修改密码失败')
+  } finally {
+    cancelPasswordChange()
+  }
 }
 
 /* =========================
@@ -1016,7 +988,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: transform 0.2s;
   font-size: 18px;
   color: white;
@@ -1025,7 +997,8 @@ onMounted(() => {
 
 .edit-avatar-btn:hover {
   transform: scale(1.1);
-  background: var(--accent-hover, #1e90ff); /* 如果有 accent-hover 变量 */
+  background: var(--accent-hover, #1e90ff);
+  /* 如果有 accent-hover 变量 */
 }
 
 .profile-greeting {
@@ -1385,14 +1358,61 @@ onMounted(() => {
   border: none;
   border-radius: 10px;
   padding: 12px 22px;
-
   background: #ff4d4f;
   color: white;
-
   cursor: pointer;
+  font-size: 16px;
 }
 
 
+/* 修改密码区域 */
+.change-password-section {
+  margin-top: 20px;
+  text-align: center;
+}
+.change-pwd-btn {
+  background: #2c6bff;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 22px;
+  cursor: pointer;
+  font-size: 16px;
+}
+.password-edit-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.pwd-input {
+  width: 260px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: var(--bg-body);
+  color: var(--text-primary);
+}
+.pwd-actions {
+  display: flex;
+  gap: 16px;
+}
+.pwd-submit, .pwd-cancel {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 20px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.pwd-submit {
+  background: #2c6bff;
+  color: white;
+}
+.pwd-cancel {
+  background: #666;
+  color: white;
+}
 
 
 

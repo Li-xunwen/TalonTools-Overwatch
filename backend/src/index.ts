@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { initPool } from './utils/db';
+import { initPool, userEventLogger } from './utils/db';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { authenticateToken, AuthRequest } from './middleware/auth';
@@ -62,6 +62,11 @@ app.post('/api/login', async (req, res) => {
         JWT_SECRET,
         { expiresIn: '7d' }
     );
+    try {
+        await userEventLogger.logEvent({ userId: user.id, eventType: 'login', ipAddress: req.ip });
+    } catch (logError) {
+        console.error('Failed to log login event:', logError,{ userId: user.id, eventType: 'login', ipAddress: req.ip });
+    }
     res.json({ token, battletag: user.battletag });
 });
 

@@ -1,0 +1,142 @@
+import { Pool } from 'mysql2/promise';
+
+export type EventType = 
+  | 'login'
+  | 'like'
+  | 'unlike'
+  | 'add_hero'
+  | 'remove_hero'
+  | 'update_rank'
+  | 'edit_evaluation'
+  | 'view_profile'
+  | 'view_summary'
+  | 'upload_avatar'
+  | 'change_password'
+;
+
+export interface EventLogOptions {
+  userId: number;
+  eventType: EventType;
+  targetUserId?: number | null;
+  eventData?: Record<string, any> | null;
+  ipAddress?: string | null;
+}
+
+export interface QueryEventsOptions {
+  userId: number;
+  eventType?: EventType | EventType[];
+  startTime?: Date;
+  endTime?: Date;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * 用户事件日志工具
+ */
+export class UserEventLogger {
+  private pool: Pool;
+
+  constructor(pool: Pool) {
+    this.pool = pool;
+  }
+
+  /**
+   * 写入一条用户事件日志
+   * 异步执行，不阻塞主流程（错误只记录到控制台）
+   */
+  async logEvent(options: EventLogOptions): Promise<void> {
+    const { userId, eventType, targetUserId = null, eventData = null, ipAddress = null } = options;
+
+    try {
+      const [result] = await this.pool.execute(
+        `INSERT INTO user_events 
+          (user_id, event_type, target_user_id, event_data, ip_address)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          userId,
+          eventType,
+          targetUserId,
+          eventData ? JSON.stringify(eventData) : null,
+          ipAddress,
+        ]
+      );
+    } catch (err) {
+      // 日志记录失败不应影响主业务，只打印警告
+      console.error('[UserEventLogger] Failed to log event:', err);
+    }
+  }
+
+  /**
+   * 查询用户事件列表
+   * 支持事件类型筛选、时间范围、分页
+   */
+  async getEvents(options: QueryEventsOptions): Promise<any[]> {
+    const { userId, eventType, startTime, endTime, limit = 50, offset = 0 } = options;
+
+    let sql = `SELECT * FROM user_events WHERE user_id = ?`;
+    const params: any[] = [userId];
+
+    if (eventType) {
+      const types = Array.isArray(eventType) ? eventType : [eventType];
+      const placeholders = types.map(() => '?').join(',');
+      sql += ` AND event_type IN (${placeholders})`;
+      params.push(...types);
+    }
+
+    if (startTime) {
+      sql += ` AND event_time >= ?`;
+      params.push(startTime);
+    }
+    if (endTime) {
+      sql += ` AND event_time <= ?`;
+      params.push(endTime);
+    }
+
+    sql += ` ORDER BY event_time DESC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+
+    const [rows] = await this.pool.execute(sql, params);
+    return rows as any[];
+  }
+
+  /**
+   * 获取用户事件统计（按类型分组）
+   */
+  async getEventStats(userId: number, startTime?: Date, endTime?: Date): Promise<Record<string, number>> {
+    let sql = `SELECT event_type, COUNT(*) as count FROM user_events WHERE user_id = ?`;
+    const params: any[] = [userId];
+    if (startTime) {
+      sql += ` AND event_time >= ?`;
+      params.push(startTime);
+    }
+    if (endTime) {
+      sql += ` AND event_time <= ?`;
+      params.push(endTime);
+    }
+    sql += ` GROUP BY event_type`;
+    const [rows] = await this.pool.execute(sql, params);
+    const stats: Record<string, number> = {};
+    (rows as any[]).forEach(row => {
+      stats[row.event_type] = row.count;
+    });
+    return stats;
+  }
+}
+
+// 创建单例（可选，需要在 index.ts 中初始化）
+let loggerInstance: UserEventLogger | null = null;
+
+export function initUserEventLogger(pool: Pool): UserEventLogger {
+  if (!loggerInstance) {
+    loggerInstance = new UserEventLogger(pool);
+  }
+  return loggerInstance;
+}
+
+export function getUserEventLogger(): UserEventLogger {
+  if (!loggerInstance) {
+    throw new Error('UserEventLogger not initialized. Call initUserEventLogger(pool) first.');
+  }
+  return loggerInstance;
+}

@@ -2,15 +2,37 @@ import { Router } from 'express';
 import axios from 'axios';
 import { levelGet, levelSetEx } from '../services/levelCache';
 import { getCacheKey } from '../utils/cacheHelpers';
+import { userEventLogger } from '../utils/db';
+import { AuthRequest } from '../middleware/auth';
+import { getUserIdByBattletag } from '../utils/userHelper';   // 新增导入
 
 const router = Router();
 const DaShenURL = process.env.DASHEN_URL;
 
-async function proxyAndCache(req: any, res: any) {
+async function proxyAndCache(req: AuthRequest, res: any) {
   const body = req.body;
   const targetUrl = `${DaShenURL}${req.path}`;
   const isImage = req.path.endsWith('/image');
-  const cacheKey = getCacheKey(req.path, body);   // 关键修改
+  const cacheKey = getCacheKey(req.path, body);
+
+  // 从 token 中获取当前用户 ID
+  const currentUserId = req.user?.userId;
+  const eventType = req.path.includes('/dashen-profile') ? 'view_profile' : 'view_summary';
+
+  // 记录日志（异步，不阻塞）
+  if (currentUserId && body.bnet_id) {
+    getUserIdByBattletag(body.bnet_id)
+      .then(targetUserId => {
+        userEventLogger.logEvent({
+          userId: currentUserId,
+          eventType: eventType, 
+          targetUserId,                
+          eventData: { path: req.path, bnet_id: body.bnet_id },
+          ipAddress: req.ip
+        });
+      })
+      .catch(err => console.error('Failed to resolve target user id:', err));
+  }
 
   const cached = await levelGet(cacheKey);
   if (cached) {
@@ -43,7 +65,7 @@ async function proxyAndCache(req: any, res: any) {
       res.json(jsonData);
     }
   } catch (error: any) {
-    console.error('代理请求失败:', error.massage);
+    console.error('代理请求失败:', error.message);
     if (error.response) {
       const status = error.response.status;
       const headers = error.response.headers;
