@@ -4,8 +4,12 @@
     <div class="card-content">
       <!-- 头部：头像 + 名字 -->
       <div class="member-header">
-        <img :src="`/res/imge/${user.username.replace(/#/g, '-')}.jpg`" class="member-avatar"
-          @error="handleAvatarError" />
+       <img 
+          :src="getAvatarUrl(user.username)" 
+          class="member-avatar"
+          @error="handleAvatarError" 
+          alt="Avatar"
+        />
         <div class="member-text">
           <div v-if="user.username === selfTag" class="member-greeting">{{ randomGreeting }}</div>
           <div class="member-id">{{ user.username }}</div>
@@ -152,6 +156,13 @@ const emit = defineEmits<{
   (e: 'close-float'): void   // 关闭当前浮层（用于自动关闭）
 }>()
 
+const getAvatarUrl = (username: string) => {
+  if (!username) return ''
+  // 使用 encodeURIComponent 确保 # 等特殊字符被正确编码
+  // 后端路由 /api/users/:battletag/avatar 会接收这个参数
+  return `/api/users/${encodeURIComponent(username)}/avatar`
+}
+
 const randomGreeting = ref('')
 const newEvalText = ref('')
 const editingEval = ref<{ item: any; original: string } | null>(null)
@@ -235,7 +246,12 @@ watch(expandLike, (newVal) => {
 
 
 function handleAvatarError(e: Event) {
-  (e.target as HTMLImageElement).style.opacity = '0.4'
+  const img = e.target as HTMLImageElement
+  // 如果加载失败，可以设置一个默认占位图，或者保持当前状态（后端已配置返回 default-avatar.png）
+  // 这里我们尝试加载一个本地的默认图片作为兜底，防止后端默认图也失效
+  img.src = '/res/imge/default-avatar.png' 
+  // 如果本地也没有默认图，可以隐藏或设置样式
+  img.onerror = null // 防止无限循环
 }
 
 // 点赞按钮：只打开浮层（如果已打开则保持不变），并发送点赞请求
@@ -505,6 +521,7 @@ function onSummaryClick() {
     fetchSummaryImage()
   }
 }
+
 
 
 function openImageViewer(url: string) {

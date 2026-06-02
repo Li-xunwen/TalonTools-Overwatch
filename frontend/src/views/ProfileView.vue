@@ -5,43 +5,33 @@
     <ThemeToggle />
 
     <!-- Toast -->
-    <Toast
-      :message="toastMessage"
-      :duration="3000"
-    />
+    <Toast :message="toastMessage" :duration="3000" />
 
     <!-- 编辑按钮 -->
     <div class="top-actions">
-      <button
-        class="edit-btn"
-        @click="toggleEdit"
-      >
+      <button class="edit-btn" @click="toggleEdit">
         {{ isEditing ? '取消编辑' : '编辑资料' }}
       </button>
     </div>
 
     <!-- Loading -->
-    <div
-      v-if="loading"
-      class="loading"
-    >
+    <div v-if="loading" class="loading">
       加载中...
     </div>
 
     <!-- 主体 -->
-    <div
-      v-else
-      class="profile-container"
-    >
+    <div v-else class="profile-container">
 
       <!-- 用户头像 -->
       <div class="profile-header">
-
-        <img
-          class="profile-avatar"
-          :src="avatarUrl"
-          @error="onAvatarError"
-        >
+        <div class="avatar-wrapper">
+          <img class="profile-avatar" :src="avatarUrl" @error="onAvatarError" alt="Avatar">
+          <!-- 编辑头像按钮：仅在编辑模式下显示 -->
+          <label v-if="isEditing" class="edit-avatar-btn" title="更换头像">
+            ✏️
+            <input type="file" accept="image/*" hidden @change="handleAvatarChange" />
+          </label>
+        </div>
 
         <div class="profile-greeting">
           欢迎回来
@@ -50,7 +40,6 @@
         <div class="profile-id">
           {{ profile.battletag }}
         </div>
-
       </div>
 
       <!-- 段位区域 -->
@@ -69,16 +58,11 @@
               开放6v6
             </div>
 
-            <div
-              class="profile-rank"
-              @click="openRankPicker('rank_open_6v6')"
-            >
+            <div class="profile-rank" @click="openRankPicker('rank_open_6v6')">
 
               <template v-if="profile.rank_open_6v6">
 
-                <img
-                  :src="getRankImage(profile.rank_open_6v6.rank)"
-                >
+                <img :src="getRankImage(profile.rank_open_6v6.rank)">
 
                 <div class="rank-level">
                   {{ profile.rank_open_6v6.level }}
@@ -86,10 +70,7 @@
 
               </template>
 
-              <div
-                v-else
-                class="empty-rank"
-              >
+              <div v-else class="empty-rank">
                 +
               </div>
 
@@ -104,16 +85,11 @@
               重装
             </div>
 
-            <div
-              class="profile-rank"
-              @click="openRankPicker('rank_tank_5v5')"
-            >
+            <div class="profile-rank" @click="openRankPicker('rank_tank_5v5')">
 
               <template v-if="profile.rank_tank_5v5">
 
-                <img
-                  :src="getRankImage(profile.rank_tank_5v5.rank)"
-                >
+                <img :src="getRankImage(profile.rank_tank_5v5.rank)">
 
                 <div class="rank-level">
                   {{ profile.rank_tank_5v5.level }}
@@ -121,10 +97,7 @@
 
               </template>
 
-              <div
-                v-else
-                class="empty-rank"
-              >
+              <div v-else class="empty-rank">
                 +
               </div>
 
@@ -139,16 +112,11 @@
               输出
             </div>
 
-            <div
-              class="profile-rank"
-              @click="openRankPicker('rank_dps_5v5')"
-            >
+            <div class="profile-rank" @click="openRankPicker('rank_dps_5v5')">
 
               <template v-if="profile.rank_dps_5v5">
 
-                <img
-                  :src="getRankImage(profile.rank_dps_5v5.rank)"
-                >
+                <img :src="getRankImage(profile.rank_dps_5v5.rank)">
 
                 <div class="rank-level">
                   {{ profile.rank_dps_5v5.level }}
@@ -156,10 +124,7 @@
 
               </template>
 
-              <div
-                v-else
-                class="empty-rank"
-              >
+              <div v-else class="empty-rank">
                 +
               </div>
 
@@ -174,16 +139,11 @@
               辅助
             </div>
 
-            <div
-              class="profile-rank"
-              @click="openRankPicker('rank_support_5v5')"
-            >
+            <div class="profile-rank" @click="openRankPicker('rank_support_5v5')">
 
               <template v-if="profile.rank_support_5v5">
 
-                <img
-                  :src="getRankImage(profile.rank_support_5v5.rank)"
-                >
+                <img :src="getRankImage(profile.rank_support_5v5.rank)">
 
                 <div class="rank-level">
                   {{ profile.rank_support_5v5.level }}
@@ -191,10 +151,7 @@
 
               </template>
 
-              <div
-                v-else
-                class="empty-rank"
-              >
+              <div v-else class="empty-rank">
                 +
               </div>
 
@@ -215,24 +172,13 @@
 
         <div class="profile-heroes">
 
-          <div
-            v-for="(hero,index) in profile.heroes"
-            :key="hero + index"
-            class="hero-slot"
-          >
+          <div v-for="(hero, index) in profile.heroes" :key="hero + index" class="hero-slot">
 
             <div class="profile-hero-icon">
 
-              <img
-                :src="getHeroImage(hero)"
-                :alt="hero"
-              >
+              <img :src="getHeroImage(hero)" :alt="hero">
 
-              <button
-                v-if="isEditing"
-                class="remove-hero"
-                @click="removeHero(index)"
-              >
+              <button v-if="isEditing" class="remove-hero" @click="removeHero(index)">
                 ×
               </button>
 
@@ -241,15 +187,9 @@
           </div>
 
           <!-- 添加英雄 -->
-          <div
-            v-if="isEditing && profile.heroes.length < 5"
-            class="hero-slot"
-          >
+          <div v-if="isEditing && profile.heroes.length < 5" class="hero-slot">
 
-            <div
-              class="empty-slot"
-              @click="showHeroPicker = true"
-            >
+            <div class="empty-slot" @click="showHeroPicker = true">
               +
             </div>
 
@@ -260,22 +200,13 @@
       </section>
 
       <!-- 保存 -->
-      <div
-        v-if="isEditing"
-        class="edit-actions"
-      >
+      <div v-if="isEditing" class="edit-actions">
 
-        <button
-          class="btn-save"
-          @click="saveProfile"
-        >
+        <button class="btn-save" @click="saveProfile">
           保存资料
         </button>
 
-        <button
-          class="btn-cancel"
-          @click="cancelEdit"
-        >
+        <button class="btn-cancel" @click="cancelEdit">
           放弃修改
         </button>
 
@@ -284,10 +215,7 @@
       <!-- 登出 -->
       <div class="logout-section">
 
-        <button
-          class="logout-btn"
-          @click="logout"
-        >
+        <button class="logout-btn" @click="logout">
           退出登录
         </button>
 
@@ -296,15 +224,9 @@
     </div>
 
     <!-- Hero Picker -->
-    <div
-      v-if="showHeroPicker"
-      class="hero-picker"
-    >
+    <div v-if="showHeroPicker" class="hero-picker">
 
-      <button
-        class="picker-close"
-        @click="showHeroPicker = false"
-      >
+      <button class="picker-close" @click="showHeroPicker = false">
         ×
       </button>
 
@@ -323,16 +245,9 @@
 
           <div class="hero-grid">
 
-            <div
-              v-for="hero in tankHeroes"
-              :key="hero"
-              class="hero-picker-item"
-              @click="selectHero(hero)"
-            >
+            <div v-for="hero in tankHeroes" :key="hero" class="hero-picker-item" @click="selectHero(hero)">
 
-              <img
-                :src="getHeroImage(hero)"
-              >
+              <img :src="getHeroImage(hero)">
 
               <div class="hero-name">
                 {{ hero }}
@@ -353,16 +268,9 @@
 
           <div class="hero-grid">
 
-            <div
-              v-for="hero in dpsHeroes"
-              :key="hero"
-              class="hero-picker-item"
-              @click="selectHero(hero)"
-            >
+            <div v-for="hero in dpsHeroes" :key="hero" class="hero-picker-item" @click="selectHero(hero)">
 
-              <img
-                :src="getHeroImage(hero)"
-              >
+              <img :src="getHeroImage(hero)">
 
               <div class="hero-name">
                 {{ hero }}
@@ -383,16 +291,9 @@
 
           <div class="hero-grid">
 
-            <div
-              v-for="hero in supportHeroes"
-              :key="hero"
-              class="hero-picker-item"
-              @click="selectHero(hero)"
-            >
+            <div v-for="hero in supportHeroes" :key="hero" class="hero-picker-item" @click="selectHero(hero)">
 
-              <img
-                :src="getHeroImage(hero)"
-              >
+              <img :src="getHeroImage(hero)">
 
               <div class="hero-name">
                 {{ hero }}
@@ -409,15 +310,9 @@
     </div>
 
     <!-- Rank Picker -->
-    <div
-      v-if="showRankPicker"
-      class="rank-picker"
-    >
+    <div v-if="showRankPicker" class="rank-picker">
 
-      <button
-        class="picker-close"
-        @click="closeRankPicker"
-      >
+      <button class="picker-close" @click="closeRankPicker">
         ×
       </button>
 
@@ -427,16 +322,9 @@
 
       <div class="rank-grid">
 
-        <div
-          v-for="rank in ranks"
-          :key="rank"
-          class="rank-item"
-          @click="selectRank(rank)"
-        >
+        <div v-for="rank in ranks" :key="rank" class="rank-item" @click="selectRank(rank)">
 
-          <img
-            :src="getRankImage(rank)"
-          >
+          <img :src="getRankImage(rank)">
 
           <span>
             {{ rank }}
@@ -446,17 +334,9 @@
 
       </div>
 
-      <div
-        v-if="selectedRank"
-        class="rank-level-grid"
-      >
+      <div v-if="selectedRank" class="rank-level-grid">
 
-        <button
-          v-for="level in [1,2,3,4,5]"
-          :key="level"
-          class="rank-level-btn"
-          @click="selectRankLevel(level)"
-        >
+        <button v-for="level in [1, 2, 3, 4, 5]" :key="level" class="rank-level-btn" @click="selectRankLevel(level)">
           {{ level }}
         </button>
 
@@ -465,11 +345,7 @@
     </div>
 
     <!-- 遮罩 -->
-    <div
-      v-if="showHeroPicker || showRankPicker"
-      class="picker-mask"
-      @click="closeAllPicker"
-    ></div>
+    <div v-if="showHeroPicker || showRankPicker" class="picker-mask" @click="closeAllPicker"></div>
     <BottomNav />
 
   </div>
@@ -479,7 +355,7 @@ import { ref, computed, onMounted } from 'vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import Toast from '@/components/Toast.vue'
 import { authFetch } from '@/utils/request'
-import BottomNav from '@/components/BottomNav.vue'  
+import BottomNav from '@/components/BottomNav.vue'
 /* =========================
    类型定义
 ========================= */
@@ -616,20 +492,6 @@ const supportHeroes = [
   'zenyatta'
 ]
 
-/* =========================
-   Avatar
-========================= */
-
-const avatarUrl = computed(() => {
-  if (!profile.value.battletag) {
-    return '/res/imge/default-avatar.png'
-  }
-
-  return `/res/imge/${profile.value.battletag.replace(
-    /#/g,
-    '-'
-  )}.jpg`
-})
 
 /* =========================
    图片工具
@@ -643,13 +505,10 @@ function getRankImage(rank: string) {
   return `/res/imge/rank/${rank}.png`
 }
 
-function onAvatarError(
-  e: Event
-) {
+function onAvatarError(e: Event) {
   const img = e.target as HTMLImageElement
-
-  img.src =
-    '/res/imge/default-avatar.png'
+  img.src = '/res/imge/default-avatar.png'
+  img.onerror = null // 防止无限循环
 }
 
 /* =========================
@@ -768,7 +627,7 @@ function selectRankLevel(
     return
   }
 
-  ;(
+  ; (
     profile.value as any
   )[selectedField.value] = {
     rank: selectedRank.value,
@@ -963,6 +822,70 @@ async function saveProfile() {
 }
 
 /* =========================
+   Avatar
+========================= */
+
+// 添加一个时间戳来强制刷新图片，避免浏览器缓存旧头像
+const avatarTimestamp = ref<number>(Date.now())
+
+const avatarUrl = computed(() => {
+  if (!profile.value.battletag) {
+    return '/res/imge/default-avatar.png'
+  }
+  // 在 URL 后添加时间戳参数以破坏缓存
+  return `/api/users/${encodeURIComponent(profile.value.battletag)}/avatar?t=${avatarTimestamp.value}`
+})
+
+// 处理头像文件选择与上传
+async function handleAvatarChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  
+  if (!file) return
+  
+  // 简单校验文件大小 (5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('头像大小不能超过 5MB')
+    return
+  }
+
+  try {
+    const formData = new FormData()
+    formData.append('avatar', file)
+
+    const token = localStorage.getItem('authToken')
+    // 注意：这里假设 battletag 不需要再次编码，因为它是从 profile 中获取的原始值
+    // 但为了安全起见，URL 路径中的特殊字符最好还是编码一下，不过 fetch 的 URL 字符串通常能处理
+    const url = `/api/users/${encodeURIComponent(profile.value.battletag)}/avatar`
+
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`
+        // 注意：发送 FormData 时不要手动设置 Content-Type，浏览器会自动设置 boundary
+      },
+      body: formData
+    })
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}))
+      throw new Error(errData.error || '头像上传失败')
+    }
+
+    // 上传成功，更新时间戳以刷新图片显示
+    avatarTimestamp.value = Date.now()
+    showToast('头像更新成功')
+    
+    // 清空 input，允许重复选择同一文件
+    target.value = '' 
+  } catch (err: any) {
+    console.error(err)
+    showToast(err.message || '头像上传出错')
+  }
+}
+
+
+/* =========================
    登出
 ========================= */
 
@@ -1035,6 +958,7 @@ onMounted(() => {
 [data-theme="dark"] .edit-btn {
   background: #2c6bff47;
 }
+
 /* =========================
    头像
 ========================= */
@@ -1063,6 +987,59 @@ onMounted(() => {
   font-weight: bold;
   margin-top: 8px;
   margin-bottom: 30px;
+  word-break: break-all;
+}
+
+
+.profile-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.avatar-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+/* 编辑头像按钮样式 */
+.edit-avatar-btn {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  width: 36px;
+  height: 36px;
+  background: var(--accent);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: transform 0.2s;
+  font-size: 18px;
+  color: white;
+  border: 2px solid var(--surface);
+}
+
+.edit-avatar-btn:hover {
+  transform: scale(1.1);
+  background: var(--accent-hover, #1e90ff); /* 如果有 accent-hover 变量 */
+}
+
+.profile-greeting {
+  text-align: center;
+  margin-top: 18px;
+  opacity: .85;
+  font-size: 18px;
+}
+
+.profile-id {
+  text-align: center;
+  font-size: 28px;
+  font-weight: bold;
+  margin-top: 8px;
   word-break: break-all;
 }
 
@@ -1252,7 +1229,7 @@ onMounted(() => {
 
   z-index: 1001;
 
-  background: rgba(35,35,35,.96);
+  background: rgba(35, 35, 35, .96);
   backdrop-filter: blur(12px);
 
   border-radius: 18px;
@@ -1356,7 +1333,7 @@ onMounted(() => {
 }
 
 .rank-item:hover {
-  background: rgba(255,255,255,.08);
+  background: rgba(255, 255, 255, .08);
 }
 
 .rank-item img {
@@ -1391,7 +1368,7 @@ onMounted(() => {
 .picker-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.65);
+  background: rgba(0, 0, 0, .65);
   z-index: 1000;
 }
 
