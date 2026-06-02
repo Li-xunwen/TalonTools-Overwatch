@@ -12,6 +12,7 @@ export type EventType =
   | 'upload_avatar'
   | 'change_password'
   | 'rename_user'
+  | 'create_user'
 ;
 
 export interface EventLogOptions {

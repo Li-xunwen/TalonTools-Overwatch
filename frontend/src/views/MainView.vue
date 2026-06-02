@@ -19,7 +19,10 @@
       <button v-if="searchKeyword" class="search-clear" @click="clearSearch">✕</button>
 </div>
       <div class="section">
-        <h2 class="section-title">成员名单</h2>
+        <div class="section-header">
+          <h2 class="section-title">成员名单</h2>
+          <button v-if="isAdmin" class="add-member-btn" @click="createNewMember">+</button>
+        </div>
         <div class="members-grid">
           <MemberCard
             v-for="member in filteredMembers"
@@ -110,6 +113,7 @@ const currentExpandId = ref<string>('')
 const likePending = new Map<string, boolean>()
 const selfRole = ref<string | null>(null)
 const searchKeyword = ref('')
+const isAdmin = computed(() => selfRole.value === 'ADMIN' || selfRole.value === 'MODERATOR')
 // ---------- 辅助函数 ----------
 async function fetchUserList(): Promise<string[]> {
     const res = await fetch('/api/users/battletaglist')
@@ -340,6 +344,72 @@ const sortedMembers = computed(() => {
   })
 })
 
+function generateUniqueBattletag(): string {
+  const base = '新成员';
+  const timestamp = Date.now();
+  return `${base}${timestamp}`.slice(0, 60);
+}
+
+async function createNewMember() {
+  if (!isAdmin.value) return;
+
+  const newBattletag = generateUniqueBattletag();
+  const defaultPassword = '1234';
+
+  try {
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        battletag: newBattletag,
+        password: defaultPassword
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      if (res.status === 409) {
+        // 战网ID冲突，重试一次（追加随机后缀）
+        const retryTag = `${newBattletag}_${Math.random().toString(36).substring(2, 6)}`;
+        const retryRes = await fetch('/api/users', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            battletag: retryTag,
+            password: defaultPassword
+          })
+        });
+        const retryData = await retryRes.json();
+        if (!retryRes.ok) throw new Error(retryData.error || '创建失败');
+        await onMemberCreated(retryTag);
+        return;
+      }
+      throw new Error(data.error || '创建失败');
+    }
+
+    await onMemberCreated(newBattletag);
+  } catch (err: any) {
+    console.error(err);
+    toastMessage.value = err.message || '创建失败';
+    setTimeout(() => { toastMessage.value = ''; }, 3000);
+  }
+}
+
+async function onMemberCreated(newBattletag: string) {
+  // 刷新成员列表
+  await loadMembers();
+  // 设置搜索关键字为新建的成员ID，使其单独显示
+  searchKeyword.value = newBattletag;
+  toastMessage.value = `成员 ${newBattletag} 创建成功，默认密码 1234`;
+  setTimeout(() => { toastMessage.value = ''; }, 5000);
+}
+
 function handleGlobalClick(e: MouseEvent) {
   const target = e.target as HTMLElement
   if (!target.closest('.member-card')) {
@@ -450,5 +520,31 @@ onUnmounted(() => {
 }
 .search-clear:hover {
   opacity: 1;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.add-member-btn {
+  background: var(--accent);
+  border: none;
+  border-radius: 20px;
+  width: 32px;
+  height: 32px;
+  font-size: 20px;
+  font-weight: bold;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s;
+}
+.add-member-btn:hover {
+  transform: scale(1.05);
+  opacity: 0.9;
 }
 </style>

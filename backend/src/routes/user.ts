@@ -342,4 +342,82 @@ router.put('/users/:battletag/battletag', authenticateToken, async (req: AuthReq
     res.json({ message: '战网ID修改成功' });
 });
 
+/**
+ * POST /api/users
+ * 功能：管理员创建新用户（需要 token 认证，且角色为 MODERATOR 或 ADMIN）
+ * 请求体：{ "battletag": "新战网ID", "password": "密码" }
+ * 返回：{ message: "用户创建成功", user: { id, battletag, role } }
+ */
+router.post('/users', authenticateToken, async (req: AuthRequest, res) => {
+    const currentUserId = req.user?.userId;
+    if (!currentUserId) {
+        return res.status(401).json({ error: '未授权' });
+    }
+
+    // 检查当前用户的角色（从数据库获取真实角色）
+    const [currentUserRows] = await pool.query<any[]>(
+        'SELECT role FROM users WHERE id = ?',
+        [currentUserId]
+    );
+    if (currentUserRows.length === 0) {
+        return res.status(404).json({ error: '当前用户不存在' });
+    }
+    const currentRole = currentUserRows[0].role;
+    if (currentRole !== 'ADMIN' && currentRole !== 'MODERATOR') {
+        return res.status(403).json({ error: '权限不足，只有管理员可以创建新用户' });
+    }
+
+    const { battletag, password } = req.body;
+    if (!battletag || typeof battletag !== 'string') {
+        return res.status(400).json({ error: '缺少战网ID' });
+    }
+    if (!password || typeof password !== 'string' || password.length < 4) {
+        return res.status(400).json({ error: '密码长度不能少于4位' });
+    }
+
+    // 检查战网ID是否已存在
+    const [existing] = await pool.query<any[]>(
+        'SELECT id FROM users WHERE battletag = ?',
+        [battletag]
+    );
+    if (existing.length > 0) {
+        return res.status(409).json({ error: '战网ID已被使用' });
+    }
+
+    // 加密密码
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    try {
+        // 插入新用户
+        const [result] = await pool.query<mysql.ResultSetHeader>(
+            'INSERT INTO users (battletag, password_hash, role) VALUES (?, ?, ?)',
+            [battletag, passwordHash, 'USER']
+        );
+        const newUserId = result.insertId;
+
+        // 可选：记录事件日志
+        if (userEventLogger) {
+            userEventLogger.logEvent({
+                userId: currentUserId,
+                eventType: 'create_user',
+                targetUserId: newUserId,
+                eventData: { createdBattletag: battletag },
+                ipAddress: req.ip
+            }).catch(console.error);
+        }
+
+        res.status(201).json({
+            message: '用户创建成功',
+            user: {
+                id: newUserId,
+                battletag,
+                role: 'USER'
+            }
+        });
+    } catch (error) {
+        console.error('创建用户失败:', error);
+        res.status(500).json({ error: '服务器错误，请稍后重试' });
+    }
+});
+
 export default router;
