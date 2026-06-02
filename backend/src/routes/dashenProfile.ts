@@ -1,10 +1,11 @@
+// dashenProfile.ts
 import { Router } from 'express';
 import axios from 'axios';
-import { getRedisClient } from '../services/redisClient';
+import { levelGet, levelSetEx } from '../services/levelCache';
 import { getCacheKey } from '../utils/cacheHelpers';
 
 const router = Router();
-const BACKEND_BASE = 'http://127.0.0.1:8080/api/v2';
+const DaShenURL = process.env.DASHEN_URL;
 
 async function proxyAndCache(req: any, res: any) {
   const body = req.body;
@@ -23,14 +24,12 @@ async function proxyAndCache(req: any, res: any) {
     return res.status(404).json({ error: '未知的路由' });
   }
 
-  const targetUrl = `${BACKEND_BASE}${targetPath}`;
+  const targetUrl = `${DaShenURL}${targetPath}`;
   const isImage = targetPath.endsWith('/image');
   const cacheKey = getCacheKey(body);
 
-  const redis = await getRedisClient();
-
-  // 尝试读取缓存
-  const cached = await redis.get(cacheKey);
+  // 1. 尝试从 LevelDB 读取缓存
+  const cached = await levelGet(cacheKey);
   if (cached) {
     console.log(`[Cache HIT] ${cacheKey}`);
     if (isImage) {
@@ -52,32 +51,27 @@ async function proxyAndCache(req: any, res: any) {
     if (isImage) {
       const buffer = response.data;
       const base64 = buffer.toString('base64');
-      await redis.setEx(cacheKey, 36000, base64);
+      await levelSetEx(cacheKey, 36000, base64);
       res.set('Content-Type', response.headers['content-type'] || 'image/png');
       res.send(buffer);
     } else {
       const jsonData = response.data;
-      await redis.setEx(cacheKey, 36000, JSON.stringify(jsonData));
+      await levelSetEx(cacheKey, 36000, JSON.stringify(jsonData));
       res.json(jsonData);
     }
   } catch (error: any) {
     console.error('代理请求失败:', error);
-     // 检查是否有来自上游服务的响应
     if (error.response) {
       const status = error.response.status;
       const headers = error.response.headers;
       const data = error.response.data;
       res.status(status).set(headers).send(data);
     } else {
-      res.status(502).json({ 
-        error: 'Bad Gateway', 
-        detail: error.message 
-      });
+      res.status(502).json({ error: 'Bad Gateway', detail: error.message });
     }
   }
 }
 
-// 定义路由
 router.post('/dashen-profile', proxyAndCache);
 router.post('/dashen-profile/image', proxyAndCache);
 router.post('/dashen-summary/today', proxyAndCache);

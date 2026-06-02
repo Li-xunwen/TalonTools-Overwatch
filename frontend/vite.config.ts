@@ -1,7 +1,10 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
+import dotenv from 'dotenv'
 
+dotenv.config()
+const apiProxyTarget = process.env.API_PROXY_TARGET;
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
@@ -15,7 +18,7 @@ export default defineConfig({
     port: 80,        // 默认是 5173
     proxy: {
       '/api': {
-        target: 'http://47.116.35.79:3000/',
+        target: apiProxyTarget,
         changeOrigin: true,
         // rewrite: (path) => path, // 不需要重写，直接转发 /api/xxx
       },

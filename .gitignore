@@ -45,3 +45,6 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# LevelDB cache directory
+cache-db/
