@@ -3,8 +3,7 @@ import { Pool } from 'mysql2/promise';
 export type EventType = 
   | 'login'
   | 'like'
-  | 'add_hero'
-  | 'remove_hero'
+  | 'update_heroes'
   | 'update_rank'
   | 'edit_evaluation'
   | 'view_profile'

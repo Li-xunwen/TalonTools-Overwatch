@@ -487,7 +487,6 @@ onUnmounted(() => {
 /* 搜索栏样式 */
 .search-bar {
   position: relative;
-  max-width: 400px;
   margin: 20px auto;
   padding: 0 16px;
 }

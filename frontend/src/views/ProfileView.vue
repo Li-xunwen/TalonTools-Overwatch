@@ -190,11 +190,9 @@
             重装
           </div>
           <div class="hero-grid">
-            <div v-for="hero in tankHeroes" :key="hero" class="hero-picker-item" @click="selectHero(hero)">
-              <img :src="getHeroImage(hero)">
-              <div class="hero-name">
-                {{ hero }}
-              </div>
+            <div v-for="hero in tankHeroes" :key="hero.name" class="hero-picker-item" @click="selectHero(hero.name)">
+              <img :src="getHeroImage(hero.name)">
+              <div class="hero-name">{{ hero.zh_name }}</div>
             </div>
           </div>
         </div>
@@ -204,10 +202,10 @@
             输出
           </div>
           <div class="hero-grid">
-            <div v-for="hero in dpsHeroes" :key="hero" class="hero-picker-item" @click="selectHero(hero)">
-              <img :src="getHeroImage(hero)">
+            <div v-for="hero in dpsHeroes" :key="hero.name" class="hero-picker-item" @click="selectHero(hero.name)">
+              <img :src="getHeroImage(hero.name)">
               <div class="hero-name">
-                {{ hero }}
+                {{ hero.zh_name }}
               </div>
             </div>
           </div>
@@ -219,10 +217,10 @@
             辅助
           </div>
           <div class="hero-grid">
-            <div v-for="hero in supportHeroes" :key="hero" class="hero-picker-item" @click="selectHero(hero)">
-              <img :src="getHeroImage(hero)">
+            <div v-for="hero in supportHeroes" :key="hero.name" class="hero-picker-item" @click="selectHero(hero.name)">
+              <img :src="getHeroImage(hero.name)">
               <div class="hero-name">
-                {{ hero }}
+                {{ hero.zh_name }}
               </div>
             </div>
           </div>
@@ -252,7 +250,10 @@
         </button>
       </div>
     </div>
-
+    <!-- 管理员日志按钮（左下角） -->
+    <div v-if="!loading && isAdmin" class="admin-log-btn" @click="goToEventLog">
+      📈
+    </div>
     <!-- 遮罩 -->
     <div v-if="showHeroPicker || showRankPicker" class="picker-mask" @click="closeAllPicker"></div>
     <BottomNav />
@@ -265,6 +266,7 @@ import ThemeToggle from '@/components/ThemeToggle.vue'
 import Toast from '@/components/Toast.vue'
 import { authFetch } from '@/utils/request'
 import BottomNav from '@/components/BottomNav.vue'
+import { useRouter } from 'vue-router';
 /* =========================
    类型定义
 ========================= */
@@ -309,6 +311,11 @@ const isChangingPassword = ref(false)
 const newPassword = ref('')
 const confirmPassword = ref('')
 
+const router = useRouter();
+const isAdmin = computed(() => profile.value.role === 'ADMIN' || profile.value.role === 'MODERATOR');
+function goToEventLog() {
+  router.push('/admin/events');
+}
 /* =========================
    用户资料
 ========================= */
@@ -353,59 +360,29 @@ const ranks = [
 /* =========================
    英雄列表
 ========================= */
+const tankHeroes = ref<{ name: string; zh_name: string }[]>([])
+const dpsHeroes = ref<{ name: string; zh_name: string }[]>([])
+const supportHeroes = ref<{ name: string; zh_name: string }[]>([])
+const heroesLoading = ref(true)
 
-const tankHeroes = [
-  'dva',
-  'doomfist',
-  'hazard',
-  'junker-queen',
-  'mauga',
-  'orisa',
-  'ramattra',
-  'reinhardt',
-  'roadhog',
-  'sigma',
-  'winston',
-  'wrecking-ball',
-  'zarya'
-]
-
-const dpsHeroes = [
-  'ashe',
-  'bastion',
-  'cassidy',
-  'echo',
-  'freja',
-  'genji',
-  'hanzo',
-  'junkrat',
-  'mei',
-  'pharah',
-  'reaper',
-  'sojourn',
-  'soldier-76',
-  'sombra',
-  'symmetra',
-  'torbjorn',
-  'tracer',
-  'venture',
-  'widowmaker'
-]
-
-const supportHeroes = [
-  'ana',
-  'baptiste',
-  'brigitte',
-  'illari',
-  'juno',
-  'kiriko',
-  'lifeweaver',
-  'lucio',
-  'mercy',
-  'moira',
-  'zenyatta'
-]
-
+// 获取英雄列表
+async function loadHeroesList() {
+  try {
+    const res = await fetch('/api/heroeslist')
+    if (!res.ok) throw new Error('获取英雄列表失败')
+    const data = await res.json()
+    // data 格式: [{ id, name, zh_name, role }, ...]
+    // 按 role 分组
+    tankHeroes.value = data.filter((h: any) => h.role === 'tank').map((h: any) => ({ name: h.name, zh_name: h.zh_name }))
+    dpsHeroes.value = data.filter((h: any) => h.role === 'damage').map((h: any) => ({ name: h.name, zh_name: h.zh_name }))
+    supportHeroes.value = data.filter((h: any) => h.role === 'support').map((h: any) => ({ name: h.name, zh_name: h.zh_name }))
+  } catch (err) {
+    console.error(err)
+    showToast('加载英雄列表失败')
+  } finally {
+    heroesLoading.value = false
+  }
+}
 
 /* =========================
    图片工具
@@ -875,6 +852,7 @@ async function submitPasswordChange() {
 
 onMounted(() => {
   loadProfile()
+  loadHeroesList()
 })
 </script>
 <style scoped>
@@ -1370,6 +1348,7 @@ onMounted(() => {
   margin-top: 20px;
   text-align: center;
 }
+
 .change-pwd-btn {
   background: #2c6bff;
   color: white;
@@ -1379,6 +1358,7 @@ onMounted(() => {
   cursor: pointer;
   font-size: 16px;
 }
+
 .password-edit-form {
   display: flex;
   flex-direction: column;
@@ -1386,6 +1366,7 @@ onMounted(() => {
   gap: 12px;
   margin-top: 12px;
 }
+
 .pwd-input {
   width: 260px;
   padding: 10px;
@@ -1394,27 +1375,54 @@ onMounted(() => {
   background: var(--bg-body);
   color: var(--text-primary);
 }
+
 .pwd-actions {
   display: flex;
   gap: 16px;
 }
-.pwd-submit, .pwd-cancel {
+
+.pwd-submit,
+.pwd-cancel {
   border: none;
   border-radius: 8px;
   padding: 8px 20px;
   cursor: pointer;
   font-size: 14px;
 }
+
 .pwd-submit {
   background: #2c6bff;
   color: white;
 }
+
 .pwd-cancel {
   background: #666;
   color: white;
 }
 
-
+/* 管理员日志按钮 */
+.admin-log-btn {
+  position: fixed;
+  bottom: 80px;      /* 避开底部导航栏（高度64px） */
+  left: 20px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  z-index: 100;
+  transition: 0.2s;
+}
+.admin-log-btn:hover {
+  transform: scale(1.05);
+  opacity: 0.9;
+}
 
 /* =========================
    手机适配

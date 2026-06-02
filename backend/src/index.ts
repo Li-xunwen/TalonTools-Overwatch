@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { initPool, userEventLogger } from './utils/db';
+import { initPool, userEventLogger, pool } from './utils/db';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { authenticateToken, AuthRequest } from './middleware/auth';
@@ -11,7 +11,7 @@ import evaluationRouter from './routes/evaluation';
 import rankRouter from './routes/rank';
 import heroesRouter from './routes/heroes';
 import dashenProfileRouter from './routes/dashenProfile';
-
+import adminRouter from './routes/admin';
 dotenv.config();
 
 const { PORT, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET } = process.env;
@@ -70,6 +70,28 @@ app.post('/api/login', async (req, res) => {
     res.json({ token, battletag: user.battletag });
 });
 
+/**
+ * GET /api/heroeslist
+ * 功能：获取所有英雄列表（无需 token）
+ * 返回示例：
+ * [
+ *   { "id": 1, "name": "wuyang", "zh_name": "无漾", "role": "support" },
+ *   { "id": 2, "name": "kiriko", "zh_name": "雾子", "role": "support" },
+ *   ...
+ * ]
+ */
+app.get('/api/heroeslist', async (req, res) => {
+    try {
+        const [rows] = await pool.query<any[]>(
+            'SELECT id, name, zh_name, role FROM heroes ORDER BY id'
+        );
+        res.json(rows);
+    } catch (error) {
+        console.error('获取英雄列表失败:', error);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
 // 挂载需要认证的路由
 app.use('/api', userRouter);          // 用户相关
 app.use('/api', likeRouter);          // 点赞
@@ -77,6 +99,7 @@ app.use('/api', evaluationRouter);     // 评价
 app.use('/api/user', rankRouter);      // 用户段位更新
 app.use('/api/user', heroesRouter);    // 用户英雄更新
 app.use('/api/v2', dashenProfileRouter);
+app.use('/api/admin', adminRouter); 
 
 app.listen(port, () => {
     console.log(`🚀 Server is running at http://localhost:${port}`);

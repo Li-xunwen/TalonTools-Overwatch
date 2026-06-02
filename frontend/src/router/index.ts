@@ -25,6 +25,12 @@ const routes = [
     name: 'Profile',
     component: () => import('../views/ProfileView.vue'),
     meta: { requiresAuth: true },
+  },
+    {
+    path: '/admin/events',
+    name: 'EventLog',
+    component: () => import('../views/EventLogView.vue'),
+    meta: { requiresAuth: true }  // 需要登录
   }
 
 ]
