@@ -42,7 +42,7 @@
           <div class="btn-label">今日总结</div>
         </div>
         <!-- 管理按钮（仅管理员可见） -->
-        
+
         <div class="action-btn" @click.stop="onSummaryClick">
           <div v-if="isAdmin" class="action-btn" @click.stop="onAdminClick">
             <div class="btn-icon">🔧</div>
@@ -140,6 +140,11 @@
           <input type="text" v-model="adminNewBattletag" placeholder="新战网ID" class="admin-input" />
           <button class="admin-submit" @click="submitBattletagChange">提交</button>
         </div>
+        <div class="admin-section">
+          <div class="admin-label">邀请分享</div>
+          <div class="share-text" @click="copyInviteText">{{ inviteText }}</div>
+          <div class="copy-hint">点击复制</div>
+        </div>
       </div>
     </Transition>
   </div>
@@ -174,6 +179,7 @@ const emit = defineEmits<{
   (e: 'eval-submit', username: string, text: string): void
   (e: 'expand-career', username: string): void
   (e: 'expand-summary', username: string): void
+  (e: 'expand-admin', username: string): void
   (e: 'close-float'): void   // 关闭当前浮层（用于自动关闭）
 }>()
 
@@ -209,6 +215,12 @@ const expandAdmin = ref(false)
 const adminNewPassword = ref('')
 const adminConfirmPassword = ref('')
 const adminNewBattletag = ref('')
+
+const inviteText = computed(() => {
+    const pwd = adminNewPassword.value.trim() || '123'
+    return `${props.user.username} 你的黑爪账号已经创建，访问http://47.116.35.79/来和小伙伴一起开黑吧，进来记得修改常用英雄。默认密码是${pwd}`
+})
+
 // 段位列表
 const rankList = computed(() => {
   const ranks: { type: string; label: string; rank: string; level: number }[] = []
@@ -549,66 +561,77 @@ function onSummaryClick() {
   }
 }
 function onAdminClick() {
-    // 关闭其他浮层
-    if (expandAdmin.value) {
-        expandAdmin.value = false
-    } else {
-        emit('close-float')   // 关闭其他浮层（可选）
-        expandAdmin.value = true
-    }
+  // 关闭其他浮层
+  if (expandAdmin.value) {
+    expandAdmin.value = false
+  } else {
+    emit('close-float')   // 关闭其他浮层（可选）
+    expandAdmin.value = true
+  }
 }
 
 // 修改密码（管理员调用）
 async function submitPasswordChange() {
-    const pwd = adminNewPassword.value.trim()
-    if (!pwd || pwd.length < 4) {
-        alert('新密码长度不能少于4位')
-        return
-    }
-    if (pwd !== adminConfirmPassword.value.trim()) {
-        alert('两次密码不一致')
-        return
-    }
-    const token = localStorage.getItem('authToken')
-    const encoded = encodeURIComponent(props.user.username)
+  const pwd = adminNewPassword.value.trim()
+  if (!pwd || pwd.length < 4) {
+    alert('新密码长度不能少于4位')
+    return
+  }
+  if (pwd !== adminConfirmPassword.value.trim()) {
+    alert('两次密码不一致')
+    return
+  }
+  const token = localStorage.getItem('authToken')
+  const encoded = encodeURIComponent(props.user.username)
+  try {
+    const res = await fetch(`/api/users/${encoded}/change-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ newPassword: pwd })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '修改失败')
+    alert('密码修改成功')
+    //expandAdmin.value = false
+    adminNewPassword.value = adminConfirmPassword.value = ''
+  } catch (err: any) {
+    alert(err.message)
+  }
+}
+
+// 复制文本到剪贴板
+async function copyInviteText() {
     try {
-        const res = await fetch(`/api/users/${encoded}/change-password`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ newPassword: pwd })
-        })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || '修改失败')
-        alert('密码修改成功')
-        expandAdmin.value = false
-        adminNewPassword.value = adminConfirmPassword.value = ''
-    } catch (err: any) {
-        alert(err.message)
+        await navigator.clipboard.writeText(inviteText.value)
+        alert('已复制邀请文本')
+    } catch (err) {
+        console.error('复制失败:', err)
+        alert('复制失败，请手动复制')
     }
 }
 
 // 修改战网ID（管理员调用）
 async function submitBattletagChange() {
-    const newTag = adminNewBattletag.value.trim()
-    if (!newTag) {
-        alert('请输入新战网ID')
-        return
-    }
-    const token = localStorage.getItem('authToken')
-    const encoded = encodeURIComponent(props.user.username)
-    try {
-        const res = await fetch(`/api/users/${encoded}/battletag`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ newBattletag: newTag })
-        })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || '修改失败')
-        alert('战网ID修改成功，页面将刷新')
-        location.reload()  // 强制刷新以更新列表
-    } catch (err: any) {
-        alert(err.message)
-    }
+  const newTag = adminNewBattletag.value.trim()
+  if (!newTag) {
+    alert('请输入新战网ID')
+    return
+  }
+  const token = localStorage.getItem('authToken')
+  const encoded = encodeURIComponent(props.user.username)
+  try {
+    const res = await fetch(`/api/users/${encoded}/battletag`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ newBattletag: newTag })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '修改失败')
+    alert('战网ID修改成功，页面将刷新')
+    location.reload()  // 强制刷新以更新列表
+  } catch (err: any) {
+    alert(err.message)
+  }
 }
 
 
@@ -985,38 +1008,64 @@ onUnmounted(() => {
   z-index: 20;
   overflow-y: auto;
 }
+
 .admin-panel-title {
-    font-weight: bold;
-    margin-bottom: 8px;
-    text-align: center;
-    color: var(--accent);
+  font-weight: bold;
+  margin-bottom: 8px;
+  text-align: center;
+  color: var(--accent);
 }
+
 .admin-section {
-    margin-bottom: 12px;
-    border-top: 1px solid rgba(255,255,255,0.1);
-    padding-top: 8px;
+  margin-bottom: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 8px;
 }
+
 .admin-label {
-    font-size: 12px;
-    opacity: 0.8;
-    margin-bottom: 4px;
+  font-size: 12px;
+  opacity: 0.8;
+  margin-bottom: 4px;
 }
+
 .admin-input {
-    width: 100%;
-    padding: 6px;
-    margin-bottom: 6px;
-    border-radius: 4px;
-    border: 1px solid #555;
-    background: var(--input-bg);
-    color: var(--text-primary);
+  width: 100%;
+  padding: 6px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background: var(--input-bg);
+  color: var(--text-primary);
 }
+
 .admin-submit {
-    background: var(--accent);
-    border: none;
-    border-radius: 4px;
-    padding: 4px 8px;
-    color: white;
-    cursor: pointer;
+  background: var(--accent);
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.share-text {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    padding: 8px;
     font-size: 12px;
+    cursor: pointer;
+    word-break: break-all;
+    transition: background 0.2s;
+}
+.share-text:hover {
+    background: var(--accent);
+    color: white;
+}
+.copy-hint {
+    font-size: 10px;
+    text-align: right;
+    margin-top: 4px;
+    opacity: 0.6;
 }
 </style>
