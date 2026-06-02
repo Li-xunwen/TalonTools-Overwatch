@@ -15,6 +15,7 @@
             :key="member.username"
             :user="member"
             :self-tag="selfTag"
+            :self-role="selfRole"
             :current-expand-id="currentExpandId"
             :like-cache="likeCache"
             :eval-cache="evalCache"
@@ -23,8 +24,8 @@
             @expand-eval="handleExpandEval"
             @like-click="handleLikeClick"
             @eval-submit="handleEvalSubmit"
-            @expand-career="handleExpandCareer" 
-            @expand-summary="handleExpandSummary"  
+            @expand-career="handleExpandCareer"
+            @expand-summary="handleExpandSummary"
           />
         </div>
       </div>
@@ -96,18 +97,19 @@ const evalCache = new Map<string, EvalItem[]>()
 const toastMessage = ref('')
 const currentExpandId = ref<string>('')
 const likePending = new Map<string, boolean>()
-
+const selfRole = ref<string | null>(null)
 // ---------- 辅助函数 ----------
 async function fetchUserList(): Promise<string[]> {
-  const res = await fetch('/api/users/battletaglist')
-  if (!res.ok) throw new Error('获取用户列表失败')
-  selfTag.value = await fetch('/api/users/me', {
-    headers: { 'Authorization': `Bearer ${token}` }
-  })
-    .then(res => res.json())
-    .then(data => data.battletag)
-  const battletagList: string[] = await res.json()
-  return battletagList
+    const res = await fetch('/api/users/battletaglist')
+    if (!res.ok) throw new Error('获取用户列表失败')
+    const meRes = await fetch('/api/users/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+    })
+    const meData = await meRes.json()
+    selfTag.value = meData.battletag
+    selfRole.value = meData.role
+    const battletagList: string[] = await res.json()
+    return battletagList
 }
 
 async function fetchUserData(username: string): Promise<UserData> {

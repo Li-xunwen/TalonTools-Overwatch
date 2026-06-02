@@ -1,7 +1,8 @@
     import { Router } from 'express';
     import { pool } from '../utils/db';
     import { authenticateToken, AuthRequest } from '../middleware/auth';
-    
+    import { userEventLogger } from '../utils/db';
+
     const router = Router();
     router.use(authenticateToken);
     
@@ -57,6 +58,7 @@
                      ON DUPLICATE KEY UPDATE content = VALUES(content), updated_at = NOW()`,
                     [currentUserId, targetUserId, trimmed]
                 );
+                userEventLogger.logEvent({ userId: currentUserId, eventType: 'rename_user'});
                 res.json({ message: '评价提交成功' });
             }
         } catch (error) {

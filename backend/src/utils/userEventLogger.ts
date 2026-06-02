@@ -3,7 +3,6 @@ import { Pool } from 'mysql2/promise';
 export type EventType = 
   | 'login'
   | 'like'
-  | 'unlike'
   | 'add_hero'
   | 'remove_hero'
   | 'update_rank'
@@ -12,6 +11,7 @@ export type EventType =
   | 'view_summary'
   | 'upload_avatar'
   | 'change_password'
+  | 'rename_user'
 ;
 
 export interface EventLogOptions {

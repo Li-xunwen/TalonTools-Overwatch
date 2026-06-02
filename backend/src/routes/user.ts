@@ -5,6 +5,8 @@ import fs from 'fs';
 import { pool } from '../utils/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { userEventLogger } from '../utils/db';
+import mysql from 'mysql2/promise';
+import fsPromises from 'fs/promises';
 
 const router = Router();
 
@@ -265,4 +267,79 @@ router.post('/users/:battletag/change-password', authenticateToken, async (req: 
         res.status(500).json({ error: '服务器错误，请稍后重试' });
     }
 });
+
+/**
+ * PUT /api/users/:battletag/battletag
+ * 功能：管理员修改用户的战网ID（需要 token 认证，且角色为 ADMIN 或 MODERATOR）
+ * 请求体：{ "newBattletag": "新战网ID" }
+ */
+router.put('/users/:battletag/battletag', authenticateToken, async (req: AuthRequest, res) => {
+    const currentUserId = req.user?.userId;
+    if (!currentUserId) return res.status(401).json({ error: '未授权' });
+
+    // 检查当前用户角色
+    const [currentUserRows] = await pool.query<any[]>(
+        'SELECT role FROM users WHERE id = ?',
+        [currentUserId]
+    );
+    if (currentUserRows.length === 0) return res.status(404).json({ error: '当前用户不存在' });
+    const currentRole = currentUserRows[0].role;
+    if (currentRole !== 'ADMIN' && currentRole !== 'MODERATOR') {
+        return res.status(403).json({ error: '权限不足，只有管理员可以修改战网ID' });
+    }
+
+    const oldBattletag = decodeURIComponent(req.params.battletag as string);
+    const { newBattletag } = req.body;
+    if (!newBattletag || typeof newBattletag !== 'string') {
+        return res.status(400).json({ error: '缺少新战网ID' });
+    }
+
+    // 检查新ID是否已被占用
+    const [existing] = await pool.query<any[]>(
+        'SELECT id FROM users WHERE battletag = ?',
+        [newBattletag]
+    );
+    if (existing.length > 0) {
+        return res.status(409).json({ error: '新战网ID已被使用' });
+    }
+
+
+    // 执行修改
+    const [result] = await pool.query<mysql.ResultSetHeader>(
+        'UPDATE users SET battletag = ? WHERE battletag = ?',
+        [newBattletag, oldBattletag]
+    );
+    if (result.affectedRows === 0) {
+        return res.status(404).json({ error: '目标用户不存在' });
+    }
+
+    try {
+        const oldBase = oldBattletag.replace(/#/g, '-');
+        const newBase = newBattletag.replace(/#/g, '-');
+        const avatarDir = path.join(process.cwd(), 'public', 'res', 'imge');
+        const possibleExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+        
+        let renamed = false;
+        for (const ext of possibleExts) {
+            const oldPath = path.join(avatarDir, `${oldBase}${ext}`);
+            if (fs.existsSync(oldPath)) {
+                const newPath = path.join(avatarDir, `${newBase}${ext}`);
+                await fsPromises.rename(oldPath, newPath);
+                console.log(`Avatar renamed: ${oldPath} -> ${newPath}`);
+                renamed = true;
+                break;
+            }
+        }
+        if (!renamed) {
+            console.log(`No avatar found for user ${oldBattletag}`);
+        }
+    } catch (renameErr) {
+        console.error('Failed to rename avatar:', renameErr);
+    }
+
+    userEventLogger.logEvent({ userId: currentUserId, eventType: 'rename_user'});
+
+    res.json({ message: '战网ID修改成功' });
+});
+
 export default router;

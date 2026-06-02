@@ -4,12 +4,7 @@
     <div class="card-content">
       <!-- 头部：头像 + 名字 -->
       <div class="member-header">
-       <img 
-          :src="getAvatarUrl(user.username)" 
-          class="member-avatar"
-          @error="handleAvatarError" 
-          alt="Avatar"
-        />
+        <img :src="getAvatarUrl(user.username)" class="member-avatar" @error="handleAvatarError" alt="Avatar" />
         <div class="member-text">
           <div v-if="user.username === selfTag" class="member-greeting">{{ randomGreeting }}</div>
           <div class="member-id">{{ user.username }}</div>
@@ -45,6 +40,14 @@
         <div class="action-btn" @click.stop="onSummaryClick">
           <div class="btn-icon">📅</div>
           <div class="btn-label">今日总结</div>
+        </div>
+        <!-- 管理按钮（仅管理员可见） -->
+        
+        <div class="action-btn" @click.stop="onSummaryClick">
+          <div v-if="isAdmin" class="action-btn" @click.stop="onAdminClick">
+            <div class="btn-icon">🔧</div>
+            <div class="btn-label">用户管理</div>
+          </div>
         </div>
       </div>
 
@@ -122,6 +125,23 @@
       </div>
     </Transition>
 
+    <!-- 管理浮层 -->
+    <Transition name="fade">
+      <div v-if="expandAdmin" class="admin-panel" @click.stop>
+        <div class="admin-panel-title">用户管理</div>
+        <div class="admin-section">
+          <div class="admin-label">修改密码</div>
+          <input type="password" v-model="adminNewPassword" placeholder="新密码（至少4位）" class="admin-input" />
+          <input type="password" v-model="adminConfirmPassword" placeholder="确认新密码" class="admin-input" />
+          <button class="admin-submit" @click="submitPasswordChange">提交</button>
+        </div>
+        <div class="admin-section">
+          <div class="admin-label">修改战网ID</div>
+          <input type="text" v-model="adminNewBattletag" placeholder="新战网ID" class="admin-input" />
+          <button class="admin-submit" @click="submitBattletagChange">提交</button>
+        </div>
+      </div>
+    </Transition>
   </div>
   <ImageViewer v-model:visible="showImageViewer" :src="currentCareerImageUrl" />
 </template>
@@ -144,6 +164,7 @@ const props = defineProps<{
   likeCache: Record<string, any[]>   // 响应式对象
   evalCache: Map<string, any[]>
   fetchEvaluations: (username: string) => Promise<any[]>
+  selfRole: string | null   // 新增
 }>()
 
 const emit = defineEmits<{
@@ -182,6 +203,12 @@ const summaryLoading = ref(false)
 const summaryImageUrl = ref('')
 const summaryError = ref<string | null>(null)
 
+// 管理按钮相关
+const isAdmin = computed(() => props.selfRole === 'ADMIN' || props.selfRole === 'MODERATOR')
+const expandAdmin = ref(false)
+const adminNewPassword = ref('')
+const adminConfirmPassword = ref('')
+const adminNewBattletag = ref('')
 // 段位列表
 const rankList = computed(() => {
   const ranks: { type: string; label: string; rank: string; level: number }[] = []
@@ -249,7 +276,7 @@ function handleAvatarError(e: Event) {
   const img = e.target as HTMLImageElement
   // 如果加载失败，可以设置一个默认占位图，或者保持当前状态（后端已配置返回 default-avatar.png）
   // 这里我们尝试加载一个本地的默认图片作为兜底，防止后端默认图也失效
-  img.src = '/res/imge/default-avatar.png' 
+  img.src = '/res/imge/default-avatar.png'
   // 如果本地也没有默认图，可以隐藏或设置样式
   img.onerror = null // 防止无限循环
 }
@@ -521,7 +548,68 @@ function onSummaryClick() {
     fetchSummaryImage()
   }
 }
+function onAdminClick() {
+    // 关闭其他浮层
+    if (expandAdmin.value) {
+        expandAdmin.value = false
+    } else {
+        emit('close-float')   // 关闭其他浮层（可选）
+        expandAdmin.value = true
+    }
+}
 
+// 修改密码（管理员调用）
+async function submitPasswordChange() {
+    const pwd = adminNewPassword.value.trim()
+    if (!pwd || pwd.length < 4) {
+        alert('新密码长度不能少于4位')
+        return
+    }
+    if (pwd !== adminConfirmPassword.value.trim()) {
+        alert('两次密码不一致')
+        return
+    }
+    const token = localStorage.getItem('authToken')
+    const encoded = encodeURIComponent(props.user.username)
+    try {
+        const res = await fetch(`/api/users/${encoded}/change-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ newPassword: pwd })
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || '修改失败')
+        alert('密码修改成功')
+        expandAdmin.value = false
+        adminNewPassword.value = adminConfirmPassword.value = ''
+    } catch (err: any) {
+        alert(err.message)
+    }
+}
+
+// 修改战网ID（管理员调用）
+async function submitBattletagChange() {
+    const newTag = adminNewBattletag.value.trim()
+    if (!newTag) {
+        alert('请输入新战网ID')
+        return
+    }
+    const token = localStorage.getItem('authToken')
+    const encoded = encodeURIComponent(props.user.username)
+    try {
+        const res = await fetch(`/api/users/${encoded}/battletag`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ newBattletag: newTag })
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || '修改失败')
+        alert('战网ID修改成功，页面将刷新')
+        location.reload()  // 强制刷新以更新列表
+    } catch (err: any) {
+        alert(err.message)
+    }
+}
 
 
 function openImageViewer(url: string) {
@@ -884,5 +972,51 @@ onUnmounted(() => {
 
 .career-error {
   color: #ff6666;
+}
+
+
+/* 管理面板浮层 */
+.admin-panel {
+  top: 100%;
+  left: 0;
+  right: 0;
+  border-radius: 0 0 8px 8px;
+  padding: 8px 0;
+  z-index: 20;
+  overflow-y: auto;
+}
+.admin-panel-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+    text-align: center;
+    color: var(--accent);
+}
+.admin-section {
+    margin-bottom: 12px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 8px;
+}
+.admin-label {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-bottom: 4px;
+}
+.admin-input {
+    width: 100%;
+    padding: 6px;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    border: 1px solid #555;
+    background: var(--input-bg);
+    color: var(--text-primary);
+}
+.admin-submit {
+    background: var(--accent);
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: white;
+    cursor: pointer;
+    font-size: 12px;
 }
 </style>
