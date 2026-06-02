@@ -1,4 +1,3 @@
-// dashenProfile.ts
 import { Router } from 'express';
 import axios from 'axios';
 import { levelGet, levelSetEx } from '../services/levelCache';
@@ -9,26 +8,10 @@ const DaShenURL = process.env.DASHEN_URL;
 
 async function proxyAndCache(req: any, res: any) {
   const body = req.body;
+  const targetUrl = `${DaShenURL}${req.path}`;
+  const isImage = req.path.endsWith('/image');
+  const cacheKey = getCacheKey(req.path, body);   // 关键修改
 
-  // 动态构造目标 URL
-  let targetPath = '';
-  if (req.path === '/dashen-profile') {
-    targetPath = '/dashen-profile/';
-  } else if (req.path === '/dashen-profile/image') {
-    targetPath = '/dashen-profile/image';
-  } else if (req.path === '/dashen-summary/today') {
-    targetPath = '/dashen-summary/today';
-  } else if (req.path === '/dashen-summary/today/image') {
-    targetPath = '/dashen-summary/today/image';
-  } else {
-    return res.status(404).json({ error: '未知的路由' });
-  }
-
-  const targetUrl = `${DaShenURL}${targetPath}`;
-  const isImage = targetPath.endsWith('/image');
-  const cacheKey = getCacheKey(body);
-
-  // 1. 尝试从 LevelDB 读取缓存
   const cached = await levelGet(cacheKey);
   if (cached) {
     console.log(`[Cache HIT] ${cacheKey}`);
