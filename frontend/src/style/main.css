@@ -30,7 +30,6 @@ body {
     font-family: 'Microsoft YaHei', Arial, sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
-    overflow-x: hidden;
     transition: background 0.3s, color 0.3s;
 }
 

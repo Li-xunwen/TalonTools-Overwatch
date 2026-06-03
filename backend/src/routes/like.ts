@@ -1,5 +1,5 @@
                 import { Router } from 'express';
-                import { pool } from '../utils/db';
+                import { pool,userEventLogger } from '../utils/db';
                 import { authenticateToken, AuthRequest } from '../middleware/auth';
                 
                 const router = Router();
@@ -86,7 +86,12 @@
                         
                         await connection.commit();
                         connection.release();
-                        
+                        userEventLogger.logEvent({ 
+                        userId: currentUserId, 
+                        eventType: 'like',
+                        targetUserId: targetUserId, 
+                        eventData: { content: `今日对 ${targetTag} 点赞 ${todayCount} 次` } 
+                        });  
                         res.json({ message: '点赞成功', likeCount: newLikeCount, addedCount: actualIncrement });
                     } catch (error) {
                         await connection.rollback();

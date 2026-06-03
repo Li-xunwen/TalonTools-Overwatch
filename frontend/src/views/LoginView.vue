@@ -1,7 +1,7 @@
 <template>
   <ThemeToggle />
-
-  <div class="login-container">
+  <div class="login-page">
+    <div class="login-container">
     <h2>{{ title }}</h2>
 
     <form @submit.prevent="handleLogin">
@@ -26,6 +26,7 @@
         {{ loading ? "登录中..." : "登录" }}
       </button>
     </form>
+    </div>
   </div>
 </template>
 
@@ -232,67 +233,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* =========================
-   Theme Variables
-========================= */
 
-:global(:root) {
-  --bg-body: #f0f2f5;
-  --card-bg: #ffffff;
-  --text-primary: #1c1e21;
-
-  --input-border: #ddd;
-  --input-focus: #1877f2;
-
-  --button-bg: #1877f2;
-  --button-hover: #156ae9;
-
-  --link-color: #1877f2;
-
-  --shadow:
-    0 14px 28px rgba(0, 0, 0, 0.25),
-    0 10px 10px rgba(0, 0, 0, 0.22);
-}
-
-:global(.dark-theme) {
-  --bg-body: #121212;
-  --card-bg: #1e1e1e;
-  --text-primary: #f0f0f0;
-
-  --input-border: #444;
-  --input-focus: #4dabf7;
-
-  --button-bg: #1877f2;
-  --button-hover: #339af0;
-
-  --link-color: #4dabf7;
-
-  --shadow:
-    0 10px 20px rgba(0, 0, 0, 0.5);
-}
-
-/* =========================
-   Layout
-========================= */
-
-:global(body) {
-  margin: 0;
-  min-height: 100vh;
-
-  display: flex;
-  justify-content: center;
-  align-items: center;
-
-  font-family:
-    "Segoe UI",
-    Arial,
-    sans-serif;
-
-  background: var(--bg-body);
-  color: var(--text-primary);
-
-  transition: 0.3s;
-}
 
 * {
   box-sizing: border-box;
@@ -303,9 +244,9 @@ onUnmounted(() => {
 ========================= */
 
 .login-container {
-  width: 360px;
-  max-width: calc(100vw - 40px);
-
+  width: 300px;
+  max-width: calc(100vw - 80px);
+  height: 400px;
   padding: 40px;
 
   background: var(--card-bg);
@@ -469,6 +410,13 @@ onUnmounted(() => {
 .login-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 /* =========================
