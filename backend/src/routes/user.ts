@@ -2,9 +2,8 @@ import { Router, Request } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { pool } from '../utils/db';
+import { pool, userEventLogger } from '../utils/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { userEventLogger } from '../utils/db';
 import mysql from 'mysql2/promise';
 import fsPromises from 'fs/promises';
 
@@ -130,7 +129,13 @@ router.put('/users/:battletag/avatar', upload.single('avatar'), async (req: Uplo
     if (!req.file) {
         return res.status(400).json({ error: '没有上传文件或文件格式不正确' });
     }
-    
+    userEventLogger.logEvent({
+        userId: currentUserId,
+        eventType: 'update_avatar',
+        targetUserId: null,
+        eventData: { filename: req.file.filename },
+        ipAddress: req.ip
+    });
     res.json({ message: '头像更新成功', filename: req.file.filename });
 });
 
@@ -204,6 +209,7 @@ router.get('/users/me', async (req: AuthRequest, res) => {
  * 请求体：{ "newPassword": "新密码" }
  */
 import bcrypt from 'bcrypt';
+import { eventLoopUtilization } from 'perf_hooks';
 
 router.post('/users/:battletag/change-password', authenticateToken, async (req: AuthRequest, res) => {
     const currentUserId = req.user?.userId;
