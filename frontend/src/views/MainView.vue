@@ -40,6 +40,7 @@
             @eval-submit="handleEvalSubmit"
             @expand-career="handleExpandCareer"
             @expand-summary="handleExpandSummary"
+            @expand-match="handleExpandMatch"
           />
         </div>
       </div>
@@ -424,6 +425,11 @@ function handleExpandCareer(username: string) {
 
 function handleExpandSummary(username: string) {
   const id = `summary-${username}`
+  currentExpandId.value = currentExpandId.value === id ? '' : id
+}
+
+function handleExpandMatch(username: string) {
+  const id = `match-${username}`
   currentExpandId.value = currentExpandId.value === id ? '' : id
 }
 

@@ -41,14 +41,18 @@
           <div class="btn-icon">📅</div>
           <div class="btn-label">今日总结</div>
         </div>
+        <div class="action-btn" @click.stop="onMatchClick">
+          <div class="btn-icon">🎮</div>
+          <div class="btn-label">最近对局</div>
+        </div>
         <!-- 管理按钮（仅管理员可见） -->
-
         <div class="action-btn" @click.stop="onSummaryClick">
           <div v-if="isAdmin" class="action-btn" @click.stop="onAdminClick">
             <div class="btn-icon">🔧</div>
             <div class="btn-label">用户管理</div>
           </div>
         </div>
+
       </div>
 
     </div>
@@ -125,6 +129,17 @@
       </div>
     </Transition>
 
+    <!--今日对局浮层-->
+    <Transition name="fade">
+      <div v-if="expandMatch" class="match-list" @click.stop>
+        <div v-if="matchLoading" class="match-loading">
+          <div class="loading-spinner"></div>
+          <span>加载中...</span>
+        </div>
+        <img v-else-if="matchImageUrl" :src="matchImageUrl" class="match-image"
+          @click="openImageViewer(matchImageUrl)" />
+      </div>
+    </Transition>
     <!-- 管理浮层 -->
     <Transition name="fade">
       <div v-if="expandAdmin" class="admin-panel" @click.stop>
@@ -179,6 +194,7 @@ const emit = defineEmits<{
   (e: 'eval-submit', username: string, text: string): void
   (e: 'expand-career', username: string): void
   (e: 'expand-summary', username: string): void
+    (e: 'expand-match', username: string): void
   (e: 'expand-admin', username: string): void
   (e: 'close-float'): void   // 关闭当前浮层（用于自动关闭）
 }>()
@@ -208,6 +224,12 @@ const expandSummary = computed(() => props.currentExpandId === `summary-${props.
 const summaryLoading = ref(false)
 const summaryImageUrl = ref('')
 const summaryError = ref<string | null>(null)
+
+//今日对局相关状态
+const expandMatch = computed(() => props.currentExpandId === `match-${props.user.username}`)
+const matchLoading = ref(false)
+const matchImageUrl = ref('')
+const matchError = ref<string | null>(null)
 
 // 管理按钮相关
 const isAdmin = computed(() => props.selfRole === 'ADMIN' || props.selfRole === 'MODERATOR')
@@ -560,6 +582,64 @@ function onSummaryClick() {
     fetchSummaryImage()
   }
 }
+
+// 请求今日对局图片
+async function fetchMatchImage() {
+  if (matchImageUrl.value && matchImageUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(matchImageUrl.value)
+    matchImageUrl.value = ''
+  }
+  matchLoading.value = true
+  matchError.value = null
+  const token = localStorage.getItem('authToken')
+  const body = {
+    limit: 20,
+    include_fight:true,
+    include_previous_season:true,
+    bnet_id: props.user.username
+  }
+  try {
+    const res = await fetch('/api/v2/dashen-match/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(body)
+    })
+
+    if (!res.ok) {
+      // 尝试获取错误详情
+      let errMsg = `请求失败: ${res.status}`
+      try {
+        const errData = await res.json()
+        errMsg = errData.message || errData.error || '服务错误'
+      } catch (e) {
+        // 如果返回的不是JSON，使用状态码文本
+        errMsg = res.statusText || errMsg
+      }
+      throw new Error(errMsg)
+    }
+
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    careerImageUrl.value = url
+  } catch (err: any) {
+    console.error(err)
+    careerError.value = err.message || '加载失败'
+  } finally {
+    careerLoading.value = false
+  }
+}
+
+// 点击今日对局按钮
+function onMatchClick() {
+  emit('expand-match', props.user.username)
+  if (!expandMatch.value) {
+    fetchMatchImage()
+  }
+}
+
 function onAdminClick() {
   // 关闭其他浮层
   if (expandAdmin.value) {
@@ -981,6 +1061,35 @@ onUnmounted(() => {
   text-align: center;
 }
 
+/* 今日对局浮层样式 */
+.match-list {
+  top: 100%;
+  left: 0;
+  right: 0;
+  border-radius: 0 0 8px 8px;
+  padding: 8px 0;
+  z-index: 20;
+  overflow-y: auto;
+}
+
+.match-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: white;
+}
+
+.match-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.match-error {
+  color: #ff6666;
+  text-align: center;
+}
 @keyframes spin {
   to {
     transform: rotate(360deg);

@@ -104,6 +104,6 @@ router.post('/dashen-profile', proxyAndCache);
 router.post('/dashen-profile/image', proxyAndCache);
 router.post('/dashen-summary/today', proxyAndCache);
 router.post('/dashen-summary/today/image', proxyAndCache);
-router.post('/api/v2/dashen-match', proxyAndCache);
-router.post('/api/v2/dashen-match/image', proxyAndCache);
+router.post('/dashen-match', proxyAndCache);
+router.post('/dashen-match/image', proxyAndCache);
 export default router;
