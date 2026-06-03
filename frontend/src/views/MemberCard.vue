@@ -623,12 +623,12 @@ async function fetchMatchImage() {
 
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
-    careerImageUrl.value = url
+    matchImageUrl.value = url
   } catch (err: any) {
     console.error(err)
-    careerError.value = err.message || '加载失败'
+    matchError.value = err.message || '加载失败'
   } finally {
-    careerLoading.value = false
+    matchLoading.value = false
   }
 }
 
