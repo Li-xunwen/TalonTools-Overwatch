@@ -24,12 +24,12 @@ router.get('/users/battletaglist', async (req, res) => {
 router.get('/users/:battletag/avatar', async (req, res) => {
     let battletag = decodeURIComponent(req.params.battletag as string);
     if (!battletag) return res.status(400).json({ error: '缺少 battletag 参数' });
-    
+
     const baseName = battletag.replace(/#/g, '-');
     const avatarDir = path.join(process.cwd(), 'public', 'res', 'imge');
     const possibleExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
     let foundPath: string | null = null;
-    
+
     for (const ext of possibleExts) {
         const fullPath = path.join(avatarDir, `${baseName}${ext}`);
         if (fs.existsSync(fullPath)) {
@@ -37,18 +37,18 @@ router.get('/users/:battletag/avatar', async (req, res) => {
             break;
         }
     }
-    
+
     if (!foundPath) {
         const defaultPath = path.join(avatarDir, 'default-avatar.png');
         if (fs.existsSync(defaultPath)) return res.sendFile(defaultPath);
         return res.status(404).json({ error: '头像不存在' });
     }
-    
-    // 【关键修改】设置响应头，禁止浏览器缓存头像，确保上传后立即刷新
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.setHeader('Pragma', 'no-cache');
+
+    // 后端示例
+    res.set('Cache-Control', 'public, max-age=86400'); // 缓存24小时
+    res.set('ETag', '"some-unique-hash"'); // 如果内容不变，返回304
     res.setHeader('Expires', '0');
-    
+
     res.sendFile(foundPath);
 });
 
@@ -67,9 +67,9 @@ const avatarStorage = multer.diskStorage({
         cb(null, dir);
     },
     filename: (req: Request, file: Express.Multer.File, cb) => {
-        const battletag = (req.params.battletag as string) || ''; 
+        const battletag = (req.params.battletag as string) || '';
         const sanitized = battletag.replace(/#/g, '-');
-        
+
         // 1. 确定新文件的扩展名
         let originalExt = path.extname(file.originalname).toLowerCase();
         if (!originalExt) {
@@ -78,7 +78,7 @@ const avatarStorage = multer.diskStorage({
             else if (file.mimetype === 'image/gif') originalExt = '.gif';
             else originalExt = '.png';
         }
-        
+
         const newFilename = `${sanitized}${originalExt}`;
         const dir = path.join(process.cwd(), 'public', 'res', 'imge');
 
@@ -122,10 +122,10 @@ router.put('/users/:battletag/avatar', upload.single('avatar'), async (req: Uplo
     const currentUserId = req.user?.userId;
     const currentUserTag = req.user?.battletag;
     let targetTag = decodeURIComponent(req.params.battletag as string);
-    
+
     if (!currentUserId || !currentUserTag) return res.status(401).json({ error: '未授权' });
     if (targetTag !== currentUserTag) return res.status(403).json({ error: '只能修改自己的头像' });
-    
+
     if (!req.file) {
         return res.status(400).json({ error: '没有上传文件或文件格式不正确' });
     }
@@ -305,7 +305,7 @@ router.put('/users/:battletag/battletag', authenticateToken, async (req: AuthReq
         const newBase = newBattletag.replace(/#/g, '-');
         const avatarDir = path.join(process.cwd(), 'public', 'res', 'imge');
         const possibleExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-        
+
         let renamed = false;
         for (const ext of possibleExts) {
             const oldPath = path.join(avatarDir, `${oldBase}${ext}`);
@@ -324,7 +324,7 @@ router.put('/users/:battletag/battletag', authenticateToken, async (req: AuthReq
         console.error('Failed to rename avatar:', renameErr);
     }
 
-    userEventLogger.logEvent({ userId: currentUserId, eventType: 'rename_user'});
+    userEventLogger.logEvent({ userId: currentUserId, eventType: 'rename_user' });
 
     res.json({ message: '战网ID修改成功' });
 });

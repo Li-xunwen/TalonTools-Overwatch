@@ -161,9 +161,8 @@ async function fetchUserData(username: string): Promise<UserData> {
 
 // ---------- 点赞数据 ----------
 async function fetchLikes(username: string): Promise<LikeItem[]> {
-  if (likeCache[username]) return likeCache[username]
   const encoded = encodeURIComponent(username)
-  const url = `/api/${encoded}/likelist`
+  const url = `/api/${encoded}/likelist?t=${Date.now()}`
   try {
     const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` }
@@ -211,16 +210,7 @@ async function submitLike(targetUser: string) {
       throw new Error(data.error)
     }
 
-    const newTotalLike = data.likeCount
-    const currentLikes = [...(likeCache[targetUser] || [])]
-    const existingIndex = currentLikes.findIndex(item => item.ID === self)
-    if (existingIndex >= 0) {
-      currentLikes[existingIndex].Like = newTotalLike
-    } else {
-      currentLikes.push({ ID: self, Like: newTotalLike })
-    }
-    currentLikes.sort((a, b) => b.Like - a.Like)
-    likeCache[targetUser] = currentLikes
+    await fetchLikes(targetUser)
   } catch (err) {
     console.error('点赞失败:', err)
   } finally {
@@ -409,6 +399,45 @@ async function onMemberCreated(newBattletag: string) {
   searchKeyword.value = newBattletag;
   toastMessage.value = `成员 ${newBattletag} 创建成功，默认密码 1234`;
   setTimeout(() => { toastMessage.value = ''; }, 5000);
+}
+
+// 刷新指定用户的数据（从后端获取最新信息）
+async function refreshUserData(username: string) {
+  const encoded = encodeURIComponent(username);
+  const url = `/api/${encoded}/rank_hero?t=${Date.now()}`;
+  try {
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const parseRank = (raw: any): { rank: string; level: number } | null => {
+      if (!raw) return null;
+      if (typeof raw === 'object') return raw;
+      if (typeof raw === 'string') {
+        try { return JSON.parse(raw); } catch { return null; }
+      }
+      return null;
+    };
+    const newUserData: UserData = {
+      username: data.battletag,
+      hero: data.heroes,
+      rank_open_6v6: parseRank(data.rank_open_6v6),
+      rank_tank_5v5: parseRank(data.rank_tank_5v5),
+      rank_dps_5v5: parseRank(data.rank_dps_5v5),
+      rank_support_5v5: parseRank(data.rank_support_5v5),
+      error: false
+    };
+    // 更新 members 数组中对应的用户
+    const index = members.value.findIndex(m => m.username === username);
+    if (index !== -1) {
+      members.value[index] = newUserData;
+      // 同时刷新点赞缓存（确保赞数最新）
+      await fetchLikes(username);
+    }
+  } catch (err) {
+    console.error(`刷新用户 ${username} 数据失败:`, err);
+  }
 }
 
 function handleGlobalClick(e: MouseEvent) {

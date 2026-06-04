@@ -208,8 +208,6 @@ const emit = defineEmits<{
 
 const getAvatarUrl = (username: string) => {
   if (!username) return ''
-  // 使用 encodeURIComponent 确保 # 等特殊字符被正确编码
-  // 后端路由 /api/users/:battletag/avatar 会接收这个参数
   return `/api/users/${encodeURIComponent(username)}/avatar`
 }
 
