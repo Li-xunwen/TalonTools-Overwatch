@@ -69,9 +69,16 @@
     <Transition name="fade">
       <div v-if="expandLike" class="like-list" @click.stop>
         <div v-if="likeList.length === 0" class="empty-tip">暂无点赞</div>
-        <div v-for="item in likeList.slice(0, 10)" :key="item.ID" class="like-item">
+        <div v-for="item in likeList.slice(0, 50)" :key="item.ID" class="like-item">
           <span class="like-item-id">{{ item.ID }}</span>
-          <span class="like-item-like">❤️{{ item.Like }}</span>
+          <span class="like-item-like">
+            <template v-if="item.isSpecial">
+              {{ item.baseLike }}+{{ item.todayCount }} ❤️ {{ item.timeLabel }}
+            </template>
+            <template v-else>
+              {{ item.Like }} ❤️
+            </template>
+          </span>
         </div>
       </div>
     </Transition>
@@ -194,7 +201,7 @@ const emit = defineEmits<{
   (e: 'eval-submit', username: string, text: string): void
   (e: 'expand-career', username: string): void
   (e: 'expand-summary', username: string): void
-    (e: 'expand-match', username: string): void
+  (e: 'expand-match', username: string): void
   (e: 'expand-admin', username: string): void
   (e: 'close-float'): void   // 关闭当前浮层（用于自动关闭）
 }>()
@@ -239,8 +246,8 @@ const adminConfirmPassword = ref('')
 const adminNewBattletag = ref('')
 
 const inviteText = computed(() => {
-    const pwd = adminNewPassword.value.trim() || '123'
-    return `${props.user.username} 你的黑爪账号已经创建，访问http://47.116.35.79/来和小伙伴一起开黑吧，进来记得修改常用英雄。默认密码是${pwd}`
+  const pwd = adminNewPassword.value.trim() || '123'
+  return `${props.user.username} 你的黑爪账号已经创建，访问http://47.116.35.79/来和小伙伴一起开黑吧，进来记得修改常用英雄。默认密码是${pwd}`
 })
 
 // 段位列表
@@ -275,7 +282,7 @@ const displayLikeCount = computed(() => {
 })
 
 // 点赞列表（供浮层使用）
-const likeList = computed(() => props.likeCache[props.user.username] || [])
+
 const evalList = ref<any[]>([])
 const hasSelfEval = computed(() => evalList.value.some(item => item.ID === props.selfTag))
 
@@ -304,6 +311,63 @@ watch(expandLike, (newVal) => {
     }
   }
 })
+
+// 处理点赞列表（置顶今日活跃点赞，其余按总赞数降序）
+const processedLikeList = computed(() => {
+  const raw = props.likeCache[props.user.username] || [];
+  if (!raw.length) return [];
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const specials: any[] = [];
+  const normals: any[] = [];
+
+  for (const item of raw) {
+    const updatedAt = new Date(item.updated_at);
+    const todayCount = updatedAt.getSeconds();        // 秒数 = 当天已点赞次数
+    const totalCount = item.Like;                     // 累计总点赞数
+
+    // 判断是否属于“今天”且今天有点赞记录
+    const isToday = updatedAt >= todayStart;
+    let isSpecial = false;
+    let timeLabel = '';
+
+    if (isToday && todayCount > 0) {
+      const diffHours = (now.getTime() - updatedAt.getTime()) / (1000 * 3600);
+      if (diffHours < 2) {
+        isSpecial = true;
+        timeLabel = '刚刚';
+      } else {
+        isSpecial = true;
+        timeLabel = '今天';
+      }
+    }
+
+    const newItem = {
+      ...item,
+      todayCount,
+      totalCount,
+      isSpecial,
+      timeLabel,           // 新增字段
+      baseLike: totalCount - todayCount,   // 历史总赞数
+    };
+
+    if (isSpecial) {
+      specials.push(newItem);
+    } else {
+      normals.push(newItem);
+    }
+  }
+
+  // 特殊组按更新时间降序（最近更新的排前面）
+  specials.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  // 普通组按 Like 降序（维持原逻辑）
+  normals.sort((a, b) => b.Like - a.Like);
+
+  return [...specials, ...normals];
+});
+const likeList = processedLikeList
 
 
 function handleAvatarError(e: Event) {
@@ -594,8 +658,8 @@ async function fetchMatchImage() {
   const token = localStorage.getItem('authToken')
   const body = {
     limit: 20,
-    include_fight:true,
-    include_previous_season:true,
+    include_fight: true,
+    include_previous_season: true,
     bnet_id: props.user.username
   }
   try {
@@ -681,13 +745,13 @@ async function submitPasswordChange() {
 
 // 复制文本到剪贴板
 async function copyInviteText() {
-    try {
-        await navigator.clipboard.writeText(inviteText.value)
-        alert('已复制邀请文本')
-    } catch (err) {
-        console.error('复制失败:', err)
-        alert('复制失败，请手动复制')
-    }
+  try {
+    await navigator.clipboard.writeText(inviteText.value)
+    alert('已复制邀请文本')
+  } catch (err) {
+    console.error('复制失败:', err)
+    alert('复制失败，请手动复制')
+  }
 }
 
 // 修改战网ID（管理员调用）
@@ -928,6 +992,7 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 4px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
 }
 
 .evaluation-input-container {
@@ -1090,6 +1155,7 @@ onUnmounted(() => {
   color: #ff6666;
   text-align: center;
 }
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1158,23 +1224,25 @@ onUnmounted(() => {
 }
 
 .share-text {
-    background: var(--input-bg);
-    border: 1px solid var(--input-border);
-    border-radius: 8px;
-    padding: 8px;
-    font-size: 12px;
-    cursor: pointer;
-    word-break: break-all;
-    transition: background 0.2s;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  word-break: break-all;
+  transition: background 0.2s;
 }
+
 .share-text:hover {
-    background: var(--accent);
-    color: white;
+  background: var(--accent);
+  color: white;
 }
+
 .copy-hint {
-    font-size: 10px;
-    text-align: right;
-    margin-top: 4px;
-    opacity: 0.6;
+  font-size: 10px;
+  text-align: right;
+  margin-top: 4px;
+  opacity: 0.6;
 }
 </style>

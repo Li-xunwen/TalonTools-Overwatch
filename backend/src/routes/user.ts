@@ -162,26 +162,7 @@ router.get('/:battletag/rank_hero', async (req: AuthRequest, res) => {
     }
 });
 
-// GET /api/:battletag/likelist
-router.get('/:battletag/likelist', async (req: AuthRequest, res) => {
-    let battletag = decodeURIComponent(req.params.battletag as string);
-    if (!battletag) return res.status(400).json({ error: '缺少 battletag 参数' });
-    try {
-        const [userRows] = await pool.query<any[]>('SELECT id FROM users WHERE battletag = ?', [battletag]);
-        if (userRows.length === 0) return res.status(404).json({ error: '用户不存在' });
-        const targetUserId = userRows[0].id;
-        const [likeRows] = await pool.query<any[]>(
-            `SELECT u.battletag AS ID, l.like_count AS \`Like\`
-             FROM likes l JOIN users u ON l.from_user_id = u.id
-             WHERE l.to_user_id = ? ORDER BY l.like_count DESC`,
-            [targetUserId]
-        );
-        res.json(likeRows);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: '获取点赞信息失败' });
-    }
-});
+
 
 // GET /api/users/me
 router.get('/users/me', async (req: AuthRequest, res) => {
