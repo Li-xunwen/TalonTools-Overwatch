@@ -271,15 +271,9 @@ const hasAnyRank = computed(() => rankList.value.length > 0)
 
 // 点赞显示数字
 const displayLikeCount = computed(() => {
-  const likes = props.likeCache[props.user.username] || []
-  // 如果是自己的卡片，显示自己收到的总赞数
-  if (props.user.username === props.selfTag) {
-    return likes.reduce((sum, item) => sum + (item.Like || 0), 0)
-  }
-  // 他人的卡片，显示当前用户给该他人的点赞次数
-  const selfLike = likes.find(item => item.ID === props.selfTag)?.Like || 0
-  return selfLike
-})
+  const likes = props.likeCache[props.user.username] || [];
+  return likes.reduce((sum, item) => sum + (item.Like || 0), 0);
+});
 
 // 点赞列表（供浮层使用）
 
