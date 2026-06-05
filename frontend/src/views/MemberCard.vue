@@ -47,6 +47,10 @@
           <div class="btn-icon">🎮</div>
           <div class="btn-label">最近对局</div>
         </div>
+        <div class="action-btn" @click.stop="onStrengthClick">
+          <div class="btn-icon">⚔️</div>
+          <div class="btn-label">对局强度</div>
+        </div>
         <!-- 管理按钮（仅管理员可见） -->
         <div class="action-btn" @click.stop="onSummaryClick">
           <div v-if="isAdmin" class="action-btn" @click.stop="onAdminClick">
@@ -149,6 +153,23 @@
           @click="openImageViewer(matchImageUrl)" />
       </div>
     </Transition>
+
+    <!-- 对局强度浮层 -->
+     <Transition name="fade"> 
+      <div v-if="localExpandStrength" class="strength-list" @click.stop>
+        <div class="strength-options">
+          <div class="strength-option-item" @click.stop="handleQuickMatchStrength">
+            <div class="btn-icon">⚔️</div>
+            <div class="btn-label">快速比赛强度</div>
+          </div>
+          <div class="strength-option-item" @click.stop="handleCompetitiveStrength">
+            <div class="btn-icon">🏆</div>
+            <div class="btn-label">竞技比赛强度</div>
+          </div>
+        </div>
+      </div>
+     </Transition>
+
     <!-- 管理浮层 -->
     <Transition name="fade">
       <div v-if="expandAdmin" class="admin-panel" @click.stop>
@@ -204,6 +225,7 @@ const emit = defineEmits<{
   (e: 'expand-career', username: string): void
   (e: 'expand-summary', username: string): void
   (e: 'expand-match', username: string): void
+  (e: 'expand-strength', username: string): void
   (e: 'expand-admin', username: string): void
   (e: 'close-float'): void   // 关闭当前浮层（用于自动关闭）
 }>()
@@ -237,6 +259,10 @@ const expandMatch = computed(() => props.currentExpandId === `match-${props.user
 const matchLoading = ref(false)
 const matchImageUrl = ref('')
 const matchError = ref<string | null>(null)
+
+//对局强度相关状态
+const localExpandStrength = ref(false)
+const expandStrength = computed(() => props.currentExpandId === `strength-${props.user.username}`)
 
 // 管理按钮相关
 const isAdmin = computed(() => props.selfRole === 'ADMIN' || props.selfRole === 'MODERATOR')
@@ -689,7 +715,6 @@ async function fetchMatchImage() {
     matchLoading.value = false
   }
 }
-
 // 点击今日对局按钮
 function onMatchClick() {
   emit('expand-match', props.user.username)
@@ -698,6 +723,30 @@ function onMatchClick() {
   }
 }
 
+// 点击对局强度按钮
+function onStrengthClick() {
+  if (expandStrength.value) {
+    localExpandStrength.value = false
+    emit('close-float') 
+  } else {
+    localExpandStrength.value = true
+    emit('expand-strength', props.user.username)
+  }
+}
+
+// 新增：处理快速比赛强度点击
+function handleQuickMatchStrength() {
+  // 这里可以添加具体逻辑，例如请求快速比赛数据或打开新窗口
+  console.log('查看快速比赛强度:', props.user.username)
+  // 示例: window.open(`/api/strength/quick/${props.user.username}`)
+}
+
+// 新增：处理竞技比赛强度点击
+function handleCompetitiveStrength() {
+  // 这里可以添加具体逻辑，例如请求竞技比赛数据或打开新窗口
+  console.log('查看竞技比赛强度:', props.user.username)
+  // 示例: window.open(`/api/strength/competitive/${props.user.username}`)
+}
 function onAdminClick() {
   // 关闭其他浮层
   if (expandAdmin.value) {
@@ -1261,6 +1310,52 @@ onUnmounted(() => {
 .match-error {
   color: #ff6666;
   text-align: center;
+}
+
+
+/* 对局强度浮层样式 */
+.strength-list {
+  top: 100%;
+  left: 0;
+  right: 0;
+  border-radius: 0 0 8px 8px;
+  padding: 8px 0;
+  z-index: 20;
+  overflow-y: auto;
+}
+
+.strength-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.strength-option-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.strength-option-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.strength-option-item .btn-icon {
+  font-size: 16px;
+  background: transparent;
+  width: auto;
+  height: auto;
+  margin-bottom: 0;
+}
+
+.strength-option-item .btn-label {
+  font-size: 12px;
+  color: var(--text-primary);
+  opacity: 1;
 }
 
 @keyframes spin {
