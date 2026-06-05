@@ -904,7 +904,7 @@ onUnmounted(() => {
 
 .rank-level-badge.challenger-level {
   color: #ffd700;
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 900;
   text-shadow: 0 0 4px rgba(255, 215, 0, 0.3);
   right: -1;
