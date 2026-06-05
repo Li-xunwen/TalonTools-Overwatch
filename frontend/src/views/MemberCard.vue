@@ -16,7 +16,9 @@
         <div class="rank-item" v-for="rank in rankList" :key="rank.type">
           <div class="rank-icon-wrapper">
             <img :src="`/res/imge/rank/${rank.rank}.png`" :alt="rank.rank" class="rank-icon" />
-            <span class="rank-level-badge">{{ rank.level }}</span>
+            <span class="rank-level-badge" :class="{ 'challenger-level': rank.rank.toLowerCase() === 'challenger' }">
+              {{ rank.rank.toLowerCase() === 'challenger' ? 'TOP ' + rank.level : rank.level }}
+            </span>
           </div>
           <div class="rank-label">{{ rank.label }}</div>
         </div>
@@ -259,7 +261,7 @@ const rankList = computed(() => {
   ]
   for (const r of rankMap) {
     const data = props.user[r.field as keyof typeof props.user] as { rank: string; level: number } | null | undefined
-    if (data && data.rank && data.level >= 1 && data.level <= 5) {
+    if (data && data.rank && data.level >= 1) {
       ranks.push({ type: r.field, label: r.label, rank: data.rank, level: data.level })
     }
   }
@@ -897,6 +899,22 @@ onUnmounted(() => {
 
 .dark-theme .rank-level-badge {
   color: #fff;
+}
+
+
+.rank-level-badge.challenger-level {
+  color: #ffd700;
+  font-size: 8px;
+  font-weight: 900;
+  text-shadow: 0 0 4px rgba(255, 215, 0, 0.3);
+  right: -1;
+  bottom: -3px;
+}
+
+
+.dark-theme .rank-level-badge.challenger-level {
+  color: #ffea00;
+  text-shadow: 0 0 6px rgba(255, 234, 0, 0.3);
 }
 
 .rank-label {
