@@ -13,6 +13,8 @@ export type EventType =
   | 'change_password'
   | 'rename_user'
   | 'create_user'
+  | 'dashen-quick-strength'
+  | 'dashen-competitive-strength'
 ;
 
 export interface EventLogOptions {

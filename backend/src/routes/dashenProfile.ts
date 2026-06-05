@@ -21,11 +21,18 @@ function getCacheTTL(path: string): number {
     }
     // 今日总结（summary）相关：2 小时
     if (path.includes('/dashen-summary')) {
-        return 2*3600; // 3600 秒
+        return 2*3600; 
     }
     if (path.includes('/api/v2/dashen-match')) {
-        return 3600; // 3600 秒
+        return 3600;
     }
+    if (path.includes('/api/v2/dashen-quick-strength')) {
+        return 6*3600;
+    }
+    if (path.includes('/api/v2/dashen-competitive-strength')) {
+        return 6*3600;
+    }
+
     // 默认（可扩展其他路径）
     return 36000;
 }
@@ -39,7 +46,8 @@ async function proxyAndCache(req: AuthRequest, res: any) {
 
     // 从 token 中获取当前用户 ID
     const currentUserId = req.user?.userId;
-    const eventType = req.path.includes('/dashen-profile') ? 'view_profile' : req.path.includes('/dashen-summary') ? 'view_summary' : 'view_match';
+    const eventType = req.path.includes('/dashen-profile') ? 'view_profile' : req.path.includes('/dashen-summary') ? 'view_summary' 
+    : req.path.includes('/dashen-match') ? 'view_match' : req.path.includes('/dashen-quick-strength') ? 'dashen-quick-strength' : 'dashen-competitive-strength';
 
     // 记录日志（异步，不阻塞）
     if (currentUserId && body.bnet_id) {
@@ -106,4 +114,8 @@ router.post('/dashen-summary/today', proxyAndCache);
 router.post('/dashen-summary/today/image', proxyAndCache);
 router.post('/dashen-match', proxyAndCache);
 router.post('/dashen-match/image', proxyAndCache);
+router.post('/dashen-quick-strength', proxyAndCache);
+router.post('/dashen-competitive-strength', proxyAndCache);
+router.post('/dashen-quick-strength/image', proxyAndCache);
+router.post('/dashen-competitive-strength/image', proxyAndCache);
 export default router;

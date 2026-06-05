@@ -155,7 +155,7 @@
     </Transition>
 
     <!-- 对局强度浮层 -->
-     <Transition name="fade"> 
+    <Transition name="fade">
       <div v-if="localExpandStrength" class="strength-list" @click.stop>
         <div class="strength-options">
           <div class="strength-option-item" @click.stop="handleQuickMatchStrength">
@@ -167,8 +167,20 @@
             <div class="btn-label">竞技比赛强度</div>
           </div>
         </div>
+        <!-- 图片加载区域（始终显示，但仅在请求后才有内容） -->
+        <div>
+          <div v-if="strengthLoading" class="strength-loading">
+            <div class="loading-spinner"></div>
+            <span>加载中...</span>
+          </div>
+          <img v-else-if="strengthImageUrl" :src="strengthImageUrl" class="strength-image"
+            @click="openImageViewer(strengthImageUrl)" />
+          <div v-else-if="strengthError" class="strength-error">
+            {{ strengthError }}
+          </div>
+        </div>
       </div>
-     </Transition>
+    </Transition>
 
     <!-- 管理浮层 -->
     <Transition name="fade">
@@ -225,7 +237,8 @@ const emit = defineEmits<{
   (e: 'expand-career', username: string): void
   (e: 'expand-summary', username: string): void
   (e: 'expand-match', username: string): void
-  (e: 'expand-strength', username: string): void
+  (e: 'expand-quickstrength', username: string): void
+  (e: 'expand-competitivestrength', username: string): void
   (e: 'expand-admin', username: string): void
   (e: 'close-float'): void   // 关闭当前浮层（用于自动关闭）
 }>()
@@ -262,7 +275,10 @@ const matchError = ref<string | null>(null)
 
 //对局强度相关状态
 const localExpandStrength = ref(false)
-const expandStrength = computed(() => props.currentExpandId === `strength-${props.user.username}`)
+const showStrengthImage = ref(false)
+const strengthLoading = ref(false)
+const strengthImageUrl = ref('')
+const strengthError = ref<string | null>(null)
 
 // 管理按钮相关
 const isAdmin = computed(() => props.selfRole === 'ADMIN' || props.selfRole === 'MODERATOR')
@@ -693,13 +709,11 @@ async function fetchMatchImage() {
     })
 
     if (!res.ok) {
-      // 尝试获取错误详情
       let errMsg = `请求失败: ${res.status}`
       try {
         const errData = await res.json()
         errMsg = errData.message || errData.error || '服务错误'
       } catch (e) {
-        // 如果返回的不是JSON，使用状态码文本
         errMsg = res.statusText || errMsg
       }
       throw new Error(errMsg)
@@ -723,30 +737,77 @@ function onMatchClick() {
   }
 }
 
+
+// 请求比赛强度
+async function fetchStrengthImage(Strengthtype: string) {
+  if (strengthImageUrl.value && strengthImageUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(strengthImageUrl.value)
+    strengthImageUrl.value = ''
+  }
+  strengthLoading.value = true
+  strengthError.value = null
+  const token = localStorage.getItem('authToken')
+  const body = {
+    limit: 12,
+    include_previous_season: true,
+    bnet_id: props.user.username
+  }
+  try {
+    const res = await fetch(`/api/v2/${Strengthtype}/image`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(body)
+    })
+
+    if (!res.ok) {
+      let errMsg = `请求失败: ${res.status}`
+      try {
+        const errData = await res.json()
+        errMsg = errData.message || errData.error || '服务错误'
+      } catch (e) {
+        errMsg = res.statusText || errMsg
+      }
+      throw new Error(errMsg)
+    }
+
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    strengthImageUrl.value = url
+  } catch (err: any) {
+    console.error(err)
+    strengthError.value = err.message || '加载失败'
+  } finally {
+    strengthLoading.value = false
+  }
+}
+
 // 点击对局强度按钮
 function onStrengthClick() {
-  if (expandStrength.value) {
+  if (localExpandStrength.value) {
     localExpandStrength.value = false
-    emit('close-float') 
+    showStrengthImage.value = false
+    emit('close-float')
   } else {
     localExpandStrength.value = true
-    emit('expand-strength', props.user.username)
+    emit('close-float')
   }
 }
 
 // 新增：处理快速比赛强度点击
 function handleQuickMatchStrength() {
-  // 这里可以添加具体逻辑，例如请求快速比赛数据或打开新窗口
-  console.log('查看快速比赛强度:', props.user.username)
-  // 示例: window.open(`/api/strength/quick/${props.user.username}`)
+  showStrengthImage.value = true
+  fetchStrengthImage('dashen-quick-strength')
 }
 
 // 新增：处理竞技比赛强度点击
 function handleCompetitiveStrength() {
-  // 这里可以添加具体逻辑，例如请求竞技比赛数据或打开新窗口
-  console.log('查看竞技比赛强度:', props.user.username)
-  // 示例: window.open(`/api/strength/competitive/${props.user.username}`)
+  showStrengthImage.value = true
+  fetchStrengthImage('dashen-competitive-strength')
 }
+
 function onAdminClick() {
   // 关闭其他浮层
   if (expandAdmin.value) {
@@ -955,7 +1016,7 @@ onUnmounted(() => {
   color: #fff800;
   font-size: 7px;
   font-weight: 900;
-  text-shadow: 0 0 3px rgba(0,0,0,0.6), 0 0 1px rgba(0,0,0,0.5);
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.6), 0 0 1px rgba(0, 0, 0, 0.5);
   right: 0px;
   bottom: -3px;
 }
@@ -1055,7 +1116,7 @@ onUnmounted(() => {
 }
 
 .evaluation-item-content {
-  margin-bottom: 0px;  
+  margin-bottom: 0px;
   width: 100%;
 }
 
@@ -1123,13 +1184,14 @@ onUnmounted(() => {
 :deep(.evaluation-update-btn) {
   background: var(--accent);
   color: white;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
+
 :deep(.evaluation-edit-btn):hover,
 :deep(.evaluation-update-btn):hover {
   background: var(--accent-hover, #3a7bd5);
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 /* 取消按钮（弱化） */
@@ -1137,6 +1199,7 @@ onUnmounted(() => {
   background: rgba(128, 128, 128, 0.15);
   color: var(--text-secondary, #666);
 }
+
 :deep(.evaluation-cancel-btn):hover {
   background: rgba(128, 128, 128, 0.3);
   color: var(--text-primary);
@@ -1147,6 +1210,7 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.1);
   color: #aaa;
 }
+
 .dark-theme :deep(.evaluation-cancel-btn):hover {
   background: rgba(255, 255, 255, 0.2);
   color: #fff;
@@ -1170,7 +1234,8 @@ onUnmounted(() => {
   width: 100%;
   background: var(--input-bg);
   color: var(--text-primary);
-  border: 1px solid var(--border-color, #888); /* 确保边框颜色有对比度 */
+  border: 1px solid var(--border-color, #888);
+  /* 确保边框颜色有对比度 */
   border-radius: 8px;
   padding: 6px 8px;
   font-size: 12px;
@@ -1205,6 +1270,8 @@ onUnmounted(() => {
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
+
+
 
 /* 底部按钮组容器 */
 .action-buttons {
@@ -1314,6 +1381,14 @@ onUnmounted(() => {
 
 
 /* 对局强度浮层样式 */
+.strength-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: white;
+}
+
 .strength-list {
   top: 100%;
   left: 0;
@@ -1356,6 +1431,16 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--text-primary);
   opacity: 1;
+}
+
+.strength-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.strength-error {
+  color: #ff6666;
 }
 
 @keyframes spin {
@@ -1447,6 +1532,4 @@ onUnmounted(() => {
   margin-top: 4px;
   opacity: 0.6;
 }
-
-
 </style>
