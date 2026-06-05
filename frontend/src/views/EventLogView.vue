@@ -173,7 +173,7 @@ const events = ref<EventLog[]>([]);
 
 const total = ref(0);
 
-const limit = ref(20);
+const limit = ref(50);
 
 const offset = ref(0);
 

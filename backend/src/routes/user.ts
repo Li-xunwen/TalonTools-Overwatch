@@ -6,6 +6,8 @@ import { pool, userEventLogger } from '../utils/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import mysql from 'mysql2/promise';
 import fsPromises from 'fs/promises';
+import { createReadStream } from 'fs';
+import { stat } from 'fs/promises';
 
 const router = Router();
 
@@ -29,7 +31,6 @@ router.get('/users/:battletag/avatar', async (req, res) => {
     const avatarDir = path.join(process.cwd(), 'public', 'res', 'imge');
     const possibleExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
     let foundPath: string | null = null;
-
     for (const ext of possibleExts) {
         const fullPath = path.join(avatarDir, `${baseName}${ext}`);
         if (fs.existsSync(fullPath)) {
@@ -40,16 +41,33 @@ router.get('/users/:battletag/avatar', async (req, res) => {
 
     if (!foundPath) {
         const defaultPath = path.join(avatarDir, 'default-avatar.png');
-        if (fs.existsSync(defaultPath)) return res.sendFile(defaultPath);
-        return res.status(404).json({ error: '头像不存在' });
+        if (fs.existsSync(defaultPath)) foundPath = defaultPath;
+        else return res.status(404).json({ error: '头像不存在' });
     }
 
-    // 后端示例
-    res.set('Cache-Control', 'public, max-age=86400'); // 缓存24小时
-    res.set('ETag', '"some-unique-hash"'); // 如果内容不变，返回304
-    res.setHeader('Expires', '0');
+    // 获取文件信息
+    const stats = await stat(foundPath);
+    const lastModified = stats.mtime.toUTCString();
+    const etag = `"${stats.size}-${stats.mtime.getTime()}"`; // 简单但可用的 ETag
 
-    res.sendFile(foundPath);
+    // 检查条件请求头
+    const ifModifiedSince = req.headers['if-modified-since'];
+    const ifNoneMatch = req.headers['if-none-match'];
+
+    if (ifNoneMatch === etag || (ifModifiedSince && new Date(ifModifiedSince) >= stats.mtime)) {
+        // 资源未修改，返回 304
+        res.status(304).end();
+        return;
+    }
+
+    // 设置响应头
+    res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+    res.setHeader('Last-Modified', lastModified);
+    res.setHeader('ETag', etag);
+
+    // 发送文件
+    const stream = createReadStream(foundPath);
+    stream.pipe(res);
 });
 
 // ========== 以下路由都需要认证 ==========

@@ -26,7 +26,7 @@
 
       <!-- 擅长英雄 -->
       <div class="member-heroes">
-        <div v-for="hero in topHeroes" :key="hero" class="member-hero-icon">
+        <div v-for="hero in topHeroes" :key="hero" class="member-hero-icon" v-memo="[hero]">
           <img :src="`/res/imge/hero/${encodeURIComponent(hero)}.png`" :alt="hero" loading="lazy" />
         </div>
       </div>

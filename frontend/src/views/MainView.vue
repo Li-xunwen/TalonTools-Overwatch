@@ -307,13 +307,13 @@ async function handleEvalSubmit(targetUser: string, newText: string) {
 // ---------- 加载成员数据 ----------
 async function loadMembers() {
   const usernames = await fetchUserList()
-  members.value = []
-  for (const username of usernames) {
-    const userData = await fetchUserData(username)
-    if (userData.username) {
-      await fetchLikes(username)      // 预加载点赞数据（可选）
-      members.value.push(userData)
-    }
+  const userPromises = usernames.map(username => fetchUserData(username))
+  const rawUsers = await Promise.all(userPromises)
+  const validUsers = rawUsers.filter(u => u.username)
+  await Promise.all(validUsers.map(u => fetchLikes(u.username)))
+  for (const user of validUsers) {
+    members.value.push(user)
+    await nextTick()
   }
 }
 
