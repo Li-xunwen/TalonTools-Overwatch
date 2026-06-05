@@ -102,7 +102,7 @@
         </div>
         <div v-if="!hasSelfEval" class="evaluation-input-container">
           <textarea v-model="newEvalText" placeholder="请输入评价（最多32字）" maxlength="32" rows="2"></textarea>
-          <button class="evaluation-submit-btn" @click="submitNewEval">提交</button>
+          <button class="evaluation-update-btn" @click="submitNewEval">提交</button>
         </div>
       </div>
     </Transition>
@@ -903,11 +903,11 @@ onUnmounted(() => {
 
 
 .rank-level-badge.challenger-level {
-  color: #ffd700;
+  color: #fff800;
   font-size: 7px;
   font-weight: 900;
-  text-shadow: 0 0 4px rgba(255, 215, 0, 0.3);
-  right: -1;
+  text-shadow: 0 0 3px rgba(0,0,0,0.6), 0 0 1px rgba(0,0,0,0.5);
+  right: 0px;
   bottom: -3px;
 }
 
@@ -975,7 +975,7 @@ onUnmounted(() => {
 }
 
 .like-count {
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: bold;
 }
@@ -994,6 +994,20 @@ onUnmounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.evaluation-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  gap: 0px;
+}
+
+.evaluation-item-content {
+  margin-bottom: 0px;  
+  width: 100%;
 }
 
 .like-item,
@@ -1031,6 +1045,89 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
+/* ========== 评价操作按钮（修改 / 提交 / 取消）优化 ========== */
+:deep(.evaluation-actions) {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+
+/* 基础按钮样式 */
+:deep(.evaluation-edit-btn),
+:deep(.evaluation-update-btn),
+:deep(.evaluation-cancel-btn) {
+  border: none;
+  border-radius: 30px;
+  padding: 5px 10px;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  backdrop-filter: blur(2px);
+}
+
+/* 修改 / 提交按钮（强调色） */
+:deep(.evaluation-edit-btn),
+:deep(.evaluation-update-btn) {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+:deep(.evaluation-edit-btn):hover,
+:deep(.evaluation-update-btn):hover {
+  background: var(--accent-hover, #3a7bd5);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+/* 取消按钮（弱化） */
+:deep(.evaluation-cancel-btn) {
+  background: rgba(128, 128, 128, 0.15);
+  color: var(--text-secondary, #666);
+}
+:deep(.evaluation-cancel-btn):hover {
+  background: rgba(128, 128, 128, 0.3);
+  color: var(--text-primary);
+}
+
+/* 深色模式适配 */
+.dark-theme :deep(.evaluation-cancel-btn) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #aaa;
+}
+.dark-theme :deep(.evaluation-cancel-btn):hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+/* 按钮点击反馈（可选） */
+:deep(.evaluation-edit-btn):active,
+:deep(.evaluation-update-btn):active,
+:deep(.evaluation-cancel-btn):active {
+  transform: translateY(0);
+}
+
+:deep(.evaluation-item-evaluation) {
+  word-break: break-word;
+  white-space: normal;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+:deep(.evaluation-edit-input) {
+  width: 100%;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color, #888); /* 确保边框颜色有对比度 */
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  resize: vertical;
+  outline: none;
+}
 
 .career-list {
   top: 100%;
@@ -1255,4 +1352,6 @@ onUnmounted(() => {
   margin-top: 4px;
   opacity: 0.6;
 }
+
+
 </style>

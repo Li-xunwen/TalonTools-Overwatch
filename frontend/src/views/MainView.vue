@@ -304,17 +304,25 @@ async function handleEvalSubmit(targetUser: string, newText: string) {
   }
 }
 
-// ---------- 加载成员数据 ----------
+import pLimit from 'p-limit';
+
+const MAX_CONCURRENT = 10; // 并发数
+
 async function loadMembers() {
-  const usernames = await fetchUserList()
-  const userPromises = usernames.map(username => fetchUserData(username))
-  const rawUsers = await Promise.all(userPromises)
-  const validUsers = rawUsers.filter(u => u.username)
-  await Promise.all(validUsers.map(u => fetchLikes(u.username)))
-  for (const user of validUsers) {
-    members.value.push(user)
-    await nextTick()
-  }
+  const usernames = await fetchUserList();
+  members.value = [];
+  
+  const limit = pLimit(MAX_CONCURRENT);
+  const tasks = usernames.map(username => 
+    limit(async () => {
+      const userData = await fetchUserData(username);
+      if (!userData.username) return; // 无效用户跳过
+      await fetchLikes(username);
+      members.value.push(userData);
+      await nextTick();
+    })
+  );
+  await Promise.all(tasks);
 }
 
 // ---------- 排序 ----------
