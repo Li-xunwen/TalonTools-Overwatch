@@ -156,15 +156,15 @@
 
     <!-- 对局强度浮层 -->
     <Transition name="fade">
-      <div v-if="localExpandStrength" class="strength-list" @click.stop>
+      <div v-if="expandStrength" class="strength-list" @click.stop>
         <div class="strength-options">
           <div class="strength-option-item" @click.stop="handleQuickMatchStrength">
-            <div class="btn-icon">⚔️</div>
-            <div class="btn-label">快速比赛强度</div>
+            <div class="btn-icon">🍻</div>
+            <div class="btn-label">快速比赛强度分析</div>
           </div>
           <div class="strength-option-item" @click.stop="handleCompetitiveStrength">
-            <div class="btn-icon">🏆</div>
-            <div class="btn-label">竞技比赛强度</div>
+            <div class="btn-icon">🎯</div>
+            <div class="btn-label">竞技比赛强度分析</div>
           </div>
         </div>
         <!-- 图片加载区域（始终显示，但仅在请求后才有内容） -->
@@ -237,8 +237,7 @@ const emit = defineEmits<{
   (e: 'expand-career', username: string): void
   (e: 'expand-summary', username: string): void
   (e: 'expand-match', username: string): void
-  (e: 'expand-quickstrength', username: string): void
-  (e: 'expand-competitivestrength', username: string): void
+  (e: 'expand-strength', username: string): void
   (e: 'expand-admin', username: string): void
   (e: 'close-float'): void   // 关闭当前浮层（用于自动关闭）
 }>()
@@ -274,7 +273,7 @@ const matchImageUrl = ref('')
 const matchError = ref<string | null>(null)
 
 //对局强度相关状态
-const localExpandStrength = ref(false)
+const expandStrength = computed(() => props.currentExpandId === `strength-${props.user.username}`)
 const showStrengthImage = ref(false)
 const strengthLoading = ref(false)
 const strengthImageUrl = ref('')
@@ -282,7 +281,7 @@ const strengthError = ref<string | null>(null)
 
 // 管理按钮相关
 const isAdmin = computed(() => props.selfRole === 'ADMIN' || props.selfRole === 'MODERATOR')
-const expandAdmin = ref(false)
+const expandAdmin = computed(() => props.currentExpandId === `admin-${props.user.username}`)
 const adminNewPassword = ref('')
 const adminConfirmPassword = ref('')
 const adminNewBattletag = ref('')
@@ -395,12 +394,10 @@ const processedLikeList = computed(() => {
       normals.push(newItem);
     }
   }
-
   // 特殊组按更新时间降序（最近更新的排前面）
   specials.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
   // 普通组按 Like 降序（维持原逻辑）
   normals.sort((a, b) => b.Like - a.Like);
-
   return [...specials, ...normals];
 });
 const likeList = processedLikeList
@@ -408,11 +405,8 @@ const likeList = processedLikeList
 
 function handleAvatarError(e: Event) {
   const img = e.target as HTMLImageElement
-  // 如果加载失败，可以设置一个默认占位图，或者保持当前状态（后端已配置返回 default-avatar.png）
-  // 这里我们尝试加载一个本地的默认图片作为兜底，防止后端默认图也失效
   img.src = '/res/imge/default-avatar.png'
-  // 如果本地也没有默认图，可以隐藏或设置样式
-  img.onerror = null // 防止无限循环
+  img.onerror = null
 }
 
 // 点赞按钮：只打开浮层（如果已打开则保持不变），并发送点赞请求
@@ -436,13 +430,10 @@ function startEdit(item: any) {
     item,
     original: item.evaluation
   }
-
   const span = document.getElementById(
     `eval-${props.user.username}-${item.ID}`
   )
-
   if (!span) return
-
   span.innerHTML = `
     <textarea
       class="evaluation-edit-input"
@@ -450,14 +441,12 @@ function startEdit(item: any) {
       rows="2"
     >${escapeHtml(item.evaluation)}</textarea>
   `
-
   const actions =
     span.parentElement?.parentElement?.querySelector(
       '.evaluation-actions'
     )
 
   if (!actions) return
-
   actions.innerHTML = `
     <button class="evaluation-update-btn">
       提交
@@ -466,14 +455,12 @@ function startEdit(item: any) {
       取消
     </button>
   `
-
   const restoreEditButton = () => {
     actions.innerHTML = `
       <button class="evaluation-edit-btn">
         修改
       </button>
     `
-
     const editBtn =
       actions.querySelector('.evaluation-edit-btn')
 
@@ -481,19 +468,15 @@ function startEdit(item: any) {
       const currentItem = evalList.value.find(
         e => e.ID === props.selfTag
       )
-
       if (currentItem) {
         startEdit(currentItem)
       }
     })
   }
-
   const updateBtn =
     actions.querySelector('.evaluation-update-btn')
-
   const cancelBtn =
     actions.querySelector('.evaluation-cancel-btn')
-
   updateBtn?.addEventListener('click', async () => {
     const textarea =
       span.querySelector(
@@ -506,37 +489,27 @@ function startEdit(item: any) {
       alert('评价不能超过32个字符')
       return
     }
-
     try {
       emit(
         'eval-submit',
         props.user.username,
         newVal
       )
-
-      // 等待父组件完成提交
       await new Promise(resolve =>
         setTimeout(resolve, 500)
       )
 
-      // 重新拉取评价
       const latest =
         await props.fetchEvaluations(
           props.user.username
         )
-
       evalList.value = latest
-
-      // 找到自己的最新评价
       const current = latest.find(
         e => e.ID === props.selfTag
       )
-
       span.textContent =
         current?.evaluation ?? newVal
-
       restoreEditButton()
-
       editingEval.value = null
     } catch (err) {
       console.error(err)
@@ -761,7 +734,6 @@ async function fetchStrengthImage(Strengthtype: string) {
       },
       body: JSON.stringify(body)
     })
-
     if (!res.ok) {
       let errMsg = `请求失败: ${res.status}`
       try {
@@ -786,37 +758,31 @@ async function fetchStrengthImage(Strengthtype: string) {
 
 // 点击对局强度按钮
 function onStrengthClick() {
-  if (localExpandStrength.value) {
-    localExpandStrength.value = false
-    showStrengthImage.value = false
+  if (expandStrength.value) {
     emit('close-float')
   } else {
-    localExpandStrength.value = true
-    emit('close-float')
+    emit('expand-strength', props.user.username)
   }
 }
 
-// 新增：处理快速比赛强度点击
 function handleQuickMatchStrength() {
   showStrengthImage.value = true
   fetchStrengthImage('dashen-quick-strength')
 }
 
-// 新增：处理竞技比赛强度点击
+
 function handleCompetitiveStrength() {
   showStrengthImage.value = true
   fetchStrengthImage('dashen-competitive-strength')
 }
 
-function onAdminClick() {
-  // 关闭其他浮层
-  if (expandAdmin.value) {
-    expandAdmin.value = false
-  } else {
-    emit('close-float')   // 关闭其他浮层（可选）
-    expandAdmin.value = true
-  }
-}
+    function onAdminClick() {
+      if (expandAdmin.value) {
+        emit('close-float') 
+      } else {
+        emit('expand-admin', props.user.username)
+      }
+    }
 
 // 修改密码（管理员调用）
 async function submitPasswordChange() {

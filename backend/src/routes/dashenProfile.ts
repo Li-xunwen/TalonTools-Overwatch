@@ -15,21 +15,20 @@ const DaShenURL = process.env.DASHEN_URL;
  * @returns TTL in seconds
  */
 function getCacheTTL(path: string): number {
-    // 生涯（profile）相关：3 小时
     if (path.includes('/dashen-profile')) {
-        return 24 * 3600; // 10800 秒
+        return 36 * 3600;
     }
     // 今日总结（summary）相关：2 小时
     if (path.includes('/dashen-summary')) {
         return 2*3600; 
     }
-    if (path.includes('/api/v2/dashen-match')) {
+    if (path.includes('/dashen-match')) {
         return 3600;
     }
-    if (path.includes('/api/v2/dashen-quick-strength')) {
+    if (path.includes('/dashen-quick-strength')) {
         return 6*3600;
     }
-    if (path.includes('/api/v2/dashen-competitive-strength')) {
+    if (path.includes('/dashen-competitive-strength')) {
         return 6*3600;
     }
 
@@ -43,7 +42,6 @@ async function proxyAndCache(req: AuthRequest, res: any) {
     const isImage = req.path.endsWith('/image');
     const cacheKey = getCacheKey(req.path, body);
     const cacheTTL = getCacheTTL(req.path);   // 动态获取缓存时间
-
     // 从 token 中获取当前用户 ID
     const currentUserId = req.user?.userId;
     const eventType = req.path.includes('/dashen-profile') ? 'view_profile' : req.path.includes('/dashen-summary') ? 'view_summary' 

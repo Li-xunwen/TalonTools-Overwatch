@@ -80,11 +80,13 @@ export class UserEventLogger {
     let sql = `SELECT * FROM user_events WHERE user_id = ?`;
     const params: any[] = [userId];
 
-    if (eventType) {
-      const types = Array.isArray(eventType) ? eventType : [eventType];
-      const placeholders = types.map(() => '?').join(',');
+    if (eventType && Array.isArray(eventType) && eventType.length > 0) {
+      const placeholders = eventType.map(() => '?').join(',');
       sql += ` AND event_type IN (${placeholders})`;
-      params.push(...types);
+      params.push(...eventType);
+    } else if (eventType && !Array.isArray(eventType)) {
+      sql += ` AND event_type = ?`;
+      params.push(eventType);
     }
 
     if (startTime) {
@@ -99,8 +101,13 @@ export class UserEventLogger {
     sql += ` ORDER BY event_time DESC LIMIT ? OFFSET ?`;
     params.push(limit, offset);
 
-    const [rows] = await this.pool.execute(sql, params);
-    return rows as any[];
+    try {
+      const [rows] = await this.pool.execute(sql, params);
+      return rows as any[];
+    } catch (err) {
+      console.error('[UserEventLogger] Query events failed:', err, 'SQL:', sql, 'Params:', params);
+      throw err; // 抛出错误以便前端捕获
+    }
   }
 
   /**

@@ -41,6 +41,8 @@
             @expand-career="handleExpandCareer"
             @expand-summary="handleExpandSummary"
             @expand-match="handleExpandMatch"
+            @expand-strength="handleExpandStrength"
+            @expand-admin="handleExpandAdmin"
           />
         </div>
       </div>
@@ -470,6 +472,15 @@ function handleExpandMatch(username: string) {
   currentExpandId.value = currentExpandId.value === id ? '' : id
 }
 
+function handleExpandStrength(username: string) {
+  const id = `strength-${username}`
+  currentExpandId.value = currentExpandId.value === id ? '' : id
+}
+
+function handleExpandAdmin(username: string){
+  const id = `admin-${username}`
+  currentExpandId.value = currentExpandId.value === id ? '' : id
+}
 // 过滤后的成员列表（基于 sortedMembers 并按战网ID匹配）
 const filteredMembers = computed(() => {
   if (!searchKeyword.value.trim()) {

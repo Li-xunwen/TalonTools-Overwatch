@@ -9,37 +9,27 @@
       <div class="filters">
         <div class="filter-group">
           <label>事件类型：</label>
-          <select
-            v-model="filters.eventType"
-            multiple
-            @change="applyFilters"
-          >
-            <option
-              v-for="type in eventTypes"
-              :key="type"
-              :value="type"
-            >
-              {{ type }}
-            </option>
-          </select>
+          <div class="event-type-selector">
+            <div class="selector-actions">
+              <button @click="selectAllTypes" class="btn-small">全选</button>
+              <button @click="deselectAllTypes" class="btn-small">全不选</button>
+            </div>
+            <!-- 自定义多选标签区域 -->
+            <div class="type-tags-container">
+              <span v-for="type in eventTypes" :key="type" class="type-tag"
+                :class="{ active: filters.eventType.includes(type) }" @click="toggleEventType(type)">
+                {{ type }}
+              </span>
+            </div>
+          </div>
         </div>
 
+        <!-- 时间范围和其他按钮保持不变 -->
         <div class="filter-group">
           <label>时间范围：</label>
-
-          <input
-            type="datetime-local"
-            v-model="filters.startTime"
-            @change="applyFilters"
-          />
-
+          <input type="datetime-local" v-model="filters.startTime" @change="applyFilters" />
           <span>至</span>
-
-          <input
-            type="datetime-local"
-            v-model="filters.endTime"
-            @change="applyFilters"
-          />
+          <input type="datetime-local" v-model="filters.endTime" @change="applyFilters" />
         </div>
 
         <button @click="resetFilters">
@@ -65,10 +55,7 @@
           </thead>
 
           <tbody>
-            <tr
-              v-for="event in events"
-              :key="event.id"
-            >
+            <tr v-for="event in events" :key="event.id">
               <td>{{ formatDateTime(event.event_time) }}</td>
 
               <td>
@@ -106,14 +93,8 @@
       </div>
 
       <!-- 分页 -->
-      <div
-        class="pagination"
-        v-if="total > 0"
-      >
-        <button
-          :disabled="offset === 0"
-          @click="changePage(-1)"
-        >
+      <div class="pagination" v-if="total > 0">
+        <button :disabled="offset === 0" @click="changePage(-1)">
           上一页
         </button>
 
@@ -122,10 +103,7 @@
           共 {{ totalPages }} 页
         </span>
 
-        <button
-          :disabled="offset + limit >= total"
-          @click="changePage(1)"
-        >
+        <button :disabled="offset + limit >= total" @click="changePage(1)">
           下一页
         </button>
       </div>
@@ -161,10 +139,13 @@ const eventTypes = [
   'edit_evaluation',
   'view_profile',
   'view_summary',
-  'upload_avatar',
+  'view_match',
+  'update_avatar',
   'change_password',
   'rename_user',
-  'create_user'
+  'create_user',
+  'dashen-quick-strength',
+  'dashen-competitive-strength'
 ];
 
 const loading = ref(false);
@@ -178,7 +159,7 @@ const limit = ref(50);
 const offset = ref(0);
 
 const filters = ref({
-  eventType: [] as string[],
+  eventType: [...eventTypes] as string[], // 默认全选
   startTime: '',
   endTime: ''
 });
@@ -197,10 +178,11 @@ async function fetchEvents() {
   try {
     const params = new URLSearchParams();
 
-    if (filters.value.eventType.length) {
+    if (filters.value.eventType.length > 0) {
       filters.value.eventType.forEach(type => {
         params.append('eventType', type);
       });
+    } else {
     }
 
     if (filters.value.startTime) {
@@ -217,31 +199,24 @@ async function fetchEvents() {
       );
     }
 
-    params.append(
-      'limit',
-      limit.value.toString()
-    );
-
-    params.append(
-      'offset',
-      offset.value.toString()
-    );
+    params.append('limit', limit.value.toString());
+    params.append('offset', offset.value.toString());
 
     const res = await authFetch(
       `/api/admin/events?${params.toString()}`
     );
 
     if (!res.ok) {
-      throw new Error('获取日志失败');
+      const errorText = await res.text();
+      throw new Error(`获取日志失败: ${res.status} ${errorText}`);
     }
 
     const data = await res.json();
-
     events.value = data.events;
     total.value = data.total;
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
-    alert('加载日志失败');
+    alert(err.message || '加载日志失败');
   } finally {
     loading.value = false;
   }
@@ -252,15 +227,33 @@ function applyFilters() {
   fetchEvents();
 }
 
+function toggleEventType(type: string) {
+  const index = filters.value.eventType.indexOf(type);
+  if (index > -1) {
+    filters.value.eventType.splice(index, 1);
+  } else {
+    filters.value.eventType.push(type);
+  }
+  applyFilters();
+}
+
+function selectAllTypes() {
+  filters.value.eventType = [...eventTypes];
+  applyFilters();
+}
+
+function deselectAllTypes() {
+  filters.value.eventType = [];
+  applyFilters();
+}
+
 function resetFilters() {
   filters.value = {
-    eventType: [],
+    eventType: [...eventTypes],
     startTime: '',
     endTime: ''
   };
-
   offset.value = 0;
-
   fetchEvents();
 }
 
@@ -336,12 +329,9 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1; 
 }
 
-.filter-group select {
-  min-width: 150px;
-  padding: 6px;
-}
 
 .filter-group input {
   padding: 6px;
@@ -379,8 +369,7 @@ button {
   padding: 10px;
   text-align: left;
 
-  border-bottom: 1px solid
-    var(--border-color);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .event-table th {
@@ -402,5 +391,88 @@ button {
   align-items: center;
 
   gap: 16px;
+}
+
+
+.selector-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.btn-small {
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+}
+
+.btn-small:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  /* 让筛选组平均分配空间 */
+}
+
+.type-tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.type-tag {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+  user-select: none; /* 防止双击选中文本 */
+}
+
+.type-tag:hover {
+  border-color: var(--accent);
+  opacity: 0.8;
+}
+
+.type-tag.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.selector-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.btn-small {
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+}
+
+.btn-small:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
 }
 </style>
