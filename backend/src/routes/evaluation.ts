@@ -62,7 +62,8 @@ router.put('/:battletag/evaluation', async (req: AuthRequest, res) => {
                 userId: currentUserId, 
                 eventType: 'edit_evaluation',
                 targetUserId: targetUserId, 
-                eventData: { content: trimmed } 
+                eventData: { content: trimmed },
+                ipAddress: req.ip 
             });            
             res.json({ message: '评价提交成功' });
         }

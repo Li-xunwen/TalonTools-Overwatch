@@ -342,7 +342,7 @@ router.put('/users/:battletag/battletag', authenticateToken, async (req: AuthReq
         console.error('Failed to rename avatar:', renameErr);
     }
 
-    userEventLogger.logEvent({ userId: currentUserId, eventType: 'rename_user' });
+    userEventLogger.logEvent({ userId: currentUserId, eventType: 'rename_user', ipAddress: req.ip });
 
     res.json({ message: '战网ID修改成功' });
 });
