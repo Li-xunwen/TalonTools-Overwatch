@@ -13,6 +13,7 @@ lerna-debug.log*
 .env.*
 !.env.example
 *.local
+vite.config.local.ts
 
 # Dependencies
 node_modules

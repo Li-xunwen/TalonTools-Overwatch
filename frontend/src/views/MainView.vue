@@ -46,35 +46,20 @@
           />
         </div>
       </div>
-
-      <!-- 底部静态区块 -->
-      <div class="section">
-        <h2 class="section-title">活动亮点</h2>
-        <div class="test-elements-grid">
-          <div class="test-element">特色玩法</div>
-          <div class="test-element">限定皮肤</div>
-          <div class="test-element">专属成就</div>
-          <div class="test-element">团队竞技</div>
-        </div>
-      </div>
-      <div class="section">
-        <h2 class="section-title">测试内容区域</h2>
-        <p class="section-content">
-          此区域用于展示测试元素和占位内容。<br />
-          在实际开发中，这里将包含更多详细信息、排行榜、玩家统计数据等内容。
-        </p>
-        <div class="test-elements-grid">
-          <div class="test-element">数据统计</div>
-          <div class="test-element">排行榜</div>
-          <div class="test-element">奖励预览</div>
-          <div class="test-element">玩家社区</div>
-        </div>
-      </div>
     </div>
-
+            <!-- 备案信息页脚 -->
+    <div class="footer-beian">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
+        {{ icpNumber }}
+      </a>
+      <span class="sep">|</span>
+      <a href="https://www.beian.gov.cn/" target="_blank" rel="noopener noreferrer">
+        {{ policeNumber }}
+      </a>
+    </div>
+  </div>
     <!-- 使用底部导航栏组件 -->
     <BottomNav />
-  </div>
 </template>
 
 <script setup lang="ts">
@@ -84,6 +69,8 @@ import ThemeToggle from '@/components/ThemeToggle.vue'
 import PosterHeroes from '@/components/PosterHeroes.vue'
 import Toast from '@/components/Toast.vue'
 import BottomNav from '@/components/BottomNav.vue'   
+const icpNumber = import.meta.env.VITE_ICP_NUMBER || '待备案'
+const policeNumber = import.meta.env.VITE_POLICE_NUMBER || '办理中'
 // ---------- 类型定义 ----------
 interface UserData {
   username: string
@@ -600,4 +587,29 @@ onUnmounted(() => {
   transform: scale(1.05);
   opacity: 0.9;
 }
+
+.footer-beian {
+  text-align: center;
+  padding: 16px 12px 20px;
+  font-size: 12px;
+  color: var(--text-secondary, #6c757d);
+  background-color: var(--bg-primary, #fff);
+  border-top: 1px solid var(--border-color, #e9ecef);
+  margin-top: 24px;
+  margin-bottom: 70px
+}
+.footer-beian a {
+  color: inherit;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+.footer-beian a:hover {
+  opacity: 0.7;
+  text-decoration: underline;
+}
+.footer-beian .sep {
+  margin: 0 8px;
+  color: var(--text-muted, #adb5bd);
+}
+
 </style>

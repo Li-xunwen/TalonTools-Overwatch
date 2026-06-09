@@ -27,6 +27,15 @@
       </button>
     </form>
     </div>
+        <div class="footer-beian">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
+         {{ icpNumber }}
+      </a>
+      <span class="sep">|</span>
+      <a href="https://www.beian.gov.cn/" target="_blank" rel="noopener noreferrer">
+         {{ policeNumber }}
+      </a>
+    </div>
   </div>
 </template>
 
@@ -35,6 +44,8 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import ThemeToggle from "@/components/ThemeToggle.vue";
 import { useTheme } from "@/composables/useTheme";
+const icpNumber = import.meta.env.VITE_ICP_NUMBER || '待备案'
+const policeNumber = import.meta.env.VITE_POLICE_NUMBER || '办理中'
 //import VConsole from 'vconsole';
 
 const router = useRouter();
@@ -432,5 +443,41 @@ onUnmounted(() => {
   .login-container h2 {
     font-size: 22px;
   }
+}
+
+/* 备案页脚 - 绝对定位，固定在底部 */
+.footer-beian {
+  position: absolute;
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary, #6c757d);
+  background: transparent;
+  z-index: 1;
+}
+
+.footer-beian a {
+  color: inherit;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.footer-beian a:hover {
+  opacity: 0.7;
+  text-decoration: underline;
+}
+
+.footer-beian .sep {
+  margin: 0 8px;
+  color: var(--text-muted, #adb5bd);
+}
+
+/* 为绝对定位的页脚留出底部空间，防止覆盖内容 */
+.login-page {
+  position: relative;
+  min-height: 100vh;
+  padding-bottom: 50px;  /* 避免页脚遮挡表单底部 */
 }
 </style>
