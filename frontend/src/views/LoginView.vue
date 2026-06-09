@@ -25,6 +25,7 @@
       <button type="submit" class="login-btn" :disabled="loading || isLoadingUsers">
         {{ loading ? "登录中..." : "登录" }}
       </button>
+        <CaptchaA />
     </form>
     </div>
         <div class="footer-beian">
@@ -44,6 +45,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import ThemeToggle from "@/components/ThemeToggle.vue";
 import { useTheme } from "@/composables/useTheme";
+import CaptchaA from '@/components/Captcha.vue'
 const icpNumber = import.meta.env.VITE_ICP_NUMBER || '待备案'
 const policeNumber = import.meta.env.VITE_POLICE_NUMBER || '办理中'
 //import VConsole from 'vconsole';

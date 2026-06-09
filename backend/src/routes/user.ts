@@ -187,11 +187,18 @@ router.get('/users/me', async (req: AuthRequest, res) => {
     try {
         const userId = req.user?.userId;
         const [rows] = await pool.query<any[]>(
-            `SELECT id, battletag, role, rank_open_6v6, rank_tank_5v5, rank_dps_5v5, rank_support_5v5 FROM users WHERE id = ?`,
+            `SELECT id, battletag, phone, role, rank_open_6v6, rank_tank_5v5, rank_dps_5v5, rank_support_5v5 FROM users WHERE id = ?`,
             [userId]
         );
         if (rows.length === 0) return res.status(404).json({ error: '用户不存在' });
-        res.json(rows[0]);
+
+        const user = rows[0];
+        // 检查手机号是否为空（NULL 或空字符串）
+        if (!user.phone || user.phone.trim() === '') {
+            return res.status(403).json({ error: '请先绑定手机号' });
+        }
+
+        res.json(user);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: '服务器错误' });
