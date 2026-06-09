@@ -39,10 +39,14 @@ initPool({
 
 app.use(cors());
 app.use(express.json());
+app.set('trust proxy', true);
 
 // 健康检查（无需认证）
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', message: 'Your TypeScript server is running!' });
+    console.log('真实 IP:', req.ip);
+    console.log('X-Forwarded-For:', req.headers['x-forwarded-for']);
+    console.log('X-Real-IP:', req.headers['x-real-ip']);
 });
 
 // 登录（无需认证）
@@ -65,7 +69,7 @@ app.post('/api/login', async (req, res) => {
     try {
         await userEventLogger.logEvent({ userId: user.id, eventType: 'login', ipAddress: req.ip });
     } catch (logError) {
-        console.error('Failed to log login event:', logError,{ userId: user.id, eventType: 'login', ipAddress: req.ip });
+        console.error('Failed to log login event:', logError, { userId: user.id, eventType: 'login', ipAddress: req.ip });
     }
     res.json({ token, battletag: user.battletag });
 });
@@ -99,7 +103,7 @@ app.use('/api', evaluationRouter);     // 评价
 app.use('/api/user', rankRouter);      // 用户段位更新
 app.use('/api/user', heroesRouter);    // 用户英雄更新
 app.use('/api/v2', dashenProfileRouter);
-app.use('/api/admin', adminRouter); 
+app.use('/api/admin', adminRouter);
 
 app.listen(port, () => {
     console.log(`🚀 Server is running at http://localhost:${port}`);

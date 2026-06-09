@@ -6,14 +6,12 @@ import fs from 'fs'
 
 dotenv.config()
 
-// 从环境变量读取配置，提供默认值
 const apiProxyTarget = process.env.API_PROXY_TARGET
 const serverPort = parseInt(process.env.VITE_SERVER_PORT || '5173', 10)
 const enableHttps = process.env.VITE_ENABLE_HTTPS === 'true'
 const sslKeyPath = process.env.SSL_KEY_PATH
 const sslCertPath = process.env.SSL_CERT_PATH
 
-// 构建 HTTPS 配置（仅在启用且提供了有效路径时）
 let httpsConfig = undefined
 if (enableHttps && sslKeyPath && sslCertPath) {
   try {
@@ -39,13 +37,29 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: serverPort,
-    // 如果有 HTTPS 配置则启用，否则为 HTTP
     https: httpsConfig,
     proxy: {
       '/api': {
         target: apiProxyTarget,
         changeOrigin: true,
-      },
-    },
-  },
+        // 修正 configure 函数的写法
+        configure: (proxy, _options) => {
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            // 从原始请求中取出真实 IP 头，传递给后端
+            if (req.headers['x-real-ip']) {
+              proxyReq.setHeader('X-Real-IP', req.headers['x-real-ip'])
+            }
+            // 转发 X-Forwarded-For
+            if (req.headers['x-forwarded-for']) {
+              proxyReq.setHeader('X-Forwarded-For', req.headers['x-forwarded-for'])
+            }
+            // 转发 X-Forwarded-Proto
+            if (req.headers['x-forwarded-proto']) {
+              proxyReq.setHeader('X-Forwarded-Proto', req.headers['x-forwarded-proto'])
+            }
+          })
+        }
+      }
+    }
+  }
 })
