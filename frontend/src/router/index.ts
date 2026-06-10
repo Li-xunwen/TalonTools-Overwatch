@@ -26,12 +26,18 @@ const routes = [
     component: () => import('../views/ProfileView.vue'),
     meta: { requiresAuth: true },
   },
-    {
+  {
     path: '/admin/events',
     name: 'EventLog',
     component: () => import('../views/EventLogView.vue'),
-    meta: { requiresAuth: true }  // 需要登录
-  }
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/PrivacyPolicy',
+    name: 'PrivacyPolicy',
+    component: () => import('../views/PrivacyPolicy.vue'),
+    meta: { requiresAuth: false } 
+  },
 
 ]
 

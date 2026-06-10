@@ -66,7 +66,7 @@ app.post('/api/login', async (req, res) => {
     
     // 检查手机号是否为空
     if (!user.phone || user.phone.trim() === '') {
-        //return res.status(403).json({ error: '请先绑定手机号' });
+        return res.status(403).json({ error: '请先绑定手机号' });
     }
     
     const token = jwt.sign(

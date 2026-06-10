@@ -1,147 +1,100 @@
+/////以下是captcha使用示例
 <template>
   <div>
-    <div id="captcha-button" :class="{ disabled: countdown > 0 }">
+    <div 
+      id="captcha-button" 
+      :class="{ disabled: countdown > 0 }"
+      @click="handleGetCode"
+    >
       {{ countdown > 0 ? `${countdown}秒` : '获取验证码' }}
     </div>
-    <div id="captcha-element"></div>
+    <div id="captcha-container"></div> <!-- 验证码渲染容器 -->
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref } from 'vue';
+import { createCaptcha } from '@/utils/captcha';
 
-const captchaInstance = ref(null);
 const countdown = ref(0);
-let timer = null;
+let timer: ReturnType<typeof setInterval> | null = null;
+let captchaController: ReturnType<typeof createCaptcha> | null = null;
 
-// 获取阿里云验证码实例
-function getInstance(instance) {
-  captchaInstance.value = instance;
-}
+async function handleGetCode() {
+  if (countdown.value > 0) return;
+  if (!captchaController) return;
 
-// 在 success 函数中调用后端接口
-async function success(captchaVerifyParam) {
-  console.log('前端获取的凭证:', captchaVerifyParam);
-
-  const testPassword = '123';
-  const testNewPhone = '19264505004';
-  try {
-    const response = await fetch(`/api/send-sms-code`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        battletag: "Node#51456",
-        password: testPassword,
-        captchaVerifyParam: captchaVerifyParam,
-        newPhone: testNewPhone
-      })
-    });
-
-    // 先获取原始响应文本（用于调试）
-    const rawText = await response.text();
-    console.log('原始响应:', rawText);
-
-    let data;
+  // 弹出验证码并等待用户完成
+  const result = await captchaController.show();
+  
+  if (result.success && result.captchaVerifyParam) {
+    // 验证通过，调用后端发送短信接口
     try {
-      data = JSON.parse(rawText);
-    } catch (e) {
-      console.error('响应不是合法JSON:', rawText);
-      alert(`服务器返回异常: ${rawText.substring(0, 100)}`);
-      return;
+      const response = await fetch('/api/send-sms-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          battletag: 'Node#51456',
+          password: '1234', // 实际应从表单获取
+          captchaVerifyParam: result.captchaVerifyParam,
+          newPhone: '19264505004', // 实际应从表单获取
+        }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        alert('验证码已发送');
+        if (data.token) localStorage.setItem('smsToken', data.token);
+        startCountdown(); // 开始倒计时
+      } else {
+        alert(data.error || '发送失败');
+        // 验证码刷新，让用户可以重试
+        captchaController?.refresh();
+      }
+    } catch (error) {
+      console.error('网络错误:', error);
+      alert('网络错误');
+      captchaController?.refresh();
     }
-
-    if (response.ok) {
-      console.log('验证码发送成功:', data);
-      alert('验证码已发送，请查看后端控制台');
-      if (data.token) localStorage.setItem('smsToken', data.token);
-    } else {
-      console.error('发送失败:', data.error);
-      alert(data.error || '发送失败');
-    }
-  } catch (error) {
-    console.error('网络错误:', error);
-    alert('网络错误，请检查后端服务是否启动');
+  } else {
+    // 验证失败，可提示或刷新验证码
+    alert('请完成验证');
+    captchaController?.refresh();
   }
 }
-// 验证失败回调
-function fail(error) {
-  console.error('验证码验证失败:', error);
-}
 
-// 开始倒计时
 function startCountdown() {
   if (countdown.value > 0) return;
-  countdown.value = 60;
+  countdown.value = 60; // 60秒倒计时
   timer = setInterval(() => {
     if (countdown.value <= 1) {
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
       timer = null;
       countdown.value = 0;
-      // 倒计时结束，刷新验证码实例
-      if (captchaInstance.value && captchaInstance.value.refresh) {
-        captchaInstance.value.refresh();
-      }
     } else {
       countdown.value--;
     }
   }, 1000);
 }
 
-// 手动处理按钮点击
-function handleButtonClick() {
-  if (countdown.value > 0) {
-    // 倒计时中，不弹出验证码
-    console.log('请等待倒计时结束');
-    return;
-  }
-  if (captchaInstance.value && captchaInstance.value.show) {
-    captchaInstance.value.show();  // 显示验证码弹窗
-    startCountdown();              // 弹出后立即开始倒计时
-  } else {
-    console.error('验证码实例未就绪');
-  }
-}
-
-// 初始化阿里云验证码
-function initCaptcha() {
-  window.initAliyunCaptcha({
-    SceneId: 'f7f4dz8z',
-    mode: 'popup',
-    element: '#captcha-element',
-    button: null,              // 不自动绑定按钮，手动控制
-    success: success,
-    fail: fail,
-    getInstance: getInstance,
-    slideStyle: {
-      width: 360,
-      height: 40,
-    },
-    language: 'cn',
-  });
-}
-
 onMounted(() => {
-  initCaptcha();
-  const btn = document.getElementById('captcha-button');
-  if (btn) {
-    btn.addEventListener('click', handleButtonClick);
-  }
+  captchaController = createCaptcha({
+    sceneId: 'f7f4dz8z',
+    mode: 'popup',
+    button: null, // 手动控制，不自动绑定
+    container: '#captcha-container',
+  });
 });
 
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer);
-  const btn = document.getElementById('captcha-button');
-  if (btn) {
-    btn.removeEventListener('click', handleButtonClick);
-  }
 });
 </script>
 
 <style scoped>
 #captcha-button {
   z-index: 99;
-  min-width: 100px;          /* 自适应宽度 */
-  padding: 6px 16px;         /* 调整内边距，更舒适 */
+  min-width: 100px; /* 自适应宽度 */
+  padding: 6px 16px; /* 调整内边距，更舒适 */
   box-sizing: border-box;
   border-radius: 6px;
   border: 1px solid transparent;
@@ -152,7 +105,9 @@ onBeforeUnmount(() => {
   font-weight: 500;
   line-height: 1.2;
   text-align: center;
-  transition: background-color 0.2s, opacity 0.2s;
+  transition:
+    background-color 0.2s,
+    opacity 0.2s;
 }
 
 #captcha-button:hover {
@@ -163,7 +118,7 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
   opacity: 0.6;
   background-color: var(--button-bg, #42b983);
-  pointer-events: auto;      /* 保留点击事件但由逻辑阻止 */
+  pointer-events: auto; /* 保留点击事件但由逻辑阻止 */
 }
 
 /* 可选：深色/浅色模式适配 */

@@ -1,31 +1,31 @@
 /* ==========================================
    Theme Variables
 ========================================== */
-
 :root {
+  /* 基础背景与文字 */
   --bg-body: #f0f2f5;
+  --bg-color: #f0f2f5;           /* 为隐私政策页面添加 */
   --card-bg: #ffffff;
   --text-primary: #1c1e21;
 
+  /* 表单相关 */
   --input-border: #dddddd;
   --input-focus: #1877f2;
 
+  /* 按钮 */
   --button-bg: #1877f2;
   --button-hover: #156ae9;
 
+  /* 链接 */
   --link-color: #1877f2;
 
-  --shadow:
-    0 14px 28px rgba(0, 0, 0, 0.25),
-    0 10px 10px rgba(0, 0, 0, 0.22);
+  /* 阴影 */
+  --shadow: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
 }
-
-/* ==========================================
-   Dark Theme
-========================================== */
 
 .dark-theme {
   --bg-body: #121212;
+  --bg-color: #121212;           /* 深色模式下对应值 */
   --card-bg: #1e1e1e;
   --text-primary: #f0f0f0;
 
@@ -37,24 +37,23 @@
 
   --link-color: #4dabf7;
 
-  --shadow:
-    0 10px 20px rgba(0, 0, 0, 0.5);
+  --shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
 }
 
 /* ==========================================
-   Global Reset
+   Global Reset (合并自 main.css)
 ========================================== */
-
 *,
 *::before,
 *::after {
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
 /* ==========================================
-   Global Layout
+   Base Body (合并自 main.css)
 ========================================== */
-
 html {
   width: 100%;
   min-height: 100%;
@@ -64,27 +63,16 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-
-  font-family:
-    "Segoe UI",
-    "Microsoft YaHei",
-    Arial,
-    sans-serif;
-
+  font-family: 'Microsoft YaHei', Arial, sans-serif;
   background: var(--bg-body);
   color: var(--text-primary);
-
-  transition:
-    background-color 0.3s ease,
-    color 0.3s ease;
-
+  transition: background 0.3s ease, color 0.3s ease;
   overflow-x: hidden;
 }
 
 /* ==========================================
    Vue Root
 ========================================== */
-
 #app {
   width: 100%;
   min-height: 100vh;
@@ -93,7 +81,6 @@ body {
 /* ==========================================
    Common Controls
 ========================================== */
-
 button,
 input,
 textarea,
@@ -110,9 +97,42 @@ a:hover {
   text-decoration: underline;
 }
 
-/* ==========================================
-   Scrollbar
-========================================== */
+.join-play {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.content-area {
+  position: relative;
+  z-index: 3;
+  padding: 50px 20px;
+  width: 100%;
+  max-width: 1800px;
+  margin: 0 auto;
+  background: var(--bg-secondary, var(--bg-body));
+}
+
+.section {
+  margin-bottom: 40px;
+  padding: 30px;
+  background: var(--card-bg);
+  border-radius: 15px;
+  box-shadow: 0 0 20px var(--shadow-color, rgba(0, 0, 0, 0.1));
+}
+
+.top-tip-text {
+  top: 0;
+  font-size: clamp(5px, 4vw + 1rem, 64px);
+  text-align: center;
+  padding: 10px 5px 10px;
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  background: var(--bg-secondary, var(--bg-body));
+}
 
 ::-webkit-scrollbar {
   width: 8px;
