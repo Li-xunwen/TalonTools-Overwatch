@@ -439,6 +439,9 @@ async function refreshUserData(username: string) {
 
 function handleGlobalClick(e: MouseEvent) {
   const target = e.target as HTMLElement
+  if (target.closest('.image-viewer')) { 
+    return
+  }
   if (!target.closest('.member-card')) {
     currentExpandId.value = ''
   }
