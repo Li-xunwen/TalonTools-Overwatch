@@ -758,11 +758,7 @@ async function fetchStrengthImage(Strengthtype: string) {
 
 // 点击对局强度按钮
 function onStrengthClick() {
-  if (expandStrength.value) {
-    emit('close-float')
-  } else {
-    emit('expand-strength', props.user.username)
-  }
+  emit('expand-strength', props.user.username);
 }
 
 function handleQuickMatchStrength() {
@@ -776,13 +772,13 @@ function handleCompetitiveStrength() {
   fetchStrengthImage('dashen-competitive-strength')
 }
 
-    function onAdminClick() {
-      if (expandAdmin.value) {
-        emit('close-float') 
-      } else {
-        emit('expand-admin', props.user.username)
-      }
-    }
+function onAdminClick() {
+  if (expandAdmin.value) {
+    emit('close-float') 
+  } else {
+    emit('expand-admin', props.user.username)
+  }
+}
 
 // 修改密码（管理员调用）
 async function submitPasswordChange() {

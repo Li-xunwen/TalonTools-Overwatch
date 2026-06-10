@@ -460,8 +460,11 @@ function handleExpandMatch(username: string) {
 }
 
 function handleExpandStrength(username: string) {
-  const id = `strength-${username}`
-  currentExpandId.value = currentExpandId.value === id ? '' : id
+  if (currentExpandId.value === `strength-${username}`) {
+    currentExpandId.value = ''; // 收起
+  } else {
+    currentExpandId.value = `strength-${username}`; // 展开
+  }
 }
 
 function handleExpandAdmin(username: string){

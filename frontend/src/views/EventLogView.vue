@@ -145,7 +145,8 @@ const eventTypes = [
   'rename_user',
   'create_user',
   'dashen-quick-strength',
-  'dashen-competitive-strength'
+  'dashen-competitive-strength',
+  'SMS_REQUEST'
 ];
 
 const loading = ref(false);
