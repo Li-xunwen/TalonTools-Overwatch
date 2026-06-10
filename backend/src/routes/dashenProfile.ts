@@ -18,9 +18,11 @@ function getCacheTTL(path: string): number {
     if (path.includes('/dashen-profile')) {
         return 36 * 3600;
     }
-    // 今日总结（summary）相关：2 小时
     if (path.includes('/dashen-summary')) {
         return 2*3600; 
+    }
+    if (path.includes('/api/v2/dashen-match/detail/replies')) {
+        return 3600;
     }
     if (path.includes('/dashen-match')) {
         return 3600;
@@ -116,4 +118,6 @@ router.post('/dashen-quick-strength', proxyAndCache);
 router.post('/dashen-competitive-strength', proxyAndCache);
 router.post('/dashen-quick-strength/image', proxyAndCache);
 router.post('/dashen-competitive-strength/image', proxyAndCache);
+router.post('/dashen-match/detail/replies', proxyAndCache);
+
 export default router;

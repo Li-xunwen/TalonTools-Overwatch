@@ -145,12 +145,34 @@
     <!--今日对局浮层-->
     <Transition name="fade">
       <div v-if="expandMatch" class="match-list" @click.stop>
+        <div class="match-query-controls">
+          <div class="query-input-wrapper">
+            <div class="number-input-group">
+              <button class="number-btn" @click="decreaseMatchIndex" :disabled="matchQueryIndex <= 1">
+                -
+              </button>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" v-model="matchQueryIndexStr"
+                @input="handleMatchIndexInput" class="number-input" maxlength="2" />
+              <button class="number-btn" @click="increaseMatchIndex" :disabled="matchQueryIndex >= 20">
+                +
+              </button>
+            </div>
+          </div>
+          <button class="query-detail-btn" @click="handleQueryMatchDetail">
+            查询单局详情
+          </button>
+        </div>
         <div v-if="matchLoading" class="match-loading">
           <div class="loading-spinner"></div>
           <span>加载中...</span>
         </div>
         <img v-else-if="matchImageUrl" :src="matchImageUrl" class="match-image"
           @click="openImageViewer(matchImageUrl)" />
+        <!-- 单局详情图片列表 -->
+        <div v-if="matchDetailImages.length > 0" class="match-detail-images">
+          <img v-for="(img, idx) in matchDetailImages" :key="idx" :src="img" class="match-detail-image"
+            @click="openImageViewer(img)" />
+        </div>
       </div>
     </Transition>
 
@@ -271,6 +293,10 @@ const expandMatch = computed(() => props.currentExpandId === `match-${props.user
 const matchLoading = ref(false)
 const matchImageUrl = ref('')
 const matchError = ref<string | null>(null)
+const matchQueryIndex = ref(1); // 实际数值（1~20）
+const matchQueryIndexStr = ref('1'); // 显示字符串（用于双向绑定）
+// 存储单局详情返回的图片列表（base64 URL）
+const matchDetailImages = ref<string[]>([]);
 
 //对局强度相关状态
 const expandStrength = computed(() => props.currentExpandId === `strength-${props.user.username}`)
@@ -710,6 +736,112 @@ function onMatchClick() {
   }
 }
 
+// 同步字符串到数值（带校验）
+function handleMatchIndexInput() {
+  let val = matchQueryIndexStr.value.replace(/\D/g, ''); // 只保留数字
+  if (val === '') {
+    matchQueryIndex.value = 1;
+    matchQueryIndexStr.value = '';
+    return;
+  }
+  const num = parseInt(val, 10);
+  if (num < 1) {
+    matchQueryIndex.value = 1;
+    matchQueryIndexStr.value = '1';
+  } else if (num > 20) {
+    matchQueryIndex.value = 20;
+    matchQueryIndexStr.value = '20';
+  } else {
+    matchQueryIndex.value = num;
+    matchQueryIndexStr.value = String(num);
+  }
+}
+
+// 增减按钮
+function decreaseMatchIndex() {
+  if (matchQueryIndex.value > 1) {
+    matchQueryIndex.value--;
+    matchQueryIndexStr.value = String(matchQueryIndex.value);
+  }
+}
+
+function increaseMatchIndex() {
+  if (matchQueryIndex.value < 20) {
+    matchQueryIndex.value++;
+    matchQueryIndexStr.value = String(matchQueryIndex.value);
+  }
+}
+
+// 查询单局详情（实现 API 调用）
+async function handleQueryMatchDetail() {
+  const token = localStorage.getItem('authToken');
+  if (!token) {
+    alert('请先登录');
+    return;
+  }
+
+  const apiIndex = matchQueryIndex.value - 1;
+  if (apiIndex < 0 || apiIndex > 19) {
+    alert('对局序号必须在 1~20 范围内');
+    return;
+  }
+
+  const body = {
+    index: String(apiIndex),
+    limit: "20",
+    include_fight: true,
+    include_previous_season: true,
+    show_all_heroes: true,
+    analyze: true,
+    bnet_id: props.user.username
+  };
+
+  try {
+    const res = await fetch('/api/v2/dashen-match/detail/replies', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      let errMsg = `请求失败: ${res.status}`;
+      try {
+        const errData = await res.json();
+        errMsg = errData.message || errData.error || '服务错误';
+      } catch (e) {
+        errMsg = res.statusText || errMsg;
+      }
+      throw new Error(errMsg);
+    }
+
+    const data = await res.json();
+
+    // 清空旧图片
+    matchDetailImages.value = [];
+
+    // 提取所有 image 类型的 base64 数据
+    if (data.replies && Array.isArray(data.replies)) {
+      for (const reply of data.replies) {
+        if (reply.type === 'image' && reply.base64) {
+          // 构造 data URL
+          const mimeType = reply.media_type || 'image/png';
+          const imageUrl = `data:${mimeType};base64,${reply.base64}`;
+          matchDetailImages.value.push(imageUrl);
+        }
+      }
+    }
+
+    if (matchDetailImages.value.length === 0) {
+      alert('未找到对局图片');
+    }
+  } catch (err: any) {
+    console.error('查询单局详情失败:', err);
+    alert(err.message || '查询失败，请稍后重试');
+  }
+}
 
 // 请求比赛强度
 async function fetchStrengthImage(Strengthtype: string) {
@@ -774,7 +906,7 @@ function handleCompetitiveStrength() {
 
 function onAdminClick() {
   if (expandAdmin.value) {
-    emit('close-float') 
+    emit('close-float')
   } else {
     emit('expand-admin', props.user.username)
   }
@@ -1341,6 +1473,122 @@ onUnmounted(() => {
   text-align: center;
 }
 
+/* 最近对局查询控制栏 */
+.match-query-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-secondary);
+}
+
+.query-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* 关键：内部垂直居中 */
+  height: 28px;
+  /* 与按钮/输入框高度一致 */
+  gap: 2px;
+  /* 减小 label 与 input 间距 */
+}
+
+
+.number-input-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.number-input {
+  width: 40px;
+  height: 28px;
+  /* 明确指定高度 */
+  padding: 0 6px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  text-align: center;
+  font-size: 14px;
+  outline: none;
+}
+
+.number-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+
+.number-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.query-detail-btn {
+  height: 28px;
+  /* 明确指定高度 */
+  padding: 0 10px;
+  /* 移除上下 padding，用 height 控制 */
+  border: none;
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.query-detail-btn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  /* 与输入框高度一致 */
+}
+
+.query-detail-btn:hover {
+  background: var(--button-hover);
+}
+
+/* 单局详情图片容器 */
+.match-detail-images {
+  margin-top: 16px;
+  padding: 0 16px;
+}
+
+.match-detail-image {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  background: var(--bg-secondary);
+  /* 防止透明 PNG 显示异常 */
+}
 
 /* 对局强度浮层样式 */
 .strength-loading {
