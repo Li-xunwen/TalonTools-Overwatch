@@ -15,6 +15,7 @@ export type EventType =
   | 'create_user'
   | 'dashen-quick-strength'
   | 'dashen-competitive-strength'
+  | 'SMS_REQUEST'
 ;
 
 export interface EventLogOptions {
@@ -47,6 +48,15 @@ export class UserEventLogger {
   /**
    * 写入一条用户事件日志
    * 异步执行，不阻塞主流程（错误只记录到控制台）
+   * 示例：await logger.logEvent({
+                userId: 123,                          // 当前操作用户的 ID（必填）
+                eventType: 'SMS_REQUEST',             // 事件类型（必须是 EventType 枚举中的值）
+                targetUserId: null,                   // 目标用户 ID（如无则为 null）
+                eventData: {                          // 附加数据（建议包含关键上下文）
+                                                      //事件数据
+                },
+                ipAddress: '192.168.1.1',             // 客户端 IP（可从请求头获取）
+              });
    */
   async logEvent(options: EventLogOptions): Promise<void> {
     const { userId, eventType, targetUserId = null, eventData = null, ipAddress = null } = options;

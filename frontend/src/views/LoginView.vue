@@ -31,8 +31,8 @@
         <h2>绑定手机号</h2>
         <div class="bind-form">
           <!-- 手机号输入框（单独一行） -->
-          <input v-model="bindPhone" type="tel" class="input-fieldB phone-input" placeholder="手机号"
-            :disabled="bindPhoneSending" />
+          <input :value="formattedPhone" @input="handlePhoneInput" type="tel" class="input-fieldB phone-input"
+            placeholder="手机号" :disabled="bindPhoneSending" />
 
           <!-- 短信验证码输入行：输入框 + 获取验证码按钮（同行） -->
           <div class="verification-row">
@@ -51,7 +51,7 @@
           <div class="error-message">{{ bindErrorMessage }}</div>
         </div>
         <div class="bind-info">
-          根据法律法规，平台需要依规绑定用户手机号，给您造成不便，十分抱歉。我们会确保您的隐私，详情请跳转：
+          根据法律法规，平台需要依规绑定用户手机号，给您造成不便，十分抱歉。我们会保护您的隐私，详情请跳转：
           <router-link to="/PrivacyPolicy" class="privacy-link-inline">隐私政策</router-link>
         </div>
       </div>
@@ -106,6 +106,25 @@ const bindPhoneSending = ref(false);
 const bindErrorMessage = ref("");
 let bindCaptchaController: ReturnType<typeof createCaptcha> | null = null;
 let bindSmsToken = ""; // 存储发送验证码接口返回的 token
+
+// 计算属性：格式化显示（如 "192 6450 5004"）
+const formattedPhone = computed(() => {
+  const digits = bindPhone.value.replace(/\D/g, ''); // 清除非数字
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+  return `${digits.slice(0, 3)} ${digits.slice(3, 7)} ${digits.slice(7, 11)}`;
+});
+
+// 处理输入事件
+function handlePhoneInput(e: Event) {
+  const input = e.target as HTMLInputElement;
+  let value = input.value.replace(/\s/g, ''); // 移除空格
+  value = value.replace(/\D/g, ''); // 只保留数字
+  value = value.slice(0, 11); // 最多11位
+  bindPhone.value = value; // 存储纯数字
+  // 更新输入框显示值（触发 reactivity）
+  input.value = formattedPhone.value;
+}
 
 // ---------- LocalStorage 操作 ----------
 const TOKEN_KEY = "authToken";
@@ -274,6 +293,10 @@ function startBindCountdown(seconds: number) {
       if (bindTimer) clearInterval(bindTimer);
       bindTimer = null;
       bindCountdown.value = 0;
+      if (bindCaptchaController) {
+        bindCaptchaController.refresh();
+        console.log('绑定页面验证码已刷新');
+      }
     } else {
       bindCountdown.value--;
     }
@@ -304,7 +327,7 @@ async function handleGetBindCode() {
   // 调用后端发送短信接口
   bindPhoneSending.value = true;
   try {
-    const res = await fetch("/api/send-sms-code", {
+    const res = await fetch("/api/bind-phone/send-sms-code", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -333,7 +356,7 @@ async function handleGetBindCode() {
   }
 }
 
-// 提交绑定（暂时打印日志，不实际请求后端）
+// 提交绑定（调用真实后端接口）
 async function handleSubmitBind() {
   if (!bindPhone.value || !/^1[3-9]\d{9}$/.test(bindPhone.value)) {
     bindErrorMessage.value = "手机号无效";
@@ -351,36 +374,46 @@ async function handleSubmitBind() {
   bindPhoneSending.value = true;
   bindErrorMessage.value = "";
 
-  // TODO: 调用后端绑定手机号接口（暂时仅打印日志）
-  console.log("提交绑定手机号:", {
-    battletag: pendingBindBattletag.value,
-    phone: bindPhone.value,
-    smsCode: bindSmsCode.value,
-    smsToken: bindSmsToken,
-  });
-  alert("[模拟] 手机号绑定成功，即将自动登录");
-  // 模拟绑定成功后，重新执行登录流程
-  // 注意：由于后端还没有实现绑定接口，这里仅演示刷新 token 并跳转
-  // 实际项目中应该调用真正的绑定接口，成功后重新请求登录
   try {
-    // 重新登录获取新 token（后端绑定成功后应当能正常登录）
-    const res = await fetch("/api/login", {
+    const res = await fetch("/api/bind-phone/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ battletag: pendingBindBattletag.value, password: pendingBindPassword.value }),
+      body: JSON.stringify({
+        battletag: pendingBindBattletag.value,
+        password: pendingBindPassword.value,
+        smsCode: bindSmsCode.value,
+        smsToken: bindSmsToken,
+      }),
     });
     const data = await res.json();
-    if (res.ok && data.token) {
-      saveAuthData(data.token);
+
+    if (!res.ok) {
+      // 后端返回错误（如验证码错误、密码错误等）
+      bindErrorMessage.value = data.error || "绑定失败，请稍后重试";
+      return;
+    }
+
+    // 绑定成功！立即重新登录获取 token
+    const loginRes = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        battletag: pendingBindBattletag.value,
+        password: pendingBindPassword.value,
+      }),
+    });
+    const loginData = await loginRes.json();
+
+    if (loginRes.ok && loginData.token) {
+      saveAuthData(loginData.token);
       router.push("/main");
     } else {
-      bindErrorMessage.value = data.error || "登录失败，请手动重新登录";
+      bindErrorMessage.value = loginData.error || "绑定成功但登录失败，请手动重新登录";
       needBindPhone.value = false; // 返回登录界面
     }
   } catch (err) {
-    console.error("绑定后登录失败", err);
-    bindErrorMessage.value = "绑定后登录失败，请稍后手动登录";
-    needBindPhone.value = false;
+    console.error("绑定请求失败:", err);
+    bindErrorMessage.value = "网络错误，请检查后端服务是否运行";
   } finally {
     bindPhoneSending.value = false;
   }
@@ -666,7 +699,7 @@ onUnmounted(() => {
   text-align: left;
   color: var(--text-secondary);
   text-indent: 2em;
-  line-height: 1.5; 
+  line-height: 1.5;
 }
 
 .bind-form {
@@ -723,8 +756,8 @@ onUnmounted(() => {
 .privacy-link-inline {
   color: var(--link-color);
   text-decoration: none;
-  display: inline; 
-  margin-left: 4px; 
+  display: inline;
+  margin-left: 4px;
 }
 
 .privacy-link-inline:hover {

@@ -30,7 +30,7 @@ async function handleGetCode() {
   if (result.success && result.captchaVerifyParam) {
     // 验证通过，调用后端发送短信接口
     try {
-      const response = await fetch('/api/send-sms-code', {
+      const response = await fetch('/api/baind-phone/send-sms-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -70,6 +70,9 @@ function startCountdown() {
       if (timer) clearInterval(timer);
       timer = null;
       countdown.value = 0;
+      if (captchaController) {
+        captchaController.refresh();
+      }
     } else {
       countdown.value--;
     }
