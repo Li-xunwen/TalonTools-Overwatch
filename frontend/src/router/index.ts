@@ -38,6 +38,12 @@ const routes = [
     component: () => import('../views/PrivacyPolicy.vue'),
     meta: { requiresAuth: false } 
   },
+  {
+    path: '/MinecraftHelp',
+    name: 'MinecraftHelp',
+    component: () => import('../views/MinecraftHelp.vue'),
+    meta: { requiresAuth: false } 
+  },
 
 ]
 
