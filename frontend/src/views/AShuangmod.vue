@@ -2,93 +2,38 @@
     <div class="tutorial-page">
         <ThemeToggle class="theme-toggle" />
         <div class="privacy-container">
-            <!-- 新增顶部导航栏：左返回上一页，右返回首页 -->
-            <div class="top-nav-bar">
-                <a href="javascript:void(0)" @click="$router.back()" class="nav-link back-prev">
-                    返回上一页
-                </a>
-                <router-link to="/" class="nav-link back-home">
-                    返回首页
-                </router-link>
-            </div>
-            <h1 class="title">⛏️ Minecraft黑爪服安装教程</h1>
-            <div class="update-time">📅 整合包版本：v1.0.2 | 最后更新：2026年6月15日</div>
-
-            <!-- 0. 教程简介（改为 Minecraft 相关） -->
-            <section class="section">
-                <h2>🎮 欢迎来到黑爪我的世界服务器</h2>
-                <p>本教程将引导你通过 <strong>PCL2 启动器</strong> 一键安装黑爪专属整合包，快速加入我们的生存服务器。</p>
-            </section>
+            <router-link to="/">返回首页</router-link>
+            <h1 class="title">阿霜模组整合包导入教程</h1>
+            <div class="update-time">📅 整合包版本：v1.0 | 最后更新：2026年6月15日</div>
 
             <!-- 1. 下载PCL2整合包 -->
             <section class="section">
-                <h2>1. 📥下载PCL2整合包</h2>
-                <div class="download-link-wrapper">
-                    <a href="https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/PCL2%E9%BB%91%E7%88%AA1.0.zip"
-                        class="download-sample-btn" target="_blank" rel="noopener noreferrer">
-                        🎯 点击下载PCL2
-                    </a>
-                </div>
-                <!-- <a href="https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/%E9%98%BF%E9%9C%9C%E6%95%B4%E5%90%88%E5%8C%85v1.0.zip"
+                <h2>1. 下载阿霜模组整合包</h2>
+                <a href="https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/%E9%98%BF%E9%9C%9C%E6%95%B4%E5%90%88%E5%8C%85v1.0.zip"
                     class="download-sample-btn" target="_blank" rel="noopener noreferrer">
-                    (可选)点击下载阿霜模组整合包
+                    点击下载阿霜模组整合包
                 </a>
                 <p>
-                    阿霜模组整合包内置了
+                    整合包内置了
                     <a href="https://www.mcmod.cn/class/5009.html" target="_blank" rel="noopener noreferrer">
                         遥远地平线
                     </a>
                     、小地图以及客户端优化模组。
-                    <router-link to="/AShuangmod" class="mc-btn secondary">
-                        导入教程
-                    </router-link>
-                </p> -->
+                </p>
             </section>
 
             <!-- 2. 解压 -->
             <section class="section">
-                <h2>2. 📂 解压到需要安装的目录</h2>
+                <h2>2. 不用解压，直接拖入PCL</h2>
                 <figure class="image-card">
-                    <p>a.例如下图，将整合包移动到 D 盘 Game 文件夹内。<strong>右键选择“全部解压缩”</strong></p>
-                    <img src="/public/minecraft/step2.png" alt="解压步骤-复制压缩包" loading="lazy">
-                </figure>
-                <p class="separator">——————————————</p>
-                <figure class="image-card">
-                    <p><strong>b. 直接点击提取</strong></p>
-                    <img src="/public/minecraft/step3.png" alt="解压步骤-解压压缩包" loading="lazy">
+                    <img src="/public/minecraft/AShuangstep1.png" alt="解压步骤-复制压缩包" loading="lazy">
                 </figure>
             </section>
 
-            <!-- 3.运行 -->
-            <section class="section">
-                <h2>3. 🚀 运行 PCL2 启动器</h2>
-                <figure class="image-card">
-                    <img src="/public/minecraft/step4.png" alt="双击启动器图标" loading="lazy">
-                    <figcaption>打开解压后的文件夹，双击 <code>Plain Craft Launcher 2.exe</code> 即可运行。</figcaption>
-                </figure>
-                <p class="separator">————————可选操作————————</p>
-                <figure class="image-card">
-                    <p><strong>添加桌面快捷方式：</strong>右键启动器 → “显示更多选项” → “发送到” → “桌面快捷方式”。</p>
-                    <img src="/public/minecraft/step5.png" alt="创建快捷方式-右键菜单" loading="lazy">
-                </figure>
-                <figure class="image-card">
-                    <p>选择“桌面快捷方式”即可。</p>
-                    <img src="/public/minecraft/step6.png" alt="发送到桌面快捷方式" loading="lazy">
-                </figure>
-            </section>
-
-            <!-- 4.改ID -->
-            <section class="section">
-                <h2>4. ✏️ 修改你的游戏ID</h2>
-                <figure class="image-card">
-                    <img src="/public/minecraft/step7.png" alt="修改ID界面" loading="lazy">
-                    <figcaption>启动器内点击“设置” → “游戏外昵称”，输入你心仪的ID（仅支持英文、数字、下划线）。</figcaption>
-                </figure>
-            </section>
-
+        
             <!-- 5.享受 -->
             <section class="section">
-                <h2>5. 🎉 开始享受！</h2>
+                <h2>3. 🎉 开始享受！</h2>
                 <figure class="image-card">
                     <img src="/public/minecraft/enjoy.jpg" alt="游戏内截图" loading="lazy">
                     <!-- <figcaption>点击“启动游戏”，输入服务器地址 <code>play.heizhao.com</code> 即可加入黑爪世界！</figcaption> -->
@@ -97,7 +42,7 @@
         </div>
 
         <div class="back-link">
-            <a href="#" @click.prevent="scrollToTop">🔝 回到最顶上</a>
+            <router-link to="/">🏠 返回首页</router-link>
         </div>
         <div class="footer-beian">
             <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
@@ -116,10 +61,6 @@ import ThemeToggle from "@/components/ThemeToggle.vue";
 
 const icpNumber = import.meta.env.VITE_ICP_NUMBER || "沪ICP备备2026XXXX号";
 const policeNumber = import.meta.env.VITE_POLICE_NUMBER || "沪公网安备 3101150200XXXX号";
-const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-};
-
 </script>
 
 <style scoped>
@@ -324,48 +265,6 @@ const scrollToTop = () => {
 .footer-beian .sep {
     margin: 0 8px;
     color: var(--text-muted, #adb5bd);
-}
-
-/* 顶部导航栏 */
-.top-nav-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--input-border, #e2e8f0);
-}
-
-.nav-link {
-    font-size: 14px;
-    font-weight: 600;
-    text-decoration: none;
-    transition: opacity 0.2s;
-    cursor: pointer;
-    background: none;
-    border: none;
-}
-
-.nav-link.back-prev {
-    color: var(--text-secondary, #6c757d);
-}
-
-.nav-link.back-home {
-    color: var(--button-bg, #42b983);
-}
-
-.nav-link:hover {
-    opacity: 0.7;
-    text-decoration: underline;
-}
-
-/* 深色模式适配 */
-html[data-theme="dark"] .nav-link.back-prev {
-    color: #adb5bd;
-}
-
-html[data-theme="dark"] .nav-link.back-home {
-    color: #5fcb97;
 }
 
 /* ========== 深色模式字体亮度增强 ========== */

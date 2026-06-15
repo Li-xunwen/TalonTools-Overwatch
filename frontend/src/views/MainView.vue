@@ -29,7 +29,7 @@
     </div>
     <div class="footer-link">
       <a href="https://kook.vip/KWcZc1" target="_blank" rel="noopener noreferrer">
-        🎧 黑爪 Kook 语音频道
+        Kook黑爪语音频道
       </a>
       <span class="sep">|</span>
       <router-link to="/Thanks" class="privacy-link-inline">鸣谢支持</router-link>
@@ -497,6 +497,15 @@ onUnmounted(() => {
 
 <style>
 @import '../style/main.css';
+
+.join-play {
+    position: relative;
+    width: 100%;
+    max-width: 1200px;
+    min-height: 100vh;
+    overflow: hidden;
+    margin: 0 auto;  
+}
 
 .poster-wrapper {
   width: 100%;

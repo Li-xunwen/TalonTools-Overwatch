@@ -33,12 +33,7 @@ body {
     transition: background 0.3s, color 0.3s;
 }
 
-.join-play {
-    position: relative;
-    width: 100%;
-    min-height: 100vh;
-    overflow: hidden;
-}
+
 
 /* 
    已删除以下海报相关样式：

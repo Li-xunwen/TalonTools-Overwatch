@@ -9,6 +9,12 @@ const routes = [
     meta: { requiresAuth: false },
   },
   {
+    path: '/Game',
+    name: 'Game',
+    component: () => import('../views/Game.vue'),
+    meta: { requiresAuth: false },
+  },
+  {
     path: '/main',
     name: 'Main',
     component: () => import('../views/MainView.vue'),
@@ -42,6 +48,12 @@ const routes = [
     path: '/MinecraftHelp',
     name: 'MinecraftHelp',
     component: () => import('../views/MinecraftHelp.vue'),
+    meta: { requiresAuth: false } 
+  },
+  {
+    path: '/AShuangmod',
+    name: 'AShuangmod',
+    component: () => import('../views/AShuangmod.vue'),
     meta: { requiresAuth: false } 
   },
   {
