@@ -44,6 +44,12 @@ const routes = [
     component: () => import('../views/MinecraftHelp.vue'),
     meta: { requiresAuth: false } 
   },
+  {
+    path: '/Thanks',
+    name: 'Thanks',
+    component: () => import('../views/Thanks.vue'),
+    meta: { requiresAuth: false } 
+  },
 
 ]
 

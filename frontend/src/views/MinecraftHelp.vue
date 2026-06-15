@@ -3,8 +3,8 @@
         <ThemeToggle class="theme-toggle" />
         <div class="privacy-container">
             <router-link to="/">返回首页</router-link>
-            <h1 class="title">⛏️ 我的世界黑爪服务器 | 整合包安装教程 ⛏️</h1>
-            <div class="update-time">📅 整合包版本：v1.5.2 | 最后更新：2026年6月14日</div>
+            <h1 class="title">⛏️ Minecraft黑爪服安装教程</h1>
+            <div class="update-time">📅 整合包版本：v1.0.2 | 最后更新：2026年6月15日</div>
 
             <!-- 0. 教程简介（改为 Minecraft 相关） -->
             <section class="section">
@@ -72,10 +72,10 @@
                     <!-- <figcaption>点击“启动游戏”，输入服务器地址 <code>play.heizhao.com</code> 即可加入黑爪世界！</figcaption> -->
                 </figure>
             </section>
+        </div>
 
-            <div class="back-link">
-                <router-link to="/">🏠 返回首页</router-link>
-            </div>
+        <div class="back-link">
+            <router-link to="/">🏠 返回首页</router-link>
         </div>
         <div class="footer-beian">
             <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
@@ -233,13 +233,13 @@ const policeNumber = import.meta.env.VITE_POLICE_NUMBER || "沪公网安备 3101
     font-weight: 700;
     font-size: 1rem;
     transition: all 0.2s ease;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .download-sample-btn:hover {
     background: #2c6e4f;
     transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
 }
 
 .tip-text {
@@ -305,8 +305,10 @@ const policeNumber = import.meta.env.VITE_POLICE_NUMBER || "沪公网安备 3101
 html[data-theme="dark"] .tutorial-page,
 html.dark .tutorial-page,
 .dark .tutorial-page {
-    --text-primary: #f3f4f6 !important;      /* 主文字更亮 */
-    --text-secondary: #d1d5db !important;    /* 次级文字亮灰色 */
+    --text-primary: #f3f4f6 !important;
+    /* 主文字更亮 */
+    --text-secondary: #d1d5db !important;
+    /* 次级文字亮灰色 */
     --text-muted: #9ca3af !important;
     --card-bg: #1f2937 !important;
     --bg-secondary: #111827 !important;

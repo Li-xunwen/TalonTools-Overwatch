@@ -7,47 +7,36 @@
         <PosterHeroes />
       </div>
       <Toast :message="toastMessage" :duration="3000" />
-            <!-- 搜索栏 -->
+      <!-- 搜索栏 -->
       <div class="search-bar">
-        <input
-          type="text"
-          v-model="searchKeyword"
-          placeholder="搜索战网ID..."
-          class="search-input"
-          @input="handleSearch"
-        />
-      <button v-if="searchKeyword" class="search-clear" @click="clearSearch">✕</button>
-</div>
+        <input type="text" v-model="searchKeyword" placeholder="搜索战网ID..." class="search-input" @input="handleSearch" />
+        <button v-if="searchKeyword" class="search-clear" @click="clearSearch">✕</button>
+      </div>
       <div class="section">
         <div class="section-header">
           <h2 class="section-title">成员名单</h2>
           <button v-if="isAdmin" class="add-member-btn" @click="createNewMember">+</button>
         </div>
         <div class="members-grid">
-          <MemberCard
-            v-for="member in filteredMembers"
-            :key="member.username"
-            :user="member"
-            :self-tag="selfTag"
-            :self-role="selfRole"
-            :current-expand-id="currentExpandId"
-            :like-cache="likeCache"
-            :eval-cache="evalCache"
-            :fetch-evaluations="fetchEvaluations"
-            @expand-like="handleExpandLike"
-            @expand-eval="handleExpandEval"
-            @like-click="handleLikeClick"
-            @eval-submit="handleEvalSubmit"
-            @expand-career="handleExpandCareer"
-            @expand-summary="handleExpandSummary"
-            @expand-match="handleExpandMatch"
-            @expand-strength="handleExpandStrength"
-            @expand-admin="handleExpandAdmin"
-          />
+          <MemberCard v-for="member in filteredMembers" :key="member.username" :user="member" :self-tag="selfTag"
+            :self-role="selfRole" :current-expand-id="currentExpandId" :like-cache="likeCache" :eval-cache="evalCache"
+            :fetch-evaluations="fetchEvaluations" @expand-like="handleExpandLike" @expand-eval="handleExpandEval"
+            @like-click="handleLikeClick" @eval-submit="handleEvalSubmit" @expand-career="handleExpandCareer"
+            @expand-summary="handleExpandSummary" @expand-match="handleExpandMatch"
+            @expand-strength="handleExpandStrength" @expand-admin="handleExpandAdmin" />
         </div>
       </div>
     </div>
-            <!-- 备案信息页脚 -->
+    <div class="footer-link">
+      <a href="https://kook.vip/KWcZc1" target="_blank" rel="noopener noreferrer">
+        🎧 黑爪 Kook 语音频道
+      </a>
+      <span class="sep">|</span>
+      <router-link to="/Thanks" class="privacy-link-inline">鸣谢支持</router-link>
+      <span class="sep">|</span>
+      <router-link to="/PrivacyPolicy" class="privacy-link-inline">隐私政策</router-link>
+    </div>
+    <!-- 备案信息页脚 -->
     <div class="footer-beian">
       <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
         {{ icpNumber }}
@@ -58,8 +47,8 @@
       </a>
     </div>
   </div>
-    <!-- 使用底部导航栏组件 -->
-    <BottomNav />
+  <!-- 使用底部导航栏组件 -->
+  <BottomNav />
 </template>
 
 <script setup lang="ts">
@@ -68,7 +57,7 @@ import MemberCard from './MemberCard.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import PosterHeroes from '@/components/PosterHeroes.vue'
 import Toast from '@/components/Toast.vue'
-import BottomNav from '@/components/BottomNav.vue'   
+import BottomNav from '@/components/BottomNav.vue'
 const icpNumber = import.meta.env.VITE_ICP_NUMBER || '待备案'
 const policeNumber = import.meta.env.VITE_POLICE_NUMBER || '办理中'
 // ---------- 类型定义 ----------
@@ -106,16 +95,16 @@ const searchKeyword = ref('')
 const isAdmin = computed(() => selfRole.value === 'ADMIN' || selfRole.value === 'MODERATOR')
 // ---------- 辅助函数 ----------
 async function fetchUserList(): Promise<string[]> {
-    const res = await fetch('/api/users/battletaglist')
-    if (!res.ok) throw new Error('获取用户列表失败')
-    const meRes = await fetch('/api/users/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-    })
-    const meData = await meRes.json()
-    selfTag.value = meData.battletag
-    selfRole.value = meData.role
-    const battletagList: string[] = await res.json()
-    return battletagList
+  const res = await fetch('/api/users/battletaglist')
+  if (!res.ok) throw new Error('获取用户列表失败')
+  const meRes = await fetch('/api/users/me', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  const meData = await meRes.json()
+  selfTag.value = meData.battletag
+  selfRole.value = meData.role
+  const battletagList: string[] = await res.json()
+  return battletagList
 }
 
 async function fetchUserData(username: string): Promise<UserData> {
@@ -300,9 +289,9 @@ const MAX_CONCURRENT = 10; // 并发数
 async function loadMembers() {
   const usernames = await fetchUserList();
   members.value = [];
-  
+
   const limit = pLimit(MAX_CONCURRENT);
-  const tasks = usernames.map(username => 
+  const tasks = usernames.map(username =>
     limit(async () => {
       const userData = await fetchUserData(username);
       if (!userData.username) return; // 无效用户跳过
@@ -439,7 +428,7 @@ async function refreshUserData(username: string) {
 
 function handleGlobalClick(e: MouseEvent) {
   const target = e.target as HTMLElement
-  if (target.closest('.image-viewer')) { 
+  if (target.closest('.image-viewer')) {
     return
   }
   if (!target.closest('.member-card')) {
@@ -470,7 +459,7 @@ function handleExpandStrength(username: string) {
   }
 }
 
-function handleExpandAdmin(username: string){
+function handleExpandAdmin(username: string) {
   const id = `admin-${username}`
   currentExpandId.value = currentExpandId.value === id ? '' : id
 }
@@ -508,27 +497,31 @@ onUnmounted(() => {
 
 <style>
 @import '../style/main.css';
+
 .poster-wrapper {
-    width: 100%;
-    /* 保持宽高比，防止塌陷 */
-    aspect-ratio: 2 / 1; 
-    margin: 0 auto;
-    position: relative;
-    border-radius: 15px;
-    overflow: hidden;
-    box-shadow: 0 0 30px var(--shadow-color);
-    margin-top: 0;
-    margin-bottom: 10px;
-    background: var(--bg-secondary); /* 使用主题背景色作为占位 */
-    padding: 0 10px;
-    z-index: 1;
+  width: 100%;
+  /* 保持宽高比，防止塌陷 */
+  aspect-ratio: 2 / 1;
+  margin: 0 auto;
+  position: relative;
+  border-radius: 15px;
+  overflow: hidden;
+  box-shadow: 0 0 30px var(--shadow-color);
+  margin-top: 0;
+  margin-bottom: 10px;
+  background: var(--bg-secondary);
+  /* 使用主题背景色作为占位 */
+  padding: 0 10px;
+  z-index: 1;
 }
+
 .members-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, auto));
   gap: 20px 10px;
   margin-top: 20px;
-  justify-content: center;  /* 添加此行：使列在容器中居中 */
+  justify-content: center;
+  /* 添加此行：使列在容器中居中 */
 }
 
 /* 搜索栏样式 */
@@ -537,6 +530,7 @@ onUnmounted(() => {
   margin: 20px auto;
   padding: 0 16px;
 }
+
 .search-input {
   width: 100%;
   padding: 10px 36px 10px 16px;
@@ -548,10 +542,12 @@ onUnmounted(() => {
   outline: none;
   transition: all 0.2s;
 }
+
 .search-input:focus {
   border-color: var(--input-focus);
-  box-shadow: 0 0 0 2px rgba(24,119,242,0.2);
+  box-shadow: 0 0 0 2px rgba(24, 119, 242, 0.2);
 }
+
 .search-clear {
   position: absolute;
   right: 28px;
@@ -564,6 +560,7 @@ onUnmounted(() => {
   font-size: 16px;
   opacity: 0.6;
 }
+
 .search-clear:hover {
   opacity: 1;
 }
@@ -574,6 +571,7 @@ onUnmounted(() => {
   align-items: center;
   margin-bottom: 20px;
 }
+
 .add-member-btn {
   background: var(--accent);
   border: none;
@@ -589,9 +587,33 @@ onUnmounted(() => {
   justify-content: center;
   transition: 0.2s;
 }
+
 .add-member-btn:hover {
   transform: scale(1.05);
   opacity: 0.9;
+}
+
+.privacy-link-inline {
+  color: var(--link-color);
+  text-decoration: none;
+  display: inline;
+  margin-left: 4px;
+  margin-right: 4px;
+}
+
+.privacy-link-inline:hover {
+  text-decoration: underline;
+}
+
+.footer-link{
+  text-align: center;
+  padding: 16px 12px 5px;
+  font-size: 12px;
+  color: var(--text-secondary, #6c757d);
+  background-color: var(--bg-primary, #fff);
+  border-top: 1px solid var(--border-color, #e9ecef);
+  margin-top: 24px;
+  margin-bottom: 0px
 }
 
 .footer-beian {
@@ -600,22 +622,23 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--text-secondary, #6c757d);
   background-color: var(--bg-primary, #fff);
-  border-top: 1px solid var(--border-color, #e9ecef);
-  margin-top: 24px;
+  margin-top: 0px;
   margin-bottom: 70px
 }
+
 .footer-beian a {
   color: inherit;
   text-decoration: none;
   transition: opacity 0.2s;
 }
+
 .footer-beian a:hover {
   opacity: 0.7;
   text-decoration: underline;
 }
+
 .footer-beian .sep {
   margin: 0 8px;
   color: var(--text-muted, #adb5bd);
 }
-
 </style>
