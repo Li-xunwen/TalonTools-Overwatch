@@ -2,47 +2,50 @@
     <div class="tutorial-page">
         <ThemeToggle class="theme-toggle" />
         <div class="privacy-container">
-            <router-link to="/">返回首页</router-link>
-            <h1 class="title">阿霜模组整合包导入教程</h1>
-            <div class="update-time">📅 整合包版本：v1.0 | 最后更新：2026年6月15日</div>
-
-            <!-- 1. 下载PCL2整合包 -->
-            <section class="section">
-                <h2>1. 下载阿霜模组整合包</h2>
-                <a href="https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/%E9%98%BF%E9%9C%9C%E6%95%B4%E5%90%88%E5%8C%85v1.0.zip"
-                    class="download-sample-btn" target="_blank" rel="noopener noreferrer">
-                    点击下载阿霜模组整合包
+            <!-- 新增顶部导航栏：左返回上一页，右返回首页 -->
+            <div class="top-nav-bar">
+                <a href="javascript:void(0)" @click="$router.back()" class="nav-link back-prev">
+                    返回上一页
                 </a>
-                <p>
-                    整合包内置了
-                    <a href="https://www.mcmod.cn/class/5009.html" target="_blank" rel="noopener noreferrer">
-                        遥远地平线
-                    </a>
-                    、小地图以及客户端优化模组。
-                </p>
-            </section>
+                <router-link to="/main" class="nav-link back-home">
+                    返回首页
+                </router-link>
+            </div>
+            <h1 class="title">TP(传送指令教程)</h1>
 
-            <!-- 2. 解压 -->
+
+            <!-- 1. 输入TPA指令 -->
             <section class="section">
-                <h2>2. 不用解压，直接拖入PCL</h2>
+                <h2>1. 输入TPA指令</h2>
                 <figure class="image-card">
-                    <img src="/public/minecraft/AShuangstep1.png" alt="解压步骤-复制压缩包" loading="lazy">
+                    <p><strong>当你想tp其他玩家的时候 输入 /trigger TPA 然后回车发送</strong></p>
+                    <img src="/public/minecraft/TPAstep1.png" alt="输入TPA指令" loading="lazy">
+                    <p>小提示：当系统出现符合你需要的指令时按TAB键自动补全</p>
                 </figure>
             </section>
 
-        
-            <!-- 5.享受 -->
+            <!-- 2. 点击你想tp的玩家 -->
             <section class="section">
-                <h2>3. 🎉 开始享受！</h2>
+                <h2>2. 点击你想tp的玩家</h2>
                 <figure class="image-card">
-                    <img src="/public/minecraft/enjoy.jpg" alt="游戏内截图" loading="lazy">
-                    <!-- <figcaption>点击“启动游戏”，输入服务器地址 <code>play.heizhao.com</code> 即可加入黑爪世界！</figcaption> -->
+                    <p><strong>出现玩家列表时候按T键变成鼠标点击你想tp的玩家</strong></p>
+                    <img src="/public/minecraft/TPAstep2.png" alt="点击你想tp的玩家" loading="lazy">
                 </figure>
             </section>
+
+            <!-- 被TP（传输）视角： -->
+            <section class="section">
+                <h2>被TP（传输）视角：</h2>
+                <figure class="image-card">
+                    <p><strong>被TP玩家只需要按T点击绿色字体即可同意TP</strong></p>
+                    <img src="/public/minecraft/TPAstep3.png" alt="点击你想tp的玩家" loading="lazy">
+                </figure>
+            </section>
+
         </div>
 
         <div class="back-link">
-            <router-link to="/">🏠 返回首页</router-link>
+            <a href="#" @click.prevent="scrollToTop">🔝 回到最顶上</a>
         </div>
         <div class="footer-beian">
             <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
@@ -61,6 +64,10 @@ import ThemeToggle from "@/components/ThemeToggle.vue";
 
 const icpNumber = import.meta.env.VITE_ICP_NUMBER || "沪ICP备备2026XXXX号";
 const policeNumber = import.meta.env.VITE_POLICE_NUMBER || "沪公网安备 3101150200XXXX号";
+const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
 </script>
 
 <style scoped>
@@ -144,7 +151,7 @@ const policeNumber = import.meta.env.VITE_POLICE_NUMBER || "沪公网安备 3101
 /* 图片卡片样式 */
 .image-card {
     background: var(--card-bg, #f9fafb);
-    border-radius: 20px;
+    border-radius: 5px;
     overflow: hidden;
     box-shadow: 0 6px 14px rgba(0, 0, 0, 0.05);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -160,8 +167,8 @@ const policeNumber = import.meta.env.VITE_POLICE_NUMBER || "沪公网安备 3101
     width: 100%;
     height: auto;
     display: block;
-    aspect-ratio: 16 / 9;
-    object-fit: cover;
+    object-fit: contain;
+    background: var(--bg-secondary, #f9fafb);
     border-bottom: 1px solid var(--border-color, #e9ecef);
 }
 
@@ -265,6 +272,48 @@ const policeNumber = import.meta.env.VITE_POLICE_NUMBER || "沪公网安备 3101
 .footer-beian .sep {
     margin: 0 8px;
     color: var(--text-muted, #adb5bd);
+}
+
+/* 顶部导航栏 */
+.top-nav-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--input-border, #e2e8f0);
+}
+
+.nav-link {
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: opacity 0.2s;
+    cursor: pointer;
+    background: none;
+    border: none;
+}
+
+.nav-link.back-prev {
+    color: var(--text-secondary, #6c757d);
+}
+
+.nav-link.back-home {
+    color: var(--button-bg, #42b983);
+}
+
+.nav-link:hover {
+    opacity: 0.7;
+    text-decoration: underline;
+}
+
+/* 深色模式适配 */
+html[data-theme="dark"] .nav-link.back-prev {
+    color: #adb5bd;
+}
+
+html[data-theme="dark"] .nav-link.back-home {
+    color: #5fcb97;
 }
 
 /* ========== 深色模式字体亮度增强 ========== */

@@ -51,9 +51,9 @@ const routes = [
     meta: { requiresAuth: false } 
   },
   {
-    path: '/AShuangmod',
-    name: 'AShuangmod',
-    component: () => import('../views/AShuangmod.vue'),
+    path: '/TPAteach',
+    name: 'TPAteach',
+    component: () => import('../views/TPAteach.vue'),
     meta: { requiresAuth: false } 
   },
   {

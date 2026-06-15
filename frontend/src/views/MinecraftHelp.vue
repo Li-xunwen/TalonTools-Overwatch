@@ -7,7 +7,7 @@
                 <a href="javascript:void(0)" @click="$router.back()" class="nav-link back-prev">
                     返回上一页
                 </a>
-                <router-link to="/" class="nav-link back-home">
+                <router-link to="/main" class="nav-link back-home">
                     返回首页
                 </router-link>
             </div>
@@ -29,6 +29,18 @@
                         🎯 点击下载PCL2
                     </a>
                 </div>
+                 <router-link to="/TPAteach" class="mc-btn secondary">
+                        TPA(传送指令教程)
+                    </router-link>
+                    、
+                    <a href="https://www.mcmod.cn/class/1483.html" target="_blank" rel="noopener noreferrer">
+                      世界地图模组百科
+                    </a>
+                    、
+                    <a href="https://www.mcmod.cn/class/4104.html" target="_blank" rel="noopener noreferrer">
+                      背包整理模组百科
+                    </a>
+                    
                 <!-- <a href="https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/%E9%98%BF%E9%9C%9C%E6%95%B4%E5%90%88%E5%8C%85v1.0.zip"
                     class="download-sample-btn" target="_blank" rel="noopener noreferrer">
                     (可选)点击下载阿霜模组整合包
