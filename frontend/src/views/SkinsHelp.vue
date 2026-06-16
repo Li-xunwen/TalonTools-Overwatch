@@ -11,94 +11,43 @@
                     返回首页
                 </router-link>
             </div>
-            <h1 class="title">⛏️ Minecraft黑爪服安装教程</h1>
-            <div class="update-time">📅 整合包版本：v1.0.2 | 最后更新：2026年6月15日</div>
+            <h1 class="title">CustomSkinLoader更换皮肤教程</h1>
+            <!-- <div class="update-time">📅 整合包版本：v1.0.2 | 最后更新：2026年6月15日</div> -->
 
             <!-- 0. 教程简介（改为 Minecraft 相关） -->
             <section class="section">
-                <h2>🎮 欢迎来到黑爪我的世界服务器</h2>
-                <p>本教程将引导你通过 <strong>PCL2 启动器</strong> 一键安装黑爪专属整合包，快速加入我们的生存服务器。</p>
+                <h2>正版玩家不用看此教程，按正版方法正常更换就行</h2>
+                <!-- <p>本教程将引导你通过 <strong>PCL2 启动器</strong> 一键安装黑爪专属整合包，快速加入我们的生存服务器。</p> -->
             </section>
 
             <!-- 1. 下载PCL2整合包 -->
             <section class="section">
-                <h2>1. 📥下载PCL2整合包</h2>
+                <h2>1. 注册Littleskin</h2>
                 <div class="download-link-wrapper">
-                    <a href="https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/node%E6%9C%8D%E5%AE%A2%E6%88%B7%E7%AB%AF.v1.5.zip"
-                        class="download-sample-btn" target="_blank" rel="noopener noreferrer">
-                        🎯 点击下载PCL2
+                    <a href="https://littleskin.cn" class="download-sample-btn" target="_blank"
+                        rel="noopener noreferrer">
+                        点击跳转到 littleskin.cn
                     </a>
                 </div>
-                    <router-link to="/TPAteach" class="mc-btn secondary">
-                        TPA(传送指令教程)
-                    </router-link>
-                    、
-                    <router-link to="/SkinsHelp" class="mc-btn secondary">
-                    CustomSkinLoader(更换皮肤教程)
-                    </router-link>
-                    、
-                    <a href="https://www.mcmod.cn/class/1483.html" target="_blank" rel="noopener noreferrer">
-                      世界地图模组百科
-                    </a>
-                    、
-                    <a href="https://www.mcmod.cn/class/4104.html" target="_blank" rel="noopener noreferrer">
-                      背包整理模组百科
-                    </a>
-                    
-                <!-- <a href="https://talon-public-1258609989.cos.ap-chongqing.myqcloud.com/%E9%98%BF%E9%9C%9C%E6%95%B4%E5%90%88%E5%8C%85v1.0.zip"
-                    class="download-sample-btn" target="_blank" rel="noopener noreferrer">
-                    (可选)点击下载阿霜模组整合包
-                </a>
-                <p>
-                    阿霜模组整合包内置了
-                    <a href="https://www.mcmod.cn/class/5009.html" target="_blank" rel="noopener noreferrer">
-                        遥远地平线
-                    </a>
-                    、小地图以及客户端优化模组。
-                    <router-link to="/AShuangmod" class="mc-btn secondary">
-                        导入教程
-                    </router-link>
-                </p> -->
             </section>
 
-            <!-- 2. 解压 -->
+            <!-- 2. 创建角色 -->
             <section class="section">
-                <h2>2. 📂 解压到需要安装的目录</h2>
+                <h2>2. 创建角色</h2>
                 <figure class="image-card">
-                    <p>a.例如下图，将整合包移动到 D 盘 Game 文件夹内。<strong>右键选择“全部解压缩”</strong></p>
-                    <img src="/public/minecraft/step2.png" alt="解压步骤-复制压缩包" loading="lazy">
-                </figure>
-                <p class="separator">——————————————</p>
-                <figure class="image-card">
-                    <p><strong>b. 直接点击提取</strong></p>
-                    <img src="/public/minecraft/step3.png" alt="解压步骤-解压压缩包" loading="lazy">
+                    <p>a.<strong>创建一个跟你的游戏名称一致的角色名</strong></p>
+                    <img src="/public/minecraft/SkinsStep1.png" alt="创建一个跟你的游戏名称一致的角色名" loading="lazy">
+                    <figcaption>如果角色名已被占用，请你先在游戏将你的装备放箱子里，换ID重开吧</figcaption>
                 </figure>
             </section>
 
-            <!-- 3.运行 -->
+            <!-- 2. 穿上皮肤 -->
             <section class="section">
-                <h2>3. 🚀 运行 PCL2 启动器</h2>
+                <h2>2. 穿上皮肤</h2>
                 <figure class="image-card">
-                    <img src="/public/minecraft/step4.png" alt="双击启动器图标" loading="lazy">
-                    <figcaption>打开解压后的文件夹，双击 <code>Plain Craft Launcher 2.exe</code> 即可运行。</figcaption>
-                </figure>
-                <p class="separator">————————可选操作————————</p>
-                <figure class="image-card">
-                    <p><strong>添加桌面快捷方式：</strong>右键启动器 → “显示更多选项” → “发送到” → “桌面快捷方式”。</p>
-                    <img src="/public/minecraft/step5.png" alt="创建快捷方式-右键菜单" loading="lazy">
-                </figure>
-                <figure class="image-card">
-                    <p>选择“桌面快捷方式”即可。</p>
-                    <img src="/public/minecraft/step6.png" alt="发送到桌面快捷方式" loading="lazy">
-                </figure>
-            </section>
-
-            <!-- 4.改ID -->
-            <section class="section">
-                <h2>4. ✏️ 修改你的游戏ID</h2>
-                <figure class="image-card">
-                    <img src="/public/minecraft/step7.png" alt="修改ID界面" loading="lazy">
-                    <figcaption>启动器内点击“设置” → “游戏外昵称”，输入你心仪的ID（仅支持英文、数字、下划线）。</figcaption>
+                    <p>a.<strong>在皮肤库里找到喜欢的皮肤添加到衣柜，然后在衣柜里穿上吧</strong></p>
+                    <img src="/public/minecraft/SkinsStep2.png" alt="创建一个跟你的游戏名称一致的角色名" loading="lazy">
+                    <!-- <figcaption>如果角色名已被占用，请你先在游戏将你的装备放箱子里，换ID重开吧</figcaption> -->
                 </figure>
             </section>
 
@@ -106,7 +55,7 @@
             <section class="section">
                 <h2>5. 🎉 开始享受！</h2>
                 <figure class="image-card">
-                    <img src="/public/minecraft/enjoy.jpg" alt="游戏内截图" loading="lazy">
+                    <img src="/public/minecraft/enjoy2.png" alt="游戏内截图" loading="lazy">
                     <!-- <figcaption>点击“启动游戏”，输入服务器地址 <code>play.heizhao.com</code> 即可加入黑爪世界！</figcaption> -->
                 </figure>
             </section>

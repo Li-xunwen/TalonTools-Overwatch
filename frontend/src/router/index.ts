@@ -57,6 +57,12 @@ const routes = [
     meta: { requiresAuth: false } 
   },
   {
+    path: '/SkinsHelp',
+    name: 'SkinsHelp',
+    component: () => import('../views/SkinsHelp.vue'),
+    meta: { requiresAuth: false } 
+  },
+  {
     path: '/Thanks',
     name: 'Thanks',
     component: () => import('../views/Thanks.vue'),
