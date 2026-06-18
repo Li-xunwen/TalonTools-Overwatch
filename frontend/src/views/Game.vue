@@ -17,6 +17,26 @@
              黑爪 Kook 语音频道 
             </a>
           </div>
+
+          <!-- 服务器状态展示 -->
+          <div class="server-status" v-if="serverStatus">
+            <div class="status-header">
+              <span class="status-dot" :class="serverStatus.online !== undefined ? (serverStatus.online ? 'online' : 'offline') : 'unknown'"></span>
+              <span class="status-label">服务器状态</span>
+              <span class="status-refresh" @click="fetchServerStatus">🔄</span>
+            </div>
+            <div v-if="serverStatus.error" class="status-error">{{ serverStatus.error }}</div>
+            <div v-else>
+              <div class="status-players">在线 {{ serverStatus.online }} / {{ serverStatus.max }} 人</div>
+              <div class="status-motd">{{ serverStatus.motd }}</div>
+              <div class="status-latency">延迟 {{ serverStatus.latency }}ms</div>
+              <div v-if="serverStatus.players && serverStatus.players.length" class="status-player-list">
+                <span v-for="p in serverStatus.players" :key="p.id" class="player-tag">{{ p.name }}</span>
+              </div>
+              <div v-else class="status-empty">暂无玩家在线</div>
+            </div>
+          </div>
+          <div v-else class="server-status loading">⏳ 加载服务器状态...</div>
         </div>
       </div>
 
@@ -45,15 +65,53 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import BottomNav from '@/components/BottomNav.vue'
+
 const icpNumber = import.meta.env.VITE_ICP_NUMBER || "待备案";
 const policeNumber = import.meta.env.VITE_POLICE_NUMBER || "办理中";
-// 演示直接下载跳转（根据题目要求，仍导向 /MinecraftHelp）
-const handleDirectDownload = () => {
-  // 实际生产环境可改为真实的下载链接，按题目要求跳转到帮助页
-  window.location.href = '/MinecraftHelp'
+
+// 服务器状态数据
+const serverStatus = ref<any>(null)
+let refreshTimer: number | null = null
+
+// 获取服务器状态（携带 token）
+async function fetchServerStatus() {
+  try {
+    const token = localStorage.getItem('authToken')
+    const res = await fetch('/api/minecraft/status', {
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : ''
+      }
+    })
+
+    if (res.status === 401) {
+      serverStatus.value = { error: '请先登录查看服务器状态' }
+      return
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: '请求失败' }))
+      serverStatus.value = { error: err.error || '请求失败' }
+      return
+    }
+
+    const data = await res.json()
+    serverStatus.value = data // 包含 online, max, motd, latency, players
+  } catch (e) {
+    serverStatus.value = { error: '网络错误，请稍后重试' }
+  }
 }
+
+onMounted(() => {
+  fetchServerStatus()
+  refreshTimer = window.setInterval(fetchServerStatus, 30000) // 每30秒刷新
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+})
 </script>
 
 <style scoped>
@@ -209,5 +267,119 @@ const handleDirectDownload = () => {
   font-size: 1.8rem;
   margin-bottom: 12px;
   color: var(--text-primary);
+}
+
+/* ========== 服务器状态样式 ========== */
+.server-status {
+  margin: 24px auto 0;
+  max-width: 500px;
+  background: var(--bg-secondary, #f1f5f9);
+  border-radius: 24px;
+  padding: 16px 20px;
+  text-align: left;
+  box-shadow: inset 0 0 0 1px var(--border-color, #e2e8f0);
+}
+
+.server-status.loading {
+  text-align: center;
+  opacity: 0.7;
+}
+
+.status-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: #2ecc71;
+  box-shadow: 0 0 6px #2ecc71;
+}
+
+.status-dot.offline {
+  background: #e74c3c;
+}
+
+.status-dot.unknown {
+  background: #f39c12;
+}
+
+.status-label {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.status-refresh {
+  margin-left: auto;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: 0.2s;
+  font-size: 1.1rem;
+}
+
+.status-refresh:hover {
+  opacity: 1;
+  transform: rotate(60deg);
+}
+
+.status-error {
+  color: #e74c3c;
+  padding: 6px 0;
+}
+
+.status-players {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+.status-motd {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  background: var(--card-bg);
+  padding: 6px 12px;
+  border-radius: 20px;
+  display: inline-block;
+  margin: 6px 0;
+}
+
+.status-latency {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 4px 0;
+}
+
+.status-player-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.player-tag {
+  background: var(--accent, #42b983);
+  color: white;
+  padding: 2px 14px;
+  border-radius: 30px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.status-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 6px;
 }
 </style>

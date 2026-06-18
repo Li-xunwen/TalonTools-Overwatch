@@ -30,6 +30,17 @@
   }
 }
 
+
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --text-primary: #333333;
+  --card-bg: #eeeeee;
+  --accent: #555555;   
+  --shadow-color: rgba(0, 0, 0, 0.1);
+}
+
+
 @media (prefers-color-scheme: dark) {
   :root {
     --text: #9ca3af;
@@ -50,10 +61,33 @@
   }
 }
 
-body {
-  margin: 0;
+/* ========== 第一组深色变量（通过 data-theme 触发，优先于系统深色） ========== */
+[data-theme="dark"], .dark-theme {
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --text-primary: #ffffff;
+  --card-bg: #2a2a2a;
+  --accent: #bbbbbb;   /* 覆盖第二组的 --accent */
+  --shadow-color: rgba(0, 0, 0, 0.5);
 }
 
+/* ========== 第一组全局重置 ========== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ========== 合并后的 body ========== */
+body {
+  margin: 0; /* 第二组原有 */
+  font-family: 'Microsoft YaHei', Arial, sans-serif; /* 第一组字体，覆盖 :root 的 font-family */
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background 0.3s, color 0.3s;
+}
+
+/* ========== 以下为第二组原有其他样式（未改动） ========== */
 h1,
 h2 {
   font-family: var(--heading);
@@ -159,16 +193,11 @@ code {
 #app {
   width: 100%;
   max-width: none;
-
   min-height: 100vh;
-
   margin: 0;
-
   display: flex;
   flex-direction: column;
-
   text-align: initial;
-
   border: none;
 }
 

@@ -113,6 +113,11 @@
                         <div class="card-desc">￥86</div>
                     </div>
                     <div class="thanks-card">
+                        <div class="card-name">宋哈娜#51473</div>
+                        <div class="card-role">金牌赞助</div>
+                        <div class="card-desc">￥66.66</div>
+                    </div>
+                    <div class="thanks-card">
                         <div class="card-name">血腥灬玛丽#5847</div>
                         <div class="card-role">金牌赞助</div>
                         <div class="card-desc">￥50</div>
@@ -126,11 +131,6 @@
                         <div class="card-name">雨姐无敌大汉脚#5965</div>
                         <div class="card-role">金牌赞助</div>
                         <div class="card-desc">￥27</div>
-                    </div>
-                    <div class="thanks-card">
-                        <div class="card-name">宋哈娜#51473</div>
-                        <div class="card-role">银牌赞助</div>
-                        <div class="card-desc">￥16.66</div>
                     </div>
                     <div class="thanks-card">
                         <div class="card-name">帅帅的牛皮蛋#5349</div>

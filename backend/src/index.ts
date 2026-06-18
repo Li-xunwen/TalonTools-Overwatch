@@ -13,7 +13,7 @@ import heroesRouter from './routes/heroes';
 import dashenProfileRouter from './routes/dashenProfile';
 import adminRouter from './routes/admin';
 import bindPhone from './routes/bindPhone';
-
+import minecraftRouter from './routes/minecraft';
 dotenv.config();
 
 const { PORT, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET } = process.env;
@@ -106,6 +106,7 @@ app.get('/api/heroeslist', async (req, res) => {
     }
 });
 
+app.use('/api/minecraft', minecraftRouter);
 app.use('/api/bind-phone', bindPhone);
 app.use('/api', userRouter);          // 用户相关
 app.use('/api', likeRouter);          // 点赞
