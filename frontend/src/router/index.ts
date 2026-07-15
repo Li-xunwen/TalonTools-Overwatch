@@ -42,33 +42,39 @@ const routes = [
     path: '/PrivacyPolicy',
     name: 'PrivacyPolicy',
     component: () => import('../views/PrivacyPolicy.vue'),
-    meta: { requiresAuth: false } 
+    meta: { requiresAuth: false }
   },
   {
     path: '/MinecraftHelp',
     name: 'MinecraftHelp',
     component: () => import('../views/MinecraftHelp.vue'),
-    meta: { requiresAuth: false } 
+    meta: { requiresAuth: false }
   },
   {
     path: '/TPAteach',
     name: 'TPAteach',
     component: () => import('../views/TPAteach.vue'),
-    meta: { requiresAuth: false } 
+    meta: { requiresAuth: false }
   },
   {
     path: '/SkinsHelp',
     name: 'SkinsHelp',
     component: () => import('../views/SkinsHelp.vue'),
-    meta: { requiresAuth: false } 
+    meta: { requiresAuth: false }
   },
   {
     path: '/Thanks',
     name: 'Thanks',
     component: () => import('../views/Thanks.vue'),
-    meta: { requiresAuth: false } 
+    meta: { requiresAuth: false }
   },
-
+  // ====== 文档页面系统（数据库驱动） ======
+  {
+    path: '/pages/:id',
+    name: 'Pages',
+    component: () => import('../views/PagesView.vue'),
+    meta: { requiresAuth: false }
+  },
 ]
 
 // 先创建 router 实例

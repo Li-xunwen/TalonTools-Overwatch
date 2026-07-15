@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import path from 'path';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { initPool, userEventLogger, pool } from './utils/db';
@@ -14,6 +15,7 @@ import dashenProfileRouter from './routes/dashenProfile';
 import adminRouter from './routes/admin';
 import bindPhone from './routes/bindPhone';
 import minecraftRouter from './routes/minecraft';
+import pagesRouter from './routes/pages';
 dotenv.config();
 
 const { PORT, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET } = process.env;
@@ -42,6 +44,9 @@ initPool({
 app.use(cors());
 app.use(express.json());
 app.set('trust proxy', true);
+
+// 公开静态文件：Markdown 中的 /resource/users/{id}/xxx.png 等用户上传文件
+app.use('/users', express.static(path.join(__dirname, '../public/users')));
 
 // 健康检查（无需认证）
 app.get('/api/health', (req, res) => {
@@ -109,8 +114,9 @@ app.get('/api/heroeslist', async (req, res) => {
 app.use('/api/minecraft', minecraftRouter);
 app.use('/api/bind-phone', bindPhone);
 app.use('/api', userRouter);          // 用户相关
-app.use('/api', likeRouter);          // 点赞
-app.use('/api', evaluationRouter);     // 评价
+app.use('/api', pagesRouter);          // 文档页面（放在 like/evaluation 之前，避免被全局 auth 拦截）
+app.use('/api', likeRouter);          // 点赞（全局 auth，拦截整个 /api/**）
+app.use('/api', evaluationRouter);     // 评价（同上，全局 auth）
 app.use('/api/user', rankRouter);      // 用户段位更新
 app.use('/api/user', heroesRouter);    // 用户英雄更新
 app.use('/api/v2', dashenProfileRouter);

@@ -42,23 +42,25 @@ export default defineConfig({
       '/api': {
         target: apiProxyTarget,
         changeOrigin: true,
-        // 修正 configure 函数的写法
         configure: (proxy, _options) => {
           proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // 从原始请求中取出真实 IP 头，传递给后端
             if (req.headers['x-real-ip']) {
               proxyReq.setHeader('X-Real-IP', req.headers['x-real-ip'])
             }
-            // 转发 X-Forwarded-For
             if (req.headers['x-forwarded-for']) {
               proxyReq.setHeader('X-Forwarded-For', req.headers['x-forwarded-for'])
             }
-            // 转发 X-Forwarded-Proto
             if (req.headers['x-forwarded-proto']) {
               proxyReq.setHeader('X-Forwarded-Proto', req.headers['x-forwarded-proto'])
             }
           })
         }
+      },
+      // Markdown 中的 /resource/users/{author_id}/xxx.png → 重写为 /users/xxx → 代理到后端
+      '/resource': {
+        target: apiProxyTarget,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/resource/, ''),
       }
     }
   }
