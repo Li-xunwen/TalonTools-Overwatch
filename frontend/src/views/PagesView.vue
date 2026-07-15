@@ -34,7 +34,93 @@
                     <span :class="['status-badge', 'status-' + pageData.status]">{{ statusLabel(pageData.status) }}</span>
                 </template>
             </div>
+            <!-- 点赞/评论按钮栏 -->
+            <div class="page-interaction-bar">
+                <button class="interact-btn" @click="togglePageLike">
+                    <span class="like-icon">{{ pageLiked ? '👍' : '👍' }}</span>
+                    <span class="interact-label">赞</span>
+                    <span class="interact-count">{{ pageLikeCount }}</span>
+                </button>
+                <button class="interact-btn" @click="toggleLikeList">
+                    <span class="interact-label">点赞列表</span>
+                </button>
+                <button class="interact-btn" @click="scrollToComments">
+                    <span>💬</span>
+                    <span class="interact-label">评论</span>
+                </button>
+            </div>
             <div class="markdown-body" v-html="renderedContent"></div>
+
+            <!-- 评论区 -->
+            <div class="comments-section" ref="commentsRef">
+                <h2 class="comments-title">评论</h2>
+
+                <!-- 评论输入框 -->
+                <div v-if="isLoggedIn" class="comment-input-area">
+                    <textarea v-model="newComment" class="comment-textarea" placeholder="写评论..." rows="3"></textarea>
+                    <button class="comment-submit-btn" @click="submitComment" :disabled="!newComment.trim()">发送</button>
+                </div>
+                <div v-else class="comment-login-hint">登录后即可发表评论</div>
+
+                <!-- 评论列表 -->
+                <div v-if="comments.length === 0 && commentsLoaded" class="comment-empty">暂无评论</div>
+                <div v-for="comment in comments" :key="comment.id" class="comment-item">
+                    <div class="comment-header">
+                        <img :src="getAvatarByName(comment.user_name)" class="comment-avatar" @error="handleAvatarError" alt="" />
+                        <span class="comment-author">{{ comment.user_name }}</span>
+                        <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
+                    </div>
+                    <div class="comment-body">{{ comment.content }}</div>
+                    <div class="comment-actions">
+                        <button class="comment-action-btn" @click="toggleCommentLike(comment)" :class="{ liked: comment.is_liked }">
+                            {{ comment.is_liked ? '👍' : '👍' }} {{ comment.like_count }}
+                        </button>
+                        <button class="comment-action-btn" @click="startReply(comment, null)">回复</button>
+                    </div>
+
+                    <!-- 回复列表 -->
+                    <div v-if="comment.replies.length > 0" class="replies-wrap">
+                        <div v-for="reply in comment.replies" :key="reply.id" class="reply-item">
+                            <div class="comment-header">
+                                <img :src="getAvatarByName(reply.user_name)" class="comment-avatar" @error="handleAvatarError" alt="" />
+                                <span class="comment-author">{{ reply.user_name }}</span>
+                                <span class="comment-time">{{ formatDate(reply.created_at) }}</span>
+                            </div>
+                            <div class="comment-body">
+                                <span class="reply-to-label" v-if="reply.reply_to_user_name">回复@{{ reply.reply_to_user_name }} </span>
+                                {{ reply.content }}
+                            </div>
+                            <div class="comment-actions">
+                                <button class="comment-action-btn" @click="toggleReplyLike(reply)" :class="{ liked: reply.is_liked }">
+                                    {{ reply.is_liked ? '👍' : '👍' }} {{ reply.like_count }}
+                                </button>
+                                <button class="comment-action-btn" @click="startReply(comment, reply)">回复</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 回复输入框 -->
+                    <div v-if="replyingToId === comment.id" class="reply-input-area">
+                        <textarea v-model="replyContent" class="comment-textarea" :placeholder="'回复 @' + (replyingToName || '')" rows="2"></textarea>
+                        <div class="reply-input-actions">
+                            <button class="comment-submit-btn" @click="submitReply(comment)" :disabled="!replyContent.trim()">发送</button>
+                            <button class="comment-cancel-btn" @click="cancelReply">取消</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 赞列表浮层 -->
+            <div v-if="showLikeList" class="like-list-overlay" @click="showLikeList = false">
+                <div class="like-list-panel" @click.stop>
+                    <h3>点赞列表</h3>
+                    <div v-if="likeUsers.length === 0" class="like-list-empty">暂无点赞</div>
+                    <div v-for="u in likeUsers" :key="u.user_id" class="like-user-item">
+                        <img :src="getAvatarByName(u.user_name)" class="like-user-avatar" @error="handleAvatarError" alt="" />
+                        <span>{{ u.user_name }}</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- 编辑模式 -->
@@ -103,7 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -146,6 +232,35 @@ const editSections = ref<PageSection[]>([]);
 const editingSectionIdx = ref(-1);
 const saving = ref(false);
 
+// ===== 点赞 / 评论 状态 =====
+const pageLikeCount = ref(0);
+const pageLiked = ref(false);
+const likeUsers = ref<{ user_id: number; user_name: string }[]>([]);
+const showLikeList = ref(false);
+const comments = ref<PageComment[]>([]);
+const commentsLoaded = ref(false);
+const newComment = ref('');
+const replyContent = ref('');
+const replyingToId = ref<number | null>(null);
+const replyingToName = ref('');
+const commentsRef = ref<HTMLElement | null>(null);
+
+interface LikeUser {
+    user_id: number;
+    user_name: string;
+}
+interface CommentReply {
+    id: number; parent_id: number; root_id: number;
+    user_id: number; user_name: string;
+    content: string;
+    reply_to_user_id: number | null; reply_to_user_name: string | null;
+    reply_to_content: string | null;
+    like_count: number; is_liked: boolean; created_at: string;
+}
+interface PageComment extends CommentReply {
+    replies: CommentReply[];
+}
+
 const icpNumber = import.meta.env.VITE_ICP_NUMBER || '沪ICP备备2026XXXX号';
 const policeNumber = import.meta.env.VITE_POLICE_NUMBER || '沪公网安备 3101150200XXXX号';
 
@@ -171,11 +286,14 @@ const formatDate = (dateStr: string): string => {
 };
 
 const getAvatarUrl = (name: string) => name ? `/api/users/${encodeURIComponent(name)}/avatar` : '';
+function getAvatarByName(name: string) { return getAvatarUrl(name); }
 function handleAvatarError(e: Event) {
     const img = e.target as HTMLImageElement;
     img.src = '/res/imge/default-avatar.png';
     img.onerror = null;
 }
+
+const isLoggedIn = computed(() => !!localStorage.getItem('authToken'));
 
 const statusLabel = (s: number): string => ({ 0: '已删除', 1: '审核中', 2: '已发布', 3: '完全开放', 4: '草稿' })[s] || '未知';
 
@@ -213,6 +331,9 @@ async function fetchPage() {
                 isAuthor.value = p.userId === pageData.value.author_id || p.role === 'ADMIN';
             }
         } catch {}
+        // 页面加载成功后获取点赞和评论数据
+        fetchLikes();
+        fetchComments();
     } catch { error.value = '网络错误,请检查网络连接后重试'; }
     finally { loading.value = false; }
 }
@@ -350,6 +471,135 @@ async function saveAsDraft() {
 }
 
 function confirmDiscard() { if (!confirm('存在未提交的修改')) return; clearCache(); isEditing.value = false; editingSectionIdx.value = -1; }
+
+// ========== 点赞 / 评论 API 调用 ==========
+
+async function fetchLikes() {
+    if (!pageData.value) return;
+    try {
+        const res = await authFetch(`/api/pages/${pageData.value.id}/likes`);
+        if (res.ok) {
+            const data = await res.json();
+            pageLikeCount.value = data.count;
+            pageLiked.value = data.is_liked;
+            likeUsers.value = data.likes || [];
+        }
+    } catch {}
+}
+
+async function togglePageLike() {
+    if (!pageData.value) return;
+    try {
+        if (pageLiked.value) {
+            const res = await authFetch(`/api/pages/${pageData.value.id}/unlike`, { method: 'POST' });
+            if (res.ok) { const d = await res.json(); pageLikeCount.value = d.count; pageLiked.value = false; }
+        } else {
+            const res = await authFetch(`/api/pages/${pageData.value.id}/like`, { method: 'POST' });
+            if (res.ok) { const d = await res.json(); pageLikeCount.value = d.count; pageLiked.value = true; }
+        }
+        fetchLikes();
+    } catch {}
+}
+
+function toggleLikeList() { showLikeList.value = !showLikeList.value; }
+
+function scrollToComments() {
+    if (commentsRef.value) {
+        commentsRef.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+async function fetchComments() {
+    if (!pageData.value) return;
+    try {
+        const res = await authFetch(`/api/pages/${pageData.value.id}/comments`);
+        if (res.ok) {
+            const data = await res.json();
+            comments.value = data.comments || [];
+        }
+        commentsLoaded.value = true;
+    } catch { commentsLoaded.value = true; }
+}
+
+async function submitComment() {
+    if (!pageData.value || !newComment.value.trim()) return;
+    try {
+        const res = await authFetch(`/api/pages/${pageData.value.id}/comments`, {
+            method: 'POST',
+            body: JSON.stringify({ content: newComment.value.trim() }),
+        });
+        if (res.ok) {
+            newComment.value = '';
+            fetchComments();
+        } else {
+            const e = await res.json();
+            alert(e.error || '评论失败');
+        }
+    } catch { alert('网络错误'); }
+}
+
+function startReply(comment: PageComment, reply: CommentReply | null) {
+    if (replyingToId.value === comment.id) { cancelReply(); return; }
+    replyingToId.value = comment.id;
+    replyingToName.value = reply ? reply.user_name : comment.user_name;
+    replyContent.value = '';
+    nextTick(() => {
+        document.querySelector('.reply-input-area textarea')?.focus();
+    });
+}
+
+function cancelReply() {
+    replyingToId.value = null;
+    replyingToName.value = '';
+    replyContent.value = '';
+}
+
+async function submitReply(comment: PageComment) {
+    if (!replyContent.value.trim() || !replyingToId.value) return;
+    // 查找被回复 user_id
+    let replyToUserId = comment.user_id;
+    if (replyingToName.value && replyingToName.value !== comment.user_name) {
+        const found = comment.replies.find(r => r.user_name === replyingToName.value);
+        if (found) replyToUserId = found.user_id;
+    }
+    try {
+        const res = await authFetch(`/api/pages/comments/${comment.id}/reply`, {
+            method: 'POST',
+            body: JSON.stringify({ content: replyContent.value.trim(), reply_to_user_id: replyToUserId }),
+        });
+        if (res.ok) {
+            cancelReply();
+            fetchComments();
+        } else {
+            const e = await res.json();
+            alert(e.error || '回复失败');
+        }
+    } catch { alert('网络错误'); }
+}
+
+async function toggleCommentLike(comment: PageComment) {
+    try {
+        if (comment.is_liked) {
+            const res = await authFetch(`/api/pages/comments/${comment.id}/unlike`, { method: 'POST' });
+            if (res.ok) { const d = await res.json(); comment.like_count = d.count; comment.is_liked = false; }
+        } else {
+            const res = await authFetch(`/api/pages/comments/${comment.id}/like`, { method: 'POST' });
+            if (res.ok) { const d = await res.json(); comment.like_count = d.count; comment.is_liked = true; }
+        }
+    } catch {}
+}
+
+async function toggleReplyLike(reply: CommentReply) {
+    try {
+        if (reply.is_liked) {
+            const res = await authFetch(`/api/pages/comments/${reply.id}/unlike`, { method: 'POST' });
+            if (res.ok) { const d = await res.json(); reply.like_count = d.count; reply.is_liked = false; }
+        } else {
+            const res = await authFetch(`/api/pages/comments/${reply.id}/like`, { method: 'POST' });
+            if (res.ok) { const d = await res.json(); reply.like_count = d.count; reply.is_liked = true; }
+        }
+    } catch {}
+}
 
 onMounted(() => { fetchPage(); });
 </script>
@@ -532,6 +782,268 @@ html[data-theme="dark"] .status-4 { background: #1e1b4b !important; color: #a5b4
     .act-btn { font-size: 12px; padding: 5px 12px; }
     .meta-info { display: flex; flex-direction: column; align-items: center; gap: 4px; }
     .meta-sep { display: none; }
+    .page-interaction-bar { gap: 6px; flex-wrap: wrap; }
+    .interact-btn { font-size: 13px; padding: 6px 12px; }
+    .comments-section { padding: 0; }
+    .comment-item { padding: 14px; }
+}
+
+/* ========== 点赞 / 评论 样式 ========== */
+
+/* 按钮栏 */
+.page-interaction-bar {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+    padding: 14px 0 18px;
+    border-bottom: 1px solid var(--input-border, #e2e8f0);
+    margin-bottom: 18px;
+}
+.interact-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 7px 16px;
+    border: 1px solid var(--input-border, #e2e8f0);
+    border-radius: 48px;
+    background: var(--card-bg, #fff);
+    color: var(--text-primary, #1f2d3d);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all .2s;
+}
+.interact-btn:hover {
+    border-color: var(--button-bg, #42b983);
+    color: var(--button-bg, #42b983);
+    background: rgba(66,185,131,.06);
+}
+.interact-count {
+    font-weight: 600;
+    min-width: 12px;
+}
+
+/* 评论区 */
+.comments-section {
+    margin-top: 28px;
+    padding-top: 8px;
+    border-top: 2px solid var(--input-border, #e2e8f0);
+}
+.comments-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary, #1f2d3d);
+    margin-bottom: 18px;
+}
+.comment-input-area {
+    margin-bottom: 20px;
+}
+.comment-textarea {
+    width: 100%;
+    border: 1px solid var(--input-border, #e2e8f0);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--card-bg, #fff);
+    color: var(--text-primary, #1f2d3d);
+    resize: vertical;
+    outline: none;
+    transition: border-color .2s;
+    box-sizing: border-box;
+}
+.comment-textarea:focus {
+    border-color: var(--button-bg, #42b983);
+}
+.comment-submit-btn {
+    margin-top: 8px;
+    padding: 6px 20px;
+    border: none;
+    border-radius: 48px;
+    background: var(--button-bg, #42b983);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+}
+.comment-submit-btn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+.comment-submit-btn:hover:not(:disabled) {
+    background: #2c6e4f;
+}
+.comment-login-hint {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-muted, #adb5bd);
+    font-size: 14px;
+}
+.comment-empty {
+    text-align: center;
+    padding: 30px 0;
+    color: var(--text-muted, #adb5bd);
+    font-size: 14px;
+}
+
+/* 评论项 */
+.comment-item {
+    padding: 18px 20px;
+    border: 1px solid var(--input-border, #e2e8f0);
+    border-radius: 14px;
+    margin-bottom: 14px;
+    background: var(--bg-secondary, #f8f9fa);
+}
+.comment-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.comment-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.comment-author {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary, #1f2d3d);
+}
+.comment-time {
+    font-size: 12px;
+    color: var(--text-muted, #adb5bd);
+    margin-left: auto;
+}
+.comment-body {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-primary, #1f2d3d);
+    margin-bottom: 8px;
+    word-break: break-word;
+}
+.reply-to-label {
+    color: var(--button-bg, #42b983);
+    font-weight: 500;
+}
+.comment-actions {
+    display: flex;
+    gap: 12px;
+}
+.comment-action-btn {
+    background: none;
+    border: none;
+    font-size: 13px;
+    color: var(--text-secondary, #6c757d);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 6px;
+    transition: all .15s;
+}
+.comment-action-btn:hover {
+    color: var(--button-bg, #42b983);
+    background: rgba(66,185,131,.08);
+}
+.comment-action-btn.liked {
+    color: var(--button-bg, #42b983);
+}
+
+/* 回复列表 */
+.replies-wrap {
+    margin-top: 10px;
+    margin-left: 12px;
+    padding-left: 12px;
+    border-left: 2px solid var(--input-border, #e2e8f0);
+}
+.reply-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--input-border, #e2e8f0);
+}
+.reply-item:last-child {
+    border-bottom: none;
+}
+
+/* 回复输入框 */
+.reply-input-area {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--input-border, #e2e8f0);
+}
+.reply-input-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 6px;
+}
+.comment-cancel-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--input-border, #e2e8f0);
+    border-radius: 48px;
+    background: transparent;
+    color: var(--text-secondary, #6c757d);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s;
+}
+.comment-cancel-btn:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+/* 赞列表浮层 */
+.like-list-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.like-list-panel {
+    background: var(--card-bg, #fff);
+    border-radius: 16px;
+    padding: 24px 28px;
+    max-width: 360px;
+    width: 90%;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+.like-list-panel h3 {
+    font-size: 18px;
+    margin-bottom: 14px;
+    text-align: center;
+    color: var(--text-primary, #1f2d3d);
+}
+.like-list-empty {
+    text-align: center;
+    color: var(--text-muted, #adb5bd);
+    padding: 16px;
+}
+.like-user-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+}
+.like-user-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+html[data-theme="dark"] .comment-item,
+html.dark .comment-item,
+.dark .comment-item {
+    background: #1e293b !important;
+}
+html[data-theme="dark"] .like-list-panel,
+html.dark .like-list-panel,
+.dark .like-list-panel {
+    background: #1f2937 !important;
 }
 </style>
 
