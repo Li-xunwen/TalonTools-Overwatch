@@ -33,6 +33,64 @@ async function getPageById(pageId: number) {
 // =================================================================
 // GET /api/pages/:id — 获取页面（含访问权限校验）
 // =================================================================
+// =================================================================
+// GET /api/pages — 获取页面列表（公开：已审核；管理员：全部）
+// =================================================================
+router.get('/pages', async (req: Request, res: Response) => {
+    try {
+        const currentUser = parseUser(req);
+        const isAdmin = currentUser?.role === 'ADMIN';
+
+        // 未登录/普通用户只看 status=2(已发布) 和 status=3(完全开放)
+        const allowedStatuses = isAdmin ? [0, 1, 2, 3, 4] : [2, 3];
+
+        const [rows] = await pool.query<any[]>(
+            `SELECT p.id, p.title, LEFT(p.content, 500) AS content_preview, p.author_id, u.battletag AS author_name,
+                    p.updated_at, p.status,
+                    (SELECT COUNT(*) FROM pages_likes
+                     WHERE page_id = p.id AND target_type = 'page' AND target_id = p.id) AS like_count
+             FROM pages p
+             JOIN users u ON p.author_id = u.id
+             WHERE p.type = 1 AND p.status IN (?)
+             ORDER BY p.updated_at DESC`,
+            [allowedStatuses]
+        );
+
+        // 当前用户是否已点赞每条页面
+        const userId = currentUser?.userId;
+        let likedPageIds: Set<number> = new Set();
+        if (userId && rows.length > 0) {
+            const pageIds = rows.map((r: any) => r.id);
+            const [likeRows] = await pool.query<any[]>(
+                `SELECT target_id FROM pages_likes
+                 WHERE user_id = ? AND target_type = 'page' AND target_id IN (?)`,
+                [userId, pageIds]
+            );
+            likedPageIds = new Set(likeRows.map((r: any) => r.target_id));
+        }
+
+        res.json({
+            pages: rows.map((r: any) => ({
+                id: r.id,
+                title: r.title,
+                content_preview: r.content_preview,
+                author_id: r.author_id,
+                author_name: r.author_name,
+                updated_at: r.updated_at,
+                status: r.status,
+                like_count: r.like_count,
+                is_liked: likedPageIds.has(r.id),
+            })),
+        });
+    } catch (error) {
+        console.error('获取页面列表失败:', error);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+// =================================================================
+// GET /api/pages/:id — 获取页面（含访问权限校验）
+// =================================================================
 router.get('/pages/:id', async (req: Request, res: Response) => {
     try {
         const pageId = parseInt(String(req.params.id), 10);

@@ -1,7 +1,7 @@
 <template>
   <div class="fixed-bottom-nav">
     <router-link to="/news" class="nav-tab" active-class="active">
-      <div>黑爪动态</div>
+      <div>动态</div>
     </router-link>
     <router-link to="/Game" class="nav-tab" active-class="active">
       <div>游戏</div>
