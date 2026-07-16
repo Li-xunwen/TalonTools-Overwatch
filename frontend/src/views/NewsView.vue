@@ -31,6 +31,26 @@
                 <div class="video-desc" v-if="page.description">{{ page.description }}</div>
               </template>
 
+              <!-- 图集类型 -->
+              <template v-else-if="page.type === 3">
+                <div class="video-card-header">
+                  <span class="album-badge">图集</span>
+                  <span class="card-title">{{ page.title }}</span>
+                  <span v-if="page.status === 4" class="status-tag draft">草稿</span>
+                  <span v-else-if="page.status === 1" class="status-tag review">审核中</span>
+                  <span v-else-if="page.status === 0" class="status-tag deleted">已删除</span>
+                </div>
+                <div class="album-grid-wrap" v-if="extractImageUrls(page.content_preview).length > 0">
+                  <div class="album-grid" @click.stop>
+                    <div v-for="(url, i) in extractImageUrls(page.content_preview).slice(0, 9)" :key="i"
+                      class="album-grid-item" @click="openAlbumImageViewer(url)">
+                      <img :src="url" :alt="'图片' + (i + 1)" loading="lazy" />
+                    </div>
+                  </div>
+                </div>
+                <div class="video-desc" v-if="page.description">{{ page.description }}</div>
+              </template>
+
               <!-- 文档类型：原有渲染 -->
               <template v-else>
                 <span class="card-title">{{ page.title }}<span v-if="page.status === 4" class="status-tag draft">草稿</span><span v-else-if="page.status === 1" class="status-tag review">审核中</span><span v-else-if="page.status === 0" class="status-tag deleted">已删除</span></span>
@@ -119,7 +139,7 @@
       <div v-if="showFabMenu" class="fab-items">
         <button class="fab-item" @click.stop="createNewArticle">文章</button>
         <button class="fab-item" @click.stop="openVideoDialog">视频</button>
-        <button class="fab-item" @click.stop="showFabMenu = false">图集</button>
+        <button class="fab-item" @click.stop="openAlbumDialog">图集</button>
       </div>
     </Transition>
     <button class="fab-btn" @click="showFabMenu = !showFabMenu">
@@ -129,6 +149,12 @@
 
   <!-- 创建视频弹窗 -->
   <CreateVideoDialog v-if="showVideoDialog" @close="showVideoDialog = false" @published="onVideoPublished" />
+
+  <!-- 创建图集弹窗 -->
+  <CreateAlbumDialog v-if="showAlbumDialog" @close="showAlbumDialog = false" @published="onAlbumPublished" />
+
+  <!-- 大图查看 -->
+  <ImageViewer :visible="albumViewerVisible" :src="albumViewerSrc" @update:visible="albumViewerVisible = $event" @close="albumViewerVisible = false" />
 
   <BottomNav />
 </template>
@@ -142,6 +168,8 @@ import ThemeToggle from '@/components/ThemeToggle.vue'
 import BottomNav from '@/components/BottomNav.vue'
 import FooterBar from '@/components/FooterBar.vue'
 import CreateVideoDialog from '@/components/CreateVideoDialog.vue'
+import CreateAlbumDialog from '@/components/CreateAlbumDialog.vue'
+import ImageViewer from '@/components/ImageViewer.vue'
 import { authFetch } from '@/utils/request'
 
 const isLoggedIn = computed(() => !!localStorage.getItem('authToken'))
@@ -162,6 +190,9 @@ const isAdmin = ref(false)
 const router = useRouter()
 const showFabMenu = ref(false)
 const showVideoDialog = ref(false)
+const showAlbumDialog = ref(false)
+const albumViewerVisible = ref(false)
+const albumViewerSrc = ref('')
 const fabVisible = ref(true)
 const lastScrollY = ref(0)
 const activeTab = ref<'all' | 'mine'>('all')
@@ -253,7 +284,35 @@ function openVideoDialog() {
 function onVideoPublished(data: any) {
   showVideoDialog.value = false
   alert('视频已提交审核')
-  fetchPages() // 刷新列表
+  fetchPages()
+}
+
+function openAlbumDialog() {
+  showFabMenu.value = false
+  showAlbumDialog.value = true
+}
+
+function onAlbumPublished(data: any) {
+  showAlbumDialog.value = false
+  alert('图集已提交审核')
+  fetchPages()
+}
+
+function openAlbumImageViewer(url: string) {
+  albumViewerSrc.value = url
+  albumViewerVisible.value = true
+}
+
+// 从 content 中提取所有图片 URL
+function extractImageUrls(content: string): string[] {
+  if (!content) return []
+  const urls: string[] = []
+  const regex = /!\[.*?\]\(([^)]+)\)/g
+  let match
+  while ((match = regex.exec(content)) !== null) {
+    urls.push(match[1])
+  }
+  return urls
 }
 
 async function approvePage(p: P) {
@@ -488,6 +547,56 @@ async function toggleInlineReplyLike(p: P, r: any) {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* ===== 图集卡片 ===== */
+.album-badge {
+  display: inline-block;
+  background: #8b5cf6;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.album-grid-wrap {
+  margin-bottom: 8px;
+}
+.album-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.album-grid-item {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: #e0e0e0;
+  cursor: pointer;
+}
+.album-grid-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform .2s;
+}
+.album-grid-item:hover img {
+  transform: scale(1.05);
+}
+.album-grid-more {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ===== FAB ===== */

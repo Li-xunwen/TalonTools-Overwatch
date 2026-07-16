@@ -44,16 +44,19 @@ router.get('/files', authenticateToken, async (req: AuthRequest, res: Response) 
 });
 
 router.post('/files/upload', authenticateToken, (req: AuthRequest, res: Response) => {
-  upload.single('file')(req, res, (err) => {
+  upload.array('file', 9)(req, res, (err) => {
     if (err) return res.status(400).json({ error: 'upload failed: ' + err.message });
-    if (!req.file) return res.status(400).json({ error: 'no file' });
+    if (!req.files || (req.files as Express.Multer.File[]).length === 0) return res.status(400).json({ error: 'no file' });
 
-    const ext = path.extname(req.file.originalname).toLowerCase();
-    let type: 'image' | 'video' | 'other' = 'other';
-    if (['.jpg','.jpeg','.png','.gif','.webp','.svg','.bmp'].includes(ext)) type = 'image';
-    else if (['.mp4','.webm','.ogv','.mov','.avi','.mkv'].includes(ext)) type = 'video';
+    const files = (req.files as Express.Multer.File[]).map(f => {
+      const ext = path.extname(f.originalname).toLowerCase();
+      let type: 'image' | 'video' | 'other' = 'other';
+      if (['.jpg','.jpeg','.png','.gif','.webp','.svg','.bmp'].includes(ext)) type = 'image';
+      else if (['.mp4','.webm','.ogv','.mov','.avi','.mkv'].includes(ext)) type = 'video';
+      return { name: f.originalname, size: f.size, type, ext, url: '/resource/users/' + req.user!.userId + '/' + encodeURIComponent(f.originalname) };
+    });
 
-    res.json({ name: req.file.originalname, size: req.file.size, type, ext, url: '/resource/users/' + req.user!.userId + '/' + encodeURIComponent(req.file.originalname) });
+    res.json({ files, count: files.length });
   });
 });
 

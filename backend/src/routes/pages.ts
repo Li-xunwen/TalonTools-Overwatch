@@ -46,7 +46,8 @@ router.post('/pages', authenticateToken, async (req: AuthRequest, res: Response)
         }
 
         const pageType = typeof type === 'number' ? type : 1;
-        const pageStatus = pageType === 2 ? 1 : 3; // 视频类型默认审核中，其他默认完全开放
+        // 视频/图集类型默认审核中，其他默认完全开放
+        const pageStatus = (pageType === 2 || pageType === 3) ? 1 : 3;
         const pageDescription = description || null;
 
         const result = await pool.query<any>(
@@ -87,13 +88,13 @@ router.get('/pages', async (req: Request, res: Response) => {
         const allowedStatuses = isAdmin ? [0, 1, 2, 3, 4] : [2, 3];
 
         const [rows] = await pool.query<any[]>(
-            `SELECT p.id, p.title, LEFT(p.content, 500) AS content_preview, p.author_id, u.battletag AS author_name,
+            `SELECT p.id, p.title, LEFT(p.content, 3000) AS content_preview, p.author_id, u.battletag AS author_name,
                     p.updated_at, p.status, p.type, p.description,
                     (SELECT COUNT(*) FROM pages_likes
                      WHERE page_id = p.id AND target_type = 'page' AND target_id = p.id) AS like_count
              FROM pages p
              JOIN users u ON p.author_id = u.id
-             WHERE p.type IN (1, 2) AND p.status IN (?)
+             WHERE (p.type IS NULL OR p.type IN (1, 2, 3)) AND p.status IN (?)
              ORDER BY p.updated_at DESC`,
             [allowedStatuses]
         );
@@ -145,8 +146,10 @@ router.get('/pages/:id', async (req: Request, res: Response) => {
         const page = await getPageById(pageId);
         if (!page) return res.status(404).json({ error: '页面不存在' });
 
-        // 检查文章类型：仅 type=1（文档）和 type=2（视频）可通过此接口访问
-        if (page.type !== 1 && page.type !== 2) return res.status(404).json({ error: '页面不存在' });
+        // 检查文章类型：仅 type=1（文档）和 type=2（视频）可通过此接口访问（兼容旧数据 type 为 NULL 的情况）
+        if (page.type !== null && page.type !== 1 && page.type !== 2 && page.type !== 3) {
+            return res.status(404).json({ error: '页面不存在' });
+        }
 
         const currentUser = parseUser(req);
         const isAdmin = currentUser?.role === 'ADMIN';

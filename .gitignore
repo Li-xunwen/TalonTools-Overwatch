@@ -49,3 +49,6 @@ Thumbs.db
 
 # LevelDB cache directory
 cache-db/
+
+# User uploaded files
+backend/public/users/
