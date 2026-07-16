@@ -4,7 +4,6 @@
     <div class="content-area">
       <div class="top-tip-text">黑爪情报局</div>
 
-      <!-- ... template 内容保持不变 ... -->
       <div v-if="loading" class="state-card"><div class="spinner"></div><p class="state-text">加载中…</p></div>
       <div v-else-if="pages.length === 0" class="empty-state"><p>暂无内容</p></div>
       <div v-else class="page-list-wrap">
@@ -15,10 +14,30 @@
             <button v-if="isAdmin && activeTab === 'all'" :class="['admin-toggle', { active: showAdmin }]" @click="showAdmin = !showAdmin">⚙️ 管理</button>
           </div>
           <div class="page-grid">
-            <div v-for="page in filteredPages" :key="page.id" class="page-card" @click="$router.push('/pages/' + page.id)">
-              <span class="card-title">{{ page.title }}<span v-if="page.status === 4" class="status-tag draft">草稿</span><span v-else-if="page.status === 1" class="status-tag review">审核中</span><span v-else-if="page.status === 0" class="status-tag deleted">已删除</span></span>
-              <div class="card-preview" v-if="page._renderedPreview" v-html="page._renderedPreview"></div>
-              <div class="card-preview card-preview-empty" v-else>暂无内容</div>
+            <div v-for="page in filteredPages" :key="page.id" class="page-card" :class="{ 'video-card': page.type === 2 }" @click="page.type === 1 ? $router.push('/pages/' + page.id) : null">
+              <!-- 视频类型：渲染视频预览 + 简介 -->
+              <template v-if="page.type === 2">
+                <div class="video-card-header">
+                  <span class="video-badge">视频</span>
+                  <span class="card-title">{{ page.title }}</span>
+                  <span v-if="page.status === 4" class="status-tag draft">草稿</span>
+                  <span v-else-if="page.status === 1" class="status-tag review">审核中</span>
+                  <span v-else-if="page.status === 0" class="status-tag deleted">已删除</span>
+                </div>
+                <!-- 从 content 中提取视频 URL 进行渲染 -->
+                <div class="video-preview-wrap" @click.stop="$router.push('/pages/' + page.id)">
+                  <video :src="extractVideoUrl(page.content_preview)" controls playsinline muted class="video-preview-video"></video>
+                </div>
+                <div class="video-desc" v-if="page.description">{{ page.description }}</div>
+              </template>
+
+              <!-- 文档类型：原有渲染 -->
+              <template v-else>
+                <span class="card-title">{{ page.title }}<span v-if="page.status === 4" class="status-tag draft">草稿</span><span v-else-if="page.status === 1" class="status-tag review">审核中</span><span v-else-if="page.status === 0" class="status-tag deleted">已删除</span></span>
+                <div class="card-preview" v-if="page._renderedPreview" v-html="page._renderedPreview"></div>
+                <div class="card-preview card-preview-empty" v-else>暂无内容</div>
+              </template>
+
               <div class="card-meta">
                 <img :src="getAvatarUrl(page.author_name)" class="meta-avatar" @error="handleAvatarError" alt="" />
                 <span>{{ page.author_name }}</span>
@@ -29,7 +48,6 @@
                 <button :class="['card-action-btn', { liked: page.is_liked }]" @click="toggleLike(page)">{{ page.is_liked ? '👍' : '👍' }} {{ page._like_count }}</button>
                 <button class="card-action-btn" @click="toggleLikeList(page)">👤 {{ page._showLikeList ? '收起' : '赞' }}</button>
                 <button class="card-action-btn" @click="toggleComments(page)">💬 {{ page._showComments ? '收起' : '评' }}<span v-if="page._comment_count">({{ page._comment_count }})</span></button>
-
 
                 <template v-if="isAdmin && showAdmin">
                   <button v-if="page.status !== 2 && page.status !== 3" class="card-action-btn card-action-approve" @click="approvePage(page)">✅ 通过审核</button>
@@ -100,7 +118,7 @@
     <Transition name="fan">
       <div v-if="showFabMenu" class="fab-items">
         <button class="fab-item" @click.stop="createNewArticle">文章</button>
-        <button class="fab-item" @click.stop="showFabMenu = false">视频</button>
+        <button class="fab-item" @click.stop="openVideoDialog">视频</button>
         <button class="fab-item" @click.stop="showFabMenu = false">图集</button>
       </div>
     </Transition>
@@ -108,6 +126,9 @@
       <span :class="['fab-icon', { open: showFabMenu }]">+</span>
     </button>
   </div>
+
+  <!-- 创建视频弹窗 -->
+  <CreateVideoDialog v-if="showVideoDialog" @close="showVideoDialog = false" @published="onVideoPublished" />
 
   <BottomNav />
 </template>
@@ -120,6 +141,7 @@ import DOMPurify from 'dompurify'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import BottomNav from '@/components/BottomNav.vue'
 import FooterBar from '@/components/FooterBar.vue'
+import CreateVideoDialog from '@/components/CreateVideoDialog.vue'
 import { authFetch } from '@/utils/request'
 
 const isLoggedIn = computed(() => !!localStorage.getItem('authToken'))
@@ -127,7 +149,8 @@ const isLoggedIn = computed(() => !!localStorage.getItem('authToken'))
 interface P {
   id: number; title: string; content_preview: string;
   author_id: number; author_name: string; updated_at: string;
-  status: number; like_count: number; is_liked: boolean;
+  status: number; type: number; description: string | null;
+  like_count: number; is_liked: boolean;
   _renderedPreview: string; _like_count: number; _likeUsers: any[];
   _showLikeList: boolean; _comments: any[]; _commentsLoaded: boolean;
   _showComments: boolean; _newComment: string;
@@ -138,11 +161,19 @@ const pages = ref<P[]>([])
 const isAdmin = ref(false)
 const router = useRouter()
 const showFabMenu = ref(false)
+const showVideoDialog = ref(false)
 const fabVisible = ref(true)
 const lastScrollY = ref(0)
 const activeTab = ref<'all' | 'mine'>('all')
 const currentUserId = ref<number | null>(null)
 const showAdmin = ref(false)
+
+// 从 content_preview 中提取第一个视频 URL
+function extractVideoUrl(content: string): string {
+  if (!content) return ''
+  const match = content.match(/!\[.*?\]\(([^)]+)\)/)
+  return match ? match[1] : ''
+}
 
 function onScroll() {
   const sy = window.scrollY
@@ -175,7 +206,7 @@ async function fetchPages() {
       const d = await res.json()
       pages.value = (d.pages || []).map((p: any) => {
         let previewHtml = ''
-        if (p.content_preview) {
+        if (p.content_preview && p.type !== 2) {
           try {
             let text = p.content_preview.replace(/^#\s+.+?(?:\n|$)/, '').trim()
             let h = marked.parse(text || ' ', { async: false }) as string
@@ -208,18 +239,36 @@ const filteredPages = computed(() => {
     list = list.filter(p => p.author_id === currentUserId.value)
   }
   if (activeTab.value === 'all') {
-    // 黑爪动态不展示草稿
     list = list.filter(p => p.status !== 4)
   }
-  // 隐藏已删除
   return list.filter(p => p.status !== 0)
 })
+
+// 视频 FAB
+function openVideoDialog() {
+  showFabMenu.value = false
+  showVideoDialog.value = true
+}
+
+function onVideoPublished(data: any) {
+  showVideoDialog.value = false
+  alert('视频已提交审核')
+  fetchPages() // 刷新列表
+}
 
 async function approvePage(p: P) {
   if (!confirm(`通过 "${p.title}"？`)) return
   try {
     const r = await authFetch(`/api/pages/${p.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 2 }) })
     if (r.ok) { p.status = 2; alert('已通过') } else { const e = await r.json(); alert(e.error || '失败') }
+  } catch { alert('网络错误') }
+}
+
+async function draftPage(p: P) {
+  if (!confirm(`将 "${p.title}" 打回草稿？`)) return
+  try {
+    const r = await authFetch(`/api/pages/${p.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 4 }) })
+    if (r.ok) { p.status = 4; alert('已打回') } else { const e = await r.json(); alert(e.error || '失败') }
   } catch { alert('网络错误') }
 }
 
@@ -365,7 +414,6 @@ async function toggleInlineReplyLike(p: P, r: any) {
 .filter-tab:hover:not(.active) {
   background: var(--bg-secondary);
 }
-/* 管理按钮 */
 .admin-toggle {
   padding: 8px 14px;
   border: 1px solid var(--input-border);
@@ -396,7 +444,53 @@ async function toggleInlineReplyLike(p: P, r: any) {
 }
 .page-card:hover { background: var(--input-border); }
 
-/* ===== FAB 浮动菜单 ===== */
+/* ===== 视频卡片 ===== */
+.video-card {
+  cursor: default;
+}
+.video-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.video-badge {
+  display: inline-block;
+  background: #e11d48;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.video-preview-wrap {
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 8px;
+  background: #000;
+  cursor: pointer;
+}
+.video-preview-video {
+  width: 100%;
+  max-height: 240px;
+  display: block;
+  object-fit: contain;
+  background: #000;
+}
+.video-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--accent);
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ===== FAB ===== */
 .fab-area {
   position: fixed;
   bottom: 80px;
@@ -438,7 +532,6 @@ async function toggleInlineReplyLike(p: P, r: any) {
   line-height: 1;
 }
 .fab-icon.open { transform: rotate(45deg); }
-
 .fab-items {
   position: absolute;
   bottom: 66px;
@@ -467,8 +560,6 @@ async function toggleInlineReplyLike(p: P, r: any) {
 .fab-item:nth-child(1):hover { transform: translateY(-8px) rotate(-8deg) scale(1.08); }
 .fab-item:nth-child(2):hover { transform: translateY(-16px) scale(1.08); }
 .fab-item:nth-child(3):hover { transform: translateY(-8px) rotate(8deg) scale(1.08); }
-
-/* 进出动画 */
 .fan-enter-active { transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .fan-leave-active { transition: all 0.15s ease-in; }
 .fan-enter-from { opacity: 0; transform: translateY(10px) scale(0.8); }
@@ -501,7 +592,6 @@ async function toggleInlineReplyLike(p: P, r: any) {
 .meta-dot { opacity: 0.5; }
 .meta-date { font-size: 11px; }
 
-/* 状态标签 */
 .status-tag {
   font-size: 10px;
   font-weight: 600;

@@ -31,8 +31,50 @@ async function getPageById(pageId: number) {
 }
 
 // =================================================================
-// GET /api/pages/:id — 获取页面（含访问权限校验）
+// POST /api/pages — 创建页面
 // =================================================================
+router.post('/pages', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user!.userId;
+        const { title, content, description, type } = req.body;
+
+        if (!title || typeof title !== 'string' || title.trim().length === 0) {
+            return res.status(400).json({ error: '标题不能为空' });
+        }
+        if (!content || typeof content !== 'string' || content.trim().length === 0) {
+            return res.status(400).json({ error: '内容不能为空' });
+        }
+
+        const pageType = typeof type === 'number' ? type : 1;
+        const pageStatus = pageType === 2 ? 1 : 3; // 视频类型默认审核中，其他默认完全开放
+        const pageDescription = description || null;
+
+        const result = await pool.query<any>(
+            `INSERT INTO pages (title, content, description, author_id, type, status)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [title.trim(), content, pageDescription, userId, pageType, pageStatus]
+        );
+
+        const insertId = (result as any)[0].insertId;
+        const page = await getPageById(insertId);
+
+        res.status(201).json({
+            id: page.id,
+            title: page.title,
+            content: page.content,
+            description: page.description,
+            author_id: page.author_id,
+            author_name: page.author_name,
+            updated_at: page.updated_at,
+            type: page.type,
+            status: page.status,
+        });
+    } catch (error) {
+        console.error('创建页面失败:', error);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
 // =================================================================
 // GET /api/pages — 获取页面列表（公开：已审核；管理员：全部）
 // =================================================================
@@ -46,12 +88,12 @@ router.get('/pages', async (req: Request, res: Response) => {
 
         const [rows] = await pool.query<any[]>(
             `SELECT p.id, p.title, LEFT(p.content, 500) AS content_preview, p.author_id, u.battletag AS author_name,
-                    p.updated_at, p.status,
+                    p.updated_at, p.status, p.type, p.description,
                     (SELECT COUNT(*) FROM pages_likes
                      WHERE page_id = p.id AND target_type = 'page' AND target_id = p.id) AS like_count
              FROM pages p
              JOIN users u ON p.author_id = u.id
-             WHERE p.type = 1 AND p.status IN (?)
+             WHERE p.type IN (1, 2) AND p.status IN (?)
              ORDER BY p.updated_at DESC`,
             [allowedStatuses]
         );
@@ -78,6 +120,8 @@ router.get('/pages', async (req: Request, res: Response) => {
                 author_name: r.author_name,
                 updated_at: r.updated_at,
                 status: r.status,
+                type: r.type,
+                description: r.description,
                 like_count: r.like_count,
                 is_liked: likedPageIds.has(r.id),
             })),
@@ -101,8 +145,8 @@ router.get('/pages/:id', async (req: Request, res: Response) => {
         const page = await getPageById(pageId);
         if (!page) return res.status(404).json({ error: '页面不存在' });
 
-        // 检查文章类型：仅 type=1（文档）可通过此接口访问
-        if (page.type !== 1) return res.status(404).json({ error: '页面不存在' });
+        // 检查文章类型：仅 type=1（文档）和 type=2（视频）可通过此接口访问
+        if (page.type !== 1 && page.type !== 2) return res.status(404).json({ error: '页面不存在' });
 
         const currentUser = parseUser(req);
         const isAdmin = currentUser?.role === 'ADMIN';
@@ -292,18 +336,15 @@ router.post('/pages/:id/like', authenticateToken, async (req: AuthRequest, res: 
             return res.status(400).json({ error: '无效的页面 ID' });
         }
 
-        // 检查页面存在
         const page = await getPageById(pageId);
         if (!page) return res.status(404).json({ error: '页面不存在' });
 
-        // 插入点赞（唯一约束防重复）
         await pool.query(
             `INSERT IGNORE INTO pages_likes (page_id, user_id, target_type, target_id)
              VALUES (?, ?, 'page', ?)`,
             [pageId, userId, pageId]
         );
 
-        // 回查赞数
         const [countRows] = await pool.query<any[]>(
             `SELECT COUNT(*) AS cnt FROM pages_likes
              WHERE page_id = ? AND target_type = 'page' AND target_id = ?`,
@@ -357,7 +398,6 @@ router.get('/pages/:id/comments', async (req: Request, res: Response) => {
             return res.status(400).json({ error: '无效的页面 ID' });
         }
 
-        // 获取所有顶级评论（parent_id IS NULL）
         const [topRows] = await pool.query<any[]>(
             `SELECT c.*, u.battletag AS user_name
              FROM pages_comments c
@@ -367,7 +407,6 @@ router.get('/pages/:id/comments', async (req: Request, res: Response) => {
             [pageId]
         );
 
-        // 获取所有回复（parent_id IS NOT NULL）
         const [replyRows] = await pool.query<any[]>(
             `SELECT c.*, u.battletag AS user_name,
                     ru.battletag AS reply_to_user_name
@@ -379,7 +418,6 @@ router.get('/pages/:id/comments', async (req: Request, res: Response) => {
             [pageId]
         );
 
-        // 获取当前用户对每条评论的点赞状态
         const currentUser = parseUser(req);
         let likedCommentIds: Set<number> = new Set();
 
@@ -398,7 +436,6 @@ router.get('/pages/:id/comments', async (req: Request, res: Response) => {
             }
         }
 
-        // 统计所有评论的点赞数
         const allCommentIds = [...topRows.map((r: any) => r.id), ...replyRows.map((r: any) => r.id)];
         const likeCountMap: Record<number, number> = {};
         if (allCommentIds.length > 0) {
@@ -413,7 +450,6 @@ router.get('/pages/:id/comments', async (req: Request, res: Response) => {
             }
         }
 
-        // 构建回复列表
         const replyMap: Record<number, any[]> = {};
         for (const r of replyRows) {
             if (!replyMap[r.root_id]) replyMap[r.root_id] = [];
@@ -470,7 +506,6 @@ router.post('/pages/:id/comments', authenticateToken, async (req: AuthRequest, r
             return res.status(400).json({ error: '评论内容不能为空' });
         }
 
-        // 检查页面存在
         const page = await getPageById(pageId);
         if (!page) return res.status(404).json({ error: '页面不存在' });
 
@@ -482,10 +517,8 @@ router.post('/pages/:id/comments', authenticateToken, async (req: AuthRequest, r
 
         const insertId = (result as any)[0].insertId;
 
-        // 更新 root_id 为自身
         await pool.query('UPDATE pages_comments SET root_id = ? WHERE id = ?', [insertId, insertId]);
 
-        // 回查插入的评论
         const [rows] = await pool.query<any[]>(
             `SELECT c.*, u.battletag AS user_name
              FROM pages_comments c JOIN users u ON c.user_id = u.id
@@ -529,7 +562,6 @@ router.post('/pages/comments/:cid/reply', authenticateToken, async (req: AuthReq
             return res.status(400).json({ error: '回复内容不能为空' });
         }
 
-        // 查找父评论
         const [parentRows] = await pool.query<any[]>(
             'SELECT * FROM pages_comments WHERE id = ? AND deleted = 0',
             [parentId]
@@ -539,10 +571,8 @@ router.post('/pages/comments/:cid/reply', authenticateToken, async (req: AuthReq
         }
         const parent = parentRows[0];
 
-        // 确定 root_id：如果父评论是顶级评论，root_id = 父评论；否则 root_id = 父评论的 root_id
         const rootId = parent.parent_id === null ? parent.id : parent.root_id;
 
-        // 获取被回复的原文摘要（取前 50 字符）
         const replyToContent = parent.content.length > 50
             ? parent.content.substring(0, 50) + '…'
             : parent.content;
@@ -632,7 +662,6 @@ router.post('/pages/comments/:cid/like', authenticateToken, async (req: AuthRequ
             return res.status(400).json({ error: '无效的评论 ID' });
         }
 
-        // 查找评论所在页面
         const [commentRows] = await pool.query<any[]>(
             'SELECT page_id FROM pages_comments WHERE id = ? AND deleted = 0',
             [commentId]
