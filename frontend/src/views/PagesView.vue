@@ -37,7 +37,7 @@
             <!-- 点赞/评论按钮栏 -->
             <div class="page-interaction-bar">
                 <button class="interact-btn" @click="togglePageLike">
-                    <span class="like-icon">{{ pageLiked ? '👍' : '👍' }}</span>
+                    <span class="like-icon">{{ pageLiked ? '🐮' : '🐮' }}</span>
                     <span class="interact-label">赞</span>
                     <span class="interact-count">{{ pageLikeCount }}</span>
                 </button>
@@ -73,7 +73,7 @@
                     <div class="comment-body">{{ comment.content }}</div>
                     <div class="comment-actions">
                         <button class="comment-action-btn" @click="toggleCommentLike(comment)" :class="{ liked: comment.is_liked }">
-                            {{ comment.is_liked ? '👍' : '👍' }} {{ comment.like_count }}
+                            {{ comment.is_liked ? '🐮' : '🐮' }} {{ comment.like_count }}
                         </button>
                         <button class="comment-action-btn" @click="startReply(comment, null)">回复</button>
                     </div>
@@ -92,7 +92,7 @@
                             </div>
                             <div class="comment-actions">
                                 <button class="comment-action-btn" @click="toggleReplyLike(reply)" :class="{ liked: reply.is_liked }">
-                                    {{ reply.is_liked ? '👍' : '👍' }} {{ reply.like_count }}
+                                    {{ reply.is_liked ? '🐮' : '🐮' }} {{ reply.like_count }}
                                 </button>
                                 <button class="comment-action-btn" @click="startReply(comment, reply)">回复</button>
                             </div>
@@ -189,8 +189,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, computed, watch, onMounted, onUpdated, nextTick } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import ThemeToggle from '@/components/ThemeToggle.vue';
@@ -224,6 +224,7 @@ const VIDEO_ALLOW = {
 };
 
 const route = useRoute();
+const router = useRouter();
 const loading = ref(true);
 const error = ref('');
 const isAuthError = ref(false);
@@ -475,7 +476,8 @@ async function submitForReview() {
         if (!sr.ok) { const e = await sr.json(); alert('保存失败:' + (e.error || '')); return; }
         const st = await authFetch(`/api/pages/${pageData.value.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 1 }) });
         if (!st.ok) { alert('状态更新失败'); return; }
-        clearCache(); await fetchPage(); isEditing.value = false; alert('已提交审核');
+        clearCache(); isEditing.value = false; alert('已提交审核');
+        router.push('/pages/' + pageData.value.id);
     } finally { saving.value = false; }
 }
 
@@ -492,7 +494,8 @@ async function saveAsDraft() {
         if (!sr.ok) { const e = await sr.json(); alert('保存失败:' + (e.error || '')); return; }
         const st = await authFetch(`/api/pages/${pageData.value.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 4 }) });
         if (!st.ok) { alert('状态更新失败'); return; }
-        clearCache(); await fetchPage(); isEditing.value = false; alert('已保存为草稿');
+        clearCache(); isEditing.value = false; alert('已保存为草稿');
+        router.push('/pages/' + pageData.value.id);
     } finally { saving.value = false; }
 }
 
@@ -520,7 +523,14 @@ async function createPageOnServer(): Promise<boolean> {
   }
 }
 
-function confirmDiscard() { if (!confirm('存在未提交的修改')) return; clearCache(); isEditing.value = false; editingSectionIdx.value = -1; }
+function confirmDiscard() {
+  if (pageData.value?.id === 'new') {
+    // 新建文章撤销 → 返回 news
+    clearCache(); router.push('/news'); return;
+  }
+  if (!confirm('存在未提交的修改')) return;
+  clearCache(); isEditing.value = false; editingSectionIdx.value = -1;
+}
 
 // ========== 点赞 / 评论 API 调用 ==========
 
@@ -651,7 +661,29 @@ async function toggleReplyLike(reply: CommentReply) {
     } catch {}
 }
 
-onMounted(() => { fetchPage(); });
+// 使所有 <video> 可点击播放（绕过 Chromium 控件交互 bug）
+function bindVideoPlay() {
+  nextTick(() => {
+    document.querySelectorAll('.page-view video, .markdown-section video').forEach(v => {
+      const video = v as HTMLVideoElement;
+      if (!video.dataset._bound) {
+        video.dataset._bound = '1';
+        video.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (video.paused) video.play().catch(() => {});
+          else video.pause();
+        });
+        // 光标提示可点击
+        video.style.cursor = 'pointer';
+      }
+    });
+  });
+}
+
+onMounted(() => { fetchPage(); bindVideoPlay(); });
+
+// 内容变更后重新绑定
+onUpdated(() => { bindVideoPlay(); });
 
 // 路由参数变化时重新拉取（修复 News 页跳转 pages/:id 缓存问题）
 watch(() => route.fullPath, () => { fetchPage(); });

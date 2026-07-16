@@ -52,9 +52,9 @@ router.get('/pages', async (req: Request, res: Response) => {
                      WHERE page_id = p.id AND target_type = 'page' AND target_id = p.id) AS like_count
              FROM pages p
              JOIN users u ON p.author_id = u.id
-             WHERE p.type = 1 AND p.status IN (?)
+             WHERE p.type = 1 AND (p.status IN (?) OR p.author_id = ?)
              ORDER BY p.updated_at DESC`,
-            [allowedStatuses]
+            [allowedStatuses, currentUser?.userId || 0]
         );
 
         // 当前用户是否已点赞每条页面
@@ -115,8 +115,8 @@ router.get('/pages/:id', async (req: Request, res: Response) => {
                 break;
             case 2:  // 已发布
                 break;
-            case 1:  // 审核中
-                if (!isAdmin) return res.status(403).json({ error: '权限不足' });
+            case 1:  // 审核中 — 作者和管理员可看
+                if (!isAdmin && !isAuthor) return res.status(403).json({ error: '权限不足' });
                 break;
             case 0:  // 已删除
                 if (!isAdmin) return res.status(403).json({ error: '权限不足' });

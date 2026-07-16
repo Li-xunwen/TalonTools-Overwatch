@@ -9,9 +9,14 @@
       <div v-else-if="pages.length === 0" class="empty-state"><p>暂无内容</p></div>
       <div v-else class="page-list-wrap">
         <div class="page-list-section">
+          <div class="filter-tabs">
+            <button :class="['filter-tab', { active: activeTab === 'all' }]" @click="activeTab = 'all'">黑爪动态</button>
+            <button :class="['filter-tab', { active: activeTab === 'mine' }]" @click="activeTab = 'mine'">我的作品</button>
+            <button v-if="isAdmin && activeTab === 'all'" :class="['admin-toggle', { active: showAdmin }]" @click="showAdmin = !showAdmin">⚙️ 管理</button>
+          </div>
           <div class="page-grid">
-            <div v-for="page in pages" :key="page.id" class="page-card" @click="$router.push('/pages/' + page.id)">
-              <span class="card-title">{{ page.title }}</span>
+            <div v-for="page in filteredPages" :key="page.id" class="page-card" @click="$router.push('/pages/' + page.id)">
+              <span class="card-title">{{ page.title }}<span v-if="page.status === 4" class="status-tag draft">草稿</span><span v-else-if="page.status === 1" class="status-tag review">审核中</span><span v-else-if="page.status === 0" class="status-tag deleted">已删除</span></span>
               <div class="card-preview" v-if="page._renderedPreview" v-html="page._renderedPreview"></div>
               <div class="card-preview card-preview-empty" v-else>暂无内容</div>
               <div class="card-meta">
@@ -21,13 +26,16 @@
                 <span class="meta-date">{{ formatDate(page.updated_at) }}</span>
               </div>
               <div class="card-actions" @click.stop>
-                <button class="card-action-btn" @click="toggleLike(page)">{{ page.is_liked ? '👍' : '👍' }} {{ page._like_count }}</button>
-                <button class="card-action-btn" @click="toggleLikeList(page)">👤 {{ page._showLikeList ? '收起' : '赞' }}</button>
-                <button class="card-action-btn" @click="toggleComments(page)">💬 {{ page._showComments ? '收起' : '评' }}<span v-if="page._comment_count">({{ page._comment_count }})</span></button>
-                <template v-if="isAdmin">
+                <button :class="['card-action-btn', { liked: page.is_liked }]" @click="toggleLike(page)">{{ page.is_liked ? '🐮' : '🐮' }} {{ page._like_count }}</button>
+                <button class="card-action-btn" @click="toggleLikeList(page)"> {{ page._showLikeList ? '收起' : '点赞列表' }}</button>
+                <button class="card-action-btn" @click="toggleComments(page)">💬 {{ page._showComments ? '收起' : '评论' }}<span v-if="page._comment_count">({{ page._comment_count }})</span></button>
+
+
+                <template v-if="isAdmin && showAdmin">
                   <button v-if="page.status !== 2 && page.status !== 3" class="card-action-btn card-action-approve" @click="approvePage(page)">✅ 通过审核</button>
                   <button v-if="page.status === 1 || page.status === 2" class="card-action-btn card-action-draft" @click="draftPage(page)">↩️ 打回草稿</button>
                 </template>
+                <button v-if="activeTab === 'mine' && page.status !== 0" class="card-action-btn card-action-delete" @click.stop="deleteMyPage(page)">🗑️ 删除</button>
               </div>
               <div class="card-expand" @click.stop>
                 <div v-if="page._showLikeList" class="expand-box">
@@ -132,6 +140,9 @@ const router = useRouter()
 const showFabMenu = ref(false)
 const fabVisible = ref(true)
 const lastScrollY = ref(0)
+const activeTab = ref<'all' | 'mine'>('all')
+const currentUserId = ref<number | null>(null)
+const showAdmin = ref(false)
 
 function onScroll() {
   const sy = window.scrollY
@@ -147,7 +158,7 @@ onMounted(async () => {
   window.addEventListener('scroll', onScroll, { passive: true })
   try {
     const t = localStorage.getItem('authToken')
-    if (t) { const p = JSON.parse(atob(t.split('.')[1])); isAdmin.value = p.role === 'ADMIN' }
+    if (t) { const p = JSON.parse(atob(t.split('.')[1])); isAdmin.value = p.role === 'ADMIN'; currentUserId.value = p.userId }
   } catch {}
   await fetchPages()
 })
@@ -190,6 +201,19 @@ async function fetchPages() {
 const getAvatarUrl = (n: string) => n ? `/api/users/${encodeURIComponent(n)}/avatar` : ''
 function handleAvatarError(e: Event) { const img = e.target as HTMLImageElement; img.src = '/res/imge/default-avatar.png'; img.onerror = null }
 const formatDate = (d: string) => { if (!d) return ''; const dt = new Date(d); const pad = (n: number) => String(n).padStart(2, '0'); return `${dt.getFullYear()}.${pad(dt.getMonth() + 1)}.${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}` }
+
+const filteredPages = computed(() => {
+  let list = pages.value
+  if (activeTab.value === 'mine' && currentUserId.value) {
+    list = list.filter(p => p.author_id === currentUserId.value)
+  }
+  if (activeTab.value === 'all') {
+    // 黑爪动态不展示草稿
+    list = list.filter(p => p.status !== 4)
+  }
+  // 隐藏已删除
+  return list.filter(p => p.status !== 0)
+})
 
 async function approvePage(p: P) {
   if (!confirm(`通过 "${p.title}"？`)) return
@@ -267,11 +291,11 @@ async function toggleInlineCommentLike(p: P, c: any) {
   try { const r = await authFetch(`/api/pages/comments/${c.id}/${m}`, { method: 'POST' }); if (r.ok) { const d = await r.json(); c.is_liked = !c.is_liked; c.like_count = d.count } } catch {}
 }
 
-async function draftPage(p: P) {
-  if (!confirm(`将 "${p.title}" 打回草稿？`)) return
+async function deleteMyPage(p: P) {
+  if (!confirm(`确定删除 "${p.title}"？此操作不可撤销。`)) return
   try {
-    const r = await authFetch(`/api/pages/${p.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 4 }) })
-    if (r.ok) { p.status = 4; alert('已打回草稿') } else { const e = await r.json(); alert(e.error || '失败') }
+    const r = await authFetch(`/api/pages/${p.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 0 }) })
+    if (r.ok) { p.status = 0; alert('已删除') } else { const e = await r.json(); alert(e.error || '失败') }
   } catch { alert('网络错误') }
 }
 
@@ -313,6 +337,51 @@ async function toggleInlineReplyLike(p: P, r: any) {
 .page-list-wrap { max-width: 540px; margin: 0 auto; padding: 0 12px; }
 .page-list-section { background: var(--card-bg); border-radius: 24px; padding: 24px 20px; box-shadow: 0 6px 20px var(--shadow-color); }
 .page-grid { display: flex; flex-direction: column; gap: 16px; }
+
+/* 分栏筛选 */
+.filter-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 0 2px;
+}
+.filter-tab {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.filter-tab.active {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px var(--shadow-color);
+}
+.filter-tab:hover:not(.active) {
+  background: var(--bg-secondary);
+}
+/* 管理按钮 */
+.admin-toggle {
+  padding: 8px 14px;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.admin-toggle.active {
+  background: #f0f0f0;
+  border-color: var(--accent);
+}
 
 .page-card {
   background: var(--bg-secondary);
@@ -432,6 +501,21 @@ async function toggleInlineReplyLike(p: P, r: any) {
 .meta-dot { opacity: 0.5; }
 .meta-date { font-size: 11px; }
 
+/* 状态标签 */
+.status-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 3px;
+  border-radius: 4px;
+  line-height: 1.4;
+  display: inline-block;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.status-tag.draft { background: #fef3c7; color: #92400e; }
+.status-tag.review { background: #dbeafe; color: #1e40af; }
+.status-tag.deleted { background: #fecaca; color: #991b1b; }
+
 .card-actions { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; margin-bottom: 6px; }
 .card-action-btn {
   background: var(--card-bg); border: 1px solid var(--input-border);
@@ -439,10 +523,17 @@ async function toggleInlineReplyLike(p: P, r: any) {
   font-size: 12px; cursor: pointer; transition: all .2s; white-space: nowrap;
 }
 .card-action-btn:hover { border-color: var(--button-bg); color: var(--button-bg); }
+.card-action-btn.liked {
+  border-color: var(--button-bg);
+  color: var(--button-bg);
+  background: rgba(24, 119, 242, 0.08);
+}
 .card-action-approve { border-color: #16a34a; color: #16a34a; }
 .card-action-approve:hover { background: #f0fdf4; }
 .card-action-draft { border-color: #f59e0b; color: #f59e0b; }
 .card-action-draft:hover { background: #fffbeb; }
+.card-action-delete { border-color: #ef4444; color: #ef4444; }
+.card-action-delete:hover { background: #fef2f2; }
 
 .card-expand { flex: 1; overflow-y: auto; min-height: 0; }
 .card-expand::-webkit-scrollbar { width: 3px; }
