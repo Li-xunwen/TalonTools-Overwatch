@@ -607,9 +607,9 @@ onMounted(() => { fetchPage(); });
 <!-- ===== 方案 A：scoped 样式 — 已移除所有 !important CSS 变量重写，依赖 theme.css ===== -->
 <style scoped>
 * { box-sizing: border-box; }
-.page-view { min-height: 100vh; background: var(--bg-color); padding: 40px 20px 100px; position: relative; }
+.page-view { min-height: 100vh; background: var(--bg-color); padding: 40px 20px 0; position: relative; display: flex; flex-direction: column; }
 .theme-toggle { position: fixed; top: 20px; right: 20px; z-index: 100; }
-.container { max-width: 900px; margin: 0 auto; background: var(--card-bg); border-radius: 24px; box-shadow: var(--shadow); padding: 40px 32px; }
+.container { max-width: 900px; margin: 0 auto; background: var(--card-bg); border-radius: var(--glass-radius); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); padding: 40px 32px; flex: 1; }
 .container-edit { padding: 28px 20px; }
 .container-edit .edit-section { padding: 16px 18px; }
 .container-edit .edit-preamble { padding: 12px 14px; }
@@ -758,7 +758,7 @@ onMounted(() => { fetchPage(); });
 .back-link { text-align: center; margin-top: 48px; padding-top: 28px; border-top: 1px solid var(--input-border); }
 .back-link a { color: var(--button-bg); text-decoration: none; font-weight: 600; transition: all .2s; font-size: 15px; }
 .back-link a:hover { opacity: .75; text-decoration: underline; letter-spacing: .3px; }
-.footer-beian { position: absolute; bottom: 20px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--accent); z-index: 1; }
+.footer-beian { text-align: center; font-size: 12px; color: var(--accent); padding: 14px 0 18px; background: var(--bg-secondary); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); border-top: 1px solid var(--glass-border); }
 .footer-beian a { color: inherit; text-decoration: none; }
 .footer-beian a:hover { opacity: .7; text-decoration: underline; }
 .footer-beian .sep { margin: 0 8px; color: var(--accent); }

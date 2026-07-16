@@ -147,7 +147,7 @@ async function fetchPages() {
 
 const getAvatarUrl = (n: string) => n ? `/api/users/${encodeURIComponent(n)}/avatar` : ''
 function handleAvatarError(e: Event) { const img = e.target as HTMLImageElement; img.src = '/res/imge/default-avatar.png'; img.onerror = null }
-const formatDate = (d: string) => { if (!d) return ''; const dt = new Date(d); return `${dt.getFullYear()}.${String(dt.getMonth() + 1).padStart(2, '0')}.${String(dt.getDate()).padStart(2, '0')}` }
+const formatDate = (d: string) => { if (!d) return ''; const dt = new Date(d); const pad = (n: number) => String(n).padStart(2, '0'); return `${dt.getFullYear()}.${pad(dt.getMonth() + 1)}.${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}` }
 
 async function approvePage(p: P) {
   if (!confirm(`通过 "${p.title}"？`)) return

@@ -507,9 +507,12 @@ body {
 .section {
     margin-bottom: 40px;
     padding: 30px;
-    background: var(--card-bg);
-    border-radius: 15px;
-    box-shadow: 0 0 20px var(--shadow-color);
+    background: var(--section-bg);
+    border-radius: var(--glass-radius);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 

@@ -8,7 +8,7 @@
   --bg-primary: #ffffff;
   --bg-secondary: rgba(255, 255, 255, 0.35);
   --text-primary: #333333;
-  --card-bg: rgba(255, 255, 255, 0.55);
+  --card-bg: rgba(255, 255, 255, 0.35);
   --accent: #555555;
   --shadow-color: rgba(0, 0, 0, 0.04);
 
@@ -17,6 +17,7 @@
   --glass-border: rgba(255, 255, 255, 0.3);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
   --glass-radius: 16px;
+  --section-bg: rgba(238, 238, 243, 0.22);
 
   /* App 专用变量（继承基础色，按需微调） */
   --bg-body: var(--bg-primary);
@@ -54,6 +55,7 @@
   --glass-border: rgba(255, 255, 255, 0.06);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
   --glass-radius: 16px;
+  --section-bg: rgba(40, 40, 50, 0.05);
 
   /* App 专用变量 */
   --bg-body: var(--bg-primary);
@@ -165,7 +167,7 @@ a:hover {
 .section {
   margin-bottom: 40px;
   padding: 30px;
-  background: var(--card-bg);
+  background: var(--section-bg);
   border-radius: var(--glass-radius);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
