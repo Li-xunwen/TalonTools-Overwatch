@@ -189,7 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -282,7 +282,7 @@ const formatDate = (dateStr: string): string => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
     const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日 ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    return `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
 const getAvatarUrl = (name: string) => name ? `/api/users/${encodeURIComponent(name)}/avatar` : '';
@@ -602,6 +602,9 @@ async function toggleReplyLike(reply: CommentReply) {
 }
 
 onMounted(() => { fetchPage(); });
+
+// 路由参数变化时重新拉取（修复 News 页跳转 pages/:id 缓存问题）
+watch(() => route.fullPath, () => { fetchPage(); });
 </script>
 
 <!-- ===== 方案 A：scoped 样式 — 已移除所有 !important CSS 变量重写，依赖 theme.css ===== -->

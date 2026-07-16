@@ -83,11 +83,26 @@
     </div>
   </div>
   <FooterBar />
+
+  <!-- FAB 浮动按钮 -->
+  <div :class="['fab-area', { hidden: !fabVisible }]">
+    <Transition name="fan">
+      <div v-if="showFabMenu" class="fab-items">
+        <button class="fab-item" @click.stop>文章</button>
+        <button class="fab-item" @click.stop>视频</button>
+        <button class="fab-item" @click.stop>图集</button>
+      </div>
+    </Transition>
+    <button class="fab-btn" @click="showFabMenu = !showFabMenu">
+      <span :class="['fab-icon', { open: showFabMenu }]">+</span>
+    </button>
+  </div>
+
   <BottomNav />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import ThemeToggle from '@/components/ThemeToggle.vue'
@@ -109,13 +124,31 @@ interface P {
 const loading = ref(true)
 const pages = ref<P[]>([])
 const isAdmin = ref(false)
+const showFabMenu = ref(false)
+const fabVisible = ref(true)
+const lastScrollY = ref(0)
+
+function onScroll() {
+  const sy = window.scrollY
+  if (sy <= 0 || sy + window.innerHeight >= document.documentElement.scrollHeight - 10) {
+    fabVisible.value = true
+  } else {
+    fabVisible.value = sy < lastScrollY.value
+  }
+  lastScrollY.value = sy
+}
 
 onMounted(async () => {
+  window.addEventListener('scroll', onScroll, { passive: true })
   try {
     const t = localStorage.getItem('authToken')
     if (t) { const p = JSON.parse(atob(t.split('.')[1])); isAdmin.value = p.role === 'ADMIN' }
   } catch {}
   await fetchPages()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', onScroll)
 })
 
 async function fetchPages() {
@@ -140,6 +173,10 @@ async function fetchPages() {
           _newComment: '', _replyingToId: null, _replyingToName: '', _replyContent: '', _comment_count: 0
         }
       })
+      // 静默批量拉取评论数
+      Promise.all(pages.value.map(p =>
+        authFetch(`/api/pages/${p.id}/comments`).then(r => r.ok && r.json().then(d => { const cs = d.comments || []; p._comment_count = cs.length + cs.reduce((s: number, c: any) => s + (c.replies?.length || 0), 0) })).catch(() => {})
+      ))
     }
   } catch {}
   finally { loading.value = false }
@@ -184,7 +221,7 @@ async function toggleComments(p: P) {
 async function loadComments(p: P) {
   try {
     const r = await authFetch(`/api/pages/${p.id}/comments`)
-    if (r.ok) { const d = await r.json(); p._comments = d.comments || []; p._comment_count = p._comments.length }
+    if (r.ok) { const d = await r.json(); p._comments = d.comments || []; p._comment_count = p._comments.length + p._comments.reduce((s, c) => s + (c.replies?.length || 0), 0) }
     p._commentsLoaded = true
   } catch { p._commentsLoaded = true }
 }
@@ -269,6 +306,84 @@ async function toggleInlineReplyLike(p: P, r: any) {
   cursor: pointer;
 }
 .page-card:hover { background: var(--input-border); }
+
+/* ===== FAB 浮动菜单 ===== */
+.fab-area {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 998;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+.fab-area.hidden {
+  transform: translateX(-50%) translateY(80px);
+  opacity: 0;
+  pointer-events: none;
+}
+.fab-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--button-bg);
+  color: #fff;
+  border: none;
+  font-size: 30px;
+  font-weight: 300;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  transition: box-shadow 0.2s;
+}
+.fab-btn:hover { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
+.fab-icon {
+  display: inline-block;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  line-height: 1;
+}
+.fab-icon.open { transform: rotate(45deg); }
+
+.fab-items {
+  position: absolute;
+  bottom: 66px;
+  display: flex;
+  gap: 12px;
+  white-space: nowrap;
+}
+.fab-item {
+  padding: 8px 20px;
+  border-radius: 20px;
+  border: none;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 12px var(--shadow-color);
+  transition: transform 0.2s;
+}
+.fab-item:hover { transform: scale(1.08); }
+.fab-item:nth-child(1) { transform: translateY(-8px) rotate(-8deg); }
+.fab-item:nth-child(2) { transform: translateY(-16px); }
+.fab-item:nth-child(3) { transform: translateY(-8px) rotate(8deg); }
+.fab-item:nth-child(1):hover { transform: translateY(-8px) rotate(-8deg) scale(1.08); }
+.fab-item:nth-child(2):hover { transform: translateY(-16px) scale(1.08); }
+.fab-item:nth-child(3):hover { transform: translateY(-8px) rotate(8deg) scale(1.08); }
+
+/* 进出动画 */
+.fan-enter-active { transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.fan-leave-active { transition: all 0.15s ease-in; }
+.fan-enter-from { opacity: 0; transform: translateY(10px) scale(0.8); }
+.fan-leave-to { opacity: 0; transform: translateY(10px) scale(0.8); }
 
 .card-title {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
