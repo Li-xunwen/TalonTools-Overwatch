@@ -4,18 +4,14 @@
     <div class="content-area">
       <div class="top-tip-text">⚡游戏⚡</div>
 
-      <!-- 修改后的 Minecraft 安装版面（原 coming-soon-section） -->
+      <!-- Minecraft 安装版面 -->
       <div class="section minecraft-section">
         <h2 class="section-title">⛏️ 我的世界 (Minecraft) 安装</h2>
         <div class="minecraft-content">
           <p>欢迎来到黑爪旗下的Minecraft！我们提供 <strong>Java版 1.21.4</strong>服务器。</p>
           <div class="button-group">
-            <router-link to="/MinecraftHelp" class="mc-btn secondary">
-              安装教程与下载链接
-            </router-link>
-            <a href="https://kook.vip/KWcZc1" target="_blank" rel="noopener noreferrer" class="mc-btn secondary">
-             黑爪 Kook 语音频道 
-            </a>
+            <router-link to="/MinecraftHelp" class="mc-btn secondary">安装教程与下载链接</router-link>
+            <a href="https://kook.vip/KWcZc1" target="_blank" rel="noopener noreferrer" class="mc-btn secondary">黑爪 Kook 语音频道</a>
           </div>
 
           <!-- 服务器状态展示 -->
@@ -40,7 +36,7 @@
         </div>
       </div>
 
-      <!-- 保留原有的近期动态区块，增加 Minecraft 相关动态 -->
+      <!-- 近期动态 -->
       <div class="section">
         <h2 class="section-title">📢 近期动态 / 施工中</h2>
         <div class="test-elements-grid">
@@ -51,75 +47,43 @@
         </div>
       </div>
     </div>
-    <BottomNav />
-    <div class="footer-beian">
-      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
-        {{ icpNumber }}
-      </a>
-      <span class="sep">|</span>
-      <a href="https://www.beian.gov.cn/" target="_blank" rel="noopener noreferrer">
-        {{ policeNumber }}
-      </a>
-    </div>
   </div>
+  <FooterBar />
+  <BottomNav />
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import BottomNav from '@/components/BottomNav.vue'
+import FooterBar from '@/components/FooterBar.vue'
 
-const icpNumber = import.meta.env.VITE_ICP_NUMBER || "待备案";
-const policeNumber = import.meta.env.VITE_POLICE_NUMBER || "办理中";
-
-// 服务器状态数据
 const serverStatus = ref<any>(null)
 let refreshTimer: number | null = null
 
-// 获取服务器状态（携带 token）
 async function fetchServerStatus() {
   try {
     const token = localStorage.getItem('authToken')
     const res = await fetch('/api/minecraft/status', {
-      headers: {
-        'Authorization': token ? `Bearer ${token}` : ''
-      }
+      headers: { 'Authorization': token ? `Bearer ${token}` : '' }
     })
-
-    if (res.status === 401) {
-      serverStatus.value = { error: '请先登录查看服务器状态' }
-      return
-    }
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: '请求失败' }))
-      serverStatus.value = { error: err.error || '请求失败' }
-      return
-    }
-
-    const data = await res.json()
-    serverStatus.value = data // 包含 online, max, motd, latency, players
-  } catch (e) {
-    serverStatus.value = { error: '网络错误，请稍后重试' }
-  }
+    if (res.status === 401) { serverStatus.value = { error: '请先登录查看服务器状态' }; return }
+    if (!res.ok) { const err = await res.json().catch(() => ({ error: '请求失败' })); serverStatus.value = { error: err.error || '请求失败' }; return }
+    serverStatus.value = await res.json()
+  } catch { serverStatus.value = { error: '网络错误，请稍后重试' } }
 }
 
 onMounted(() => {
   fetchServerStatus()
-  refreshTimer = window.setInterval(fetchServerStatus, 30000) // 每30秒刷新
+  refreshTimer = window.setInterval(fetchServerStatus, 30000)
 })
 
-onUnmounted(() => {
-  if (refreshTimer) clearInterval(refreshTimer)
-})
+onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 </script>
 
 <style scoped>
-.news-page .content-area {
-  padding-top: 20px;
-}
+.news-page .content-area { padding-top: 20px; }
 
-/* 修改后的 Minecraft 版面样式 */
 .minecraft-section {
   text-align: center;
   background: var(--card-bg);
@@ -174,29 +138,24 @@ onUnmounted(() => {
   color: white;
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
 }
-
 .mc-btn.primary:hover {
   transform: translateY(-3px);
   filter: brightness(1.05);
   box-shadow: 0 12px 20px rgba(0, 0, 0, 0.15);
 }
-
 .mc-btn.secondary {
   background: #2c3e66;
   color: white;
 }
-
 .mc-btn.secondary:hover {
   background: #1f2c4b;
   transform: translateY(-2px);
 }
-
 .mc-btn.outline {
   background: transparent;
   border: 2px solid var(--accent, #42b983);
   color: var(--accent, #42b983);
 }
-
 .mc-btn.outline:hover {
   background: var(--accent, #42b983);
   color: white;
@@ -212,27 +171,15 @@ onUnmounted(() => {
   margin-top: 12px;
 }
 
-.inline-link {
-  color: var(--accent, #42b983);
-  text-decoration: underline;
-  font-weight: 500;
-}
+.inline-link { color: var(--accent, #42b983); text-decoration: underline; font-weight: 500; }
+.placeholder-icon { font-size: 64px; opacity: 0.7; margin-top: 30px; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1)); }
 
-.placeholder-icon {
-  font-size: 64px;
-  opacity: 0.7;
-  margin-top: 30px;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
-}
-
-/* 原有近期动态样式保持不变并增强 */
 .test-elements-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 20px;
   margin-top: 20px;
 }
-
 .test-element {
   height: 100px;
   background: var(--accent, #bbbbbb);
@@ -248,7 +195,6 @@ onUnmounted(() => {
   text-align: center;
   padding: 12px;
 }
-
 .test-element:hover {
   transform: translateY(-5px);
   box-shadow: 0 12px 25px var(--shadow-color, rgba(0, 0, 0, 0.15));
@@ -261,13 +207,13 @@ onUnmounted(() => {
   font-weight: bold;
   color: var(--text-primary);
   letter-spacing: 1px;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: none;
 }
 
-.section-title {
-  font-size: 1.8rem;
-  margin-bottom: 12px;
-  color: var(--text-primary);
-}
+.section-title { font-size: 1.8rem; margin-bottom: 12px; color: var(--text-primary); }
 
 /* ========== 服务器状态样式 ========== */
 .server-status {
@@ -279,107 +225,24 @@ onUnmounted(() => {
   text-align: left;
   box-shadow: inset 0 0 0 1px var(--border-color, #e2e8f0);
 }
-
-.server-status.loading {
-  text-align: center;
-  opacity: 0.7;
-}
-
+.server-status.loading { text-align: center; opacity: 0.7; }
 .status-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px; padding-bottom: 8px;
   border-bottom: 1px solid var(--border-color, #e2e8f0);
 }
-
-.status-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  display: inline-block;
-  flex-shrink: 0;
-}
-
-.status-dot.online {
-  background: #2ecc71;
-  box-shadow: 0 0 6px #2ecc71;
-}
-
-.status-dot.offline {
-  background: #e74c3c;
-}
-
-.status-dot.unknown {
-  background: #f39c12;
-}
-
-.status-label {
-  font-weight: 600;
-  font-size: 1rem;
-  color: var(--text-primary);
-}
-
-.status-refresh {
-  margin-left: auto;
-  cursor: pointer;
-  opacity: 0.6;
-  transition: 0.2s;
-  font-size: 1.1rem;
-}
-
-.status-refresh:hover {
-  opacity: 1;
-  transform: rotate(60deg);
-}
-
-.status-error {
-  color: #e74c3c;
-  padding: 6px 0;
-}
-
-.status-players {
-  font-weight: 600;
-  font-size: 1.1rem;
-  color: var(--text-primary);
-}
-
-.status-motd {
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-  background: var(--card-bg);
-  padding: 6px 12px;
-  border-radius: 20px;
-  display: inline-block;
-  margin: 6px 0;
-}
-
-.status-latency {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  margin: 4px 0;
-}
-
-.status-player-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.player-tag {
-  background: var(--accent, #42b983);
-  color: white;
-  padding: 2px 14px;
-  border-radius: 30px;
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.status-empty {
-  color: var(--text-muted);
-  font-style: italic;
-  margin-top: 6px;
-}
+.status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.status-dot.online { background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
+.status-dot.offline { background: #e74c3c; }
+.status-dot.unknown { background: #f39c12; }
+.status-label { font-weight: 600; font-size: 1rem; color: var(--text-primary); }
+.status-refresh { margin-left: auto; cursor: pointer; opacity: 0.6; transition: 0.2s; font-size: 1.1rem; }
+.status-refresh:hover { opacity: 1; transform: rotate(60deg); }
+.status-error { color: #e74c3c; padding: 6px 0; }
+.status-players { font-weight: 600; font-size: 1.1rem; color: var(--text-primary); }
+.status-motd { font-size: 0.95rem; color: var(--text-secondary); background: var(--card-bg); padding: 6px 12px; border-radius: 20px; display: inline-block; margin: 6px 0; }
+.status-latency { font-size: 0.85rem; color: var(--text-secondary); margin: 4px 0; }
+.status-player-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.player-tag { background: var(--accent, #42b983); color: white; padding: 2px 14px; border-radius: 30px; font-size: 0.85rem; font-weight: 500; }
+.status-empty { color: var(--text-muted); font-style: italic; margin-top: 6px; }
 </style>

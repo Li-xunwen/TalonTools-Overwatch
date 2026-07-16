@@ -1,16 +1,22 @@
 /* ==========================================
-   Theme Variables — 基础层
+   Theme Variables — 基础层（毛玻璃方案）
    ========================================== */
 
 /* 1. 默认（浅色）变量 */
 :root {
   /* 基础颜色 */
   --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f5;
+  --bg-secondary: rgba(255, 255, 255, 0.35);
   --text-primary: #333333;
-  --card-bg: #eeeeee;
+  --card-bg: rgba(255, 255, 255, 0.55);
   --accent: #555555;
-  --shadow-color: rgba(0, 0, 0, 0.1);
+  --shadow-color: rgba(0, 0, 0, 0.04);
+
+  /* 毛玻璃专用变量 */
+  --glass-blur: 16px;
+  --glass-border: rgba(255, 255, 255, 0.3);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+  --glass-radius: 16px;
 
   /* App 专用变量（继承基础色，按需微调） */
   --bg-body: var(--bg-primary);
@@ -18,7 +24,7 @@
   --text-body: var(--text-primary);
 
   /* 表单 */
-  --input-border: #dddddd;
+  --input-border: rgba(0, 0, 0, 0.10);
   --input-focus: #1877f2;
 
   /* 按钮 */
@@ -29,7 +35,7 @@
   --link-color: #1877f2;
 
   /* 阴影 */
-  --shadow: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.06);
 }
 
 /* 2. 深色模式 (通过 data-theme 或 class 触发) */
@@ -37,11 +43,17 @@
 .dark-theme {
   /* 基础颜色 */
   --bg-primary: #121212;
-  --bg-secondary: #1e1e1e;
+  --bg-secondary: rgba(30, 30, 30, 0.35);
   --text-primary: #ffffff;
-  --card-bg: #2a2a2a;
+  --card-bg: rgba(35, 35, 45, 0.55);
   --accent: #bbbbbb;
-  --shadow-color: rgba(0, 0, 0, 0.5);
+  --shadow-color: rgba(0, 0, 0, 0.25);
+
+  /* 毛玻璃专用变量 */
+  --glass-blur: 16px;
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  --glass-radius: 16px;
 
   /* App 专用变量 */
   --bg-body: var(--bg-primary);
@@ -49,7 +61,7 @@
   --text-body: var(--text-primary);
 
   /* 表单 */
-  --input-border: #444444;
+  --input-border: rgba(255, 255, 255, 0.10);
   --input-focus: #4dabf7;
 
   /* 按钮 */
@@ -60,7 +72,7 @@
   --link-color: #4dabf7;
 
   /* 阴影 */
-  --shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
 }
 
 /* ==========================================
@@ -75,7 +87,7 @@
 }
 
 /* ==========================================
-   Base Body
+   Base Body — 纯色背景，渐变交给 #app
    ========================================== */
 html {
   width: 100%;
@@ -94,11 +106,19 @@ body {
 }
 
 /* ==========================================
-   Vue Root
+   Vue Root — 渐变背景层，玻璃透过它可见
    ========================================== */
 #app {
   width: 100%;
   min-height: 100vh;
+  background: linear-gradient(135deg, #e0e7ff 0%, #fce7f3 30%, #ffe4e6 60%, #dbeafe 100%);
+  transition: background 0.3s ease;
+}
+
+/* 深色时 #app 换渐变 */
+html[data-theme="dark"] #app,
+.dark-theme #app {
+  background: linear-gradient(135deg, #0f172a 0%, #1a1a2e 40%, #111827 70%, #0f172a 100%);
 }
 
 /* ==========================================
@@ -121,7 +141,7 @@ a:hover {
 }
 
 /* ==========================================
-   Layout Helpers
+   毛玻璃基座 — 所有表面容器
    ========================================== */
 .join-play {
   position: relative;
@@ -138,14 +158,19 @@ a:hover {
   max-width: 1800px;
   margin: 0 auto;
   background: var(--bg-secondary);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .section {
   margin-bottom: 40px;
   padding: 30px;
   background: var(--card-bg);
-  border-radius: 15px;
-  box-shadow: 0 0 20px var(--shadow-color);
+  border-radius: var(--glass-radius);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .top-tip-text {
@@ -158,6 +183,51 @@ a:hover {
   font-weight: bold;
   letter-spacing: 1.5px;
   background: var(--bg-secondary);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* ==========================================
+   页面容器（PagesView.vue）
+   ========================================== */
+.page-view {
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  background: var(--card-bg);
+  border-radius: var(--glass-radius);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  padding: 40px 32px;
+}
+
+/* ==========================================
+   新闻列表（NewsView.vue）
+   ========================================== */
+.page-list-section {
+  background: var(--card-bg);
+  border-radius: var(--glass-radius);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  padding: 24px 20px;
+}
+
+/* News 页卡片 — 更厚的玻璃层，保证可读性 */
+.page-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(calc(var(--glass-blur) - 4px));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 4px));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--glass-radius);
+  box-shadow: var(--glass-shadow);
 }
 
 /* ==========================================

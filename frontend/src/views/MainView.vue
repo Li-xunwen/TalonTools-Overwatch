@@ -27,27 +27,10 @@
         </div>
       </div>
     </div>
-    <div class="footer-link">
-      <a href="https://kook.vip/KWcZc1" target="_blank" rel="noopener noreferrer">
-        Kook黑爪语音频道
-      </a>
-      <span class="sep">|</span>
-      <router-link to="/Thanks" class="privacy-link-inline">鸣谢支持</router-link>
-      <span class="sep">|</span>
-      <router-link to="/PrivacyPolicy" class="privacy-link-inline">隐私政策</router-link>
-    </div>
-    <!-- 备案信息页脚 -->
-    <div class="footer-beian">
-      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
-        {{ icpNumber }}
-      </a>
-      <span class="sep">|</span>
-      <a href="https://www.beian.gov.cn/" target="_blank" rel="noopener noreferrer">
-        {{ policeNumber }}
-      </a>
-    </div>
   </div>
-  <!-- 使用底部导航栏组件 -->
+  <!-- 页脚组件 — 背景延申至底部，自动预留 BottomNav 空间 -->
+  <FooterBar />
+  <!-- 底部导航栏 -->
   <BottomNav />
 </template>
 
@@ -58,8 +41,8 @@ import ThemeToggle from '@/components/ThemeToggle.vue'
 import PosterHeroes from '@/components/PosterHeroes.vue'
 import Toast from '@/components/Toast.vue'
 import BottomNav from '@/components/BottomNav.vue'
-const icpNumber = import.meta.env.VITE_ICP_NUMBER || '待备案'
-const policeNumber = import.meta.env.VITE_POLICE_NUMBER || '办理中'
+import FooterBar from '@/components/FooterBar.vue'
+
 // ---------- 类型定义 ----------
 interface UserData {
   username: string
@@ -497,8 +480,6 @@ onUnmounted(() => {
 
 <style>
 
-
-
 * {
     margin: 0;
     padding: 0;
@@ -511,16 +492,6 @@ body {
     color: var(--text-primary);
     transition: background 0.3s, color 0.3s;
 }
-
-
-
-/* 
-   已删除以下海报相关样式：
-   - .poster-wrapper
-   - .poster-container
-   - .play-hero
-   - .hero1 ~ .hero5
-*/
 
 .content-area {
     position: relative;
@@ -551,7 +522,10 @@ body {
     color: var(--text-primary);
     font-weight: bold;
     letter-spacing: 1.5px;
-    background: var(--bg-secondary);
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom: none;
 }
 
 
@@ -658,54 +632,5 @@ body {
 .add-member-btn:hover {
   transform: scale(1.05);
   opacity: 0.9;
-}
-
-.privacy-link-inline {
-  color: var(--link-color);
-  text-decoration: none;
-  display: inline;
-  margin-left: 4px;
-  margin-right: 4px;
-}
-
-.privacy-link-inline:hover {
-  text-decoration: underline;
-}
-
-.footer-link{
-  text-align: center;
-  padding: 16px 12px 5px;
-  font-size: 12px;
-  color: var(--text-secondary, #6c757d);
-  background-color: var(--bg-primary, #fff);
-  border-top: 1px solid var(--border-color, #e9ecef);
-  margin-top: 24px;
-  margin-bottom: 0px
-}
-
-.footer-beian {
-  text-align: center;
-  padding: 16px 12px 20px;
-  font-size: 12px;
-  color: var(--text-secondary, #6c757d);
-  background-color: var(--bg-primary, #fff);
-  margin-top: 0px;
-  margin-bottom: 70px
-}
-
-.footer-beian a {
-  color: inherit;
-  text-decoration: none;
-  transition: opacity 0.2s;
-}
-
-.footer-beian a:hover {
-  opacity: 0.7;
-  text-decoration: underline;
-}
-
-.footer-beian .sep {
-  margin: 0 8px;
-  color: var(--text-muted, #adb5bd);
 }
 </style>
