@@ -42,8 +42,7 @@ router.get('/pages', async (req: Request, res: Response) => {
         const isAdmin = currentUser?.role === 'ADMIN';
 
         // 未登录/普通用户只看 status=2(已发布) 和 status=3(完全开放)
-        // 管理员额外看审核中和已删除的文章，但草稿不显示在列表中
-        const allowedStatuses = isAdmin ? [0, 1, 2, 3] : [2, 3];
+        const allowedStatuses = isAdmin ? [0, 1, 2, 3, 4] : [2, 3];
 
         const [rows] = await pool.query<any[]>(
             `SELECT p.id, p.title, LEFT(p.content, 500) AS content_preview, p.author_id, u.battletag AS author_name,
@@ -52,9 +51,9 @@ router.get('/pages', async (req: Request, res: Response) => {
                      WHERE page_id = p.id AND target_type = 'page' AND target_id = p.id) AS like_count
              FROM pages p
              JOIN users u ON p.author_id = u.id
-             WHERE p.type = 1 AND (p.status IN (?) OR p.author_id = ?)
+             WHERE p.type = 1 AND p.status IN (?)
              ORDER BY p.updated_at DESC`,
-            [allowedStatuses, currentUser?.userId || 0]
+            [allowedStatuses]
         );
 
         // 当前用户是否已点赞每条页面
@@ -115,14 +114,14 @@ router.get('/pages/:id', async (req: Request, res: Response) => {
                 break;
             case 2:  // 已发布
                 break;
-            case 1:  // 审核中 — 作者和管理员可看
-                if (!isAdmin && !isAuthor) return res.status(403).json({ error: '权限不足' });
+            case 1:  // 审核中
+                if (!isAdmin) return res.status(403).json({ error: '权限不足' });
                 break;
             case 0:  // 已删除
                 if (!isAdmin) return res.status(403).json({ error: '权限不足' });
                 break;
-            case 4:  // 草稿 — 仅作者可查看，管理员也不行
-                if (!isAuthor) return res.status(403).json({ error: '权限不足' });
+            case 4:  // 草稿
+                if (!isAuthor && !isAdmin) return res.status(403).json({ error: '权限不足' });
                 break;
             default:
                 return res.status(404).json({ error: '页面不存在' });
@@ -141,40 +140,6 @@ router.get('/pages/:id', async (req: Request, res: Response) => {
         });
     } catch (error) {
         console.error('获取页面失败:', error);
-        res.status(500).json({ error: '服务器错误' });
-    }
-});
-
-// =================================================================
-// POST /api/pages — 创建新页面
-// =================================================================
-router.post('/pages', authenticateToken, async (req: AuthRequest, res: Response) => {
-    try {
-        const userId = req.user!.userId;
-        const { title, content } = req.body;
-
-        if (!title || typeof title !== 'string' || title.trim().length === 0) {
-            return res.status(400).json({ error: '标题不能为空' });
-        }
-        if (content === undefined || typeof content !== 'string') {
-            return res.status(400).json({ error: '内容不能为空' });
-        }
-
-        const result = await pool.query<any>(
-            'INSERT INTO pages (title, content, author_id, type, status) VALUES (?, ?, ?, 1, 4)',
-            [title.trim(), content, userId]
-        );
-
-        const newId = (result as any)[0].insertId;
-
-        res.status(201).json({
-            id: newId,
-            title: title.trim(),
-            status: 4,
-            message: '创建成功',
-        });
-    } catch (error) {
-        console.error('创建页面失败:', error);
         res.status(500).json({ error: '服务器错误' });
     }
 });

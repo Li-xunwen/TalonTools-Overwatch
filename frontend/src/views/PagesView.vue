@@ -158,7 +158,7 @@
                             <button class="tb-btn" @click="wrapText(idx, '*', '*')"><i>I</i></button>
                             <button class="tb-btn" @click="wrapText(idx, '`', '`')">代码</button>
                             <button class="tb-btn" @click="insertLink(idx)">🔗 链接</button>
-                            <button class="tb-btn" @click="insertImage(idx)">🖼️ 图片</button>
+                            <button class="tb-btn" @click="insertFile(idx)">📁 插入文件</button>
                             <button class="tb-btn tb-sep" @click="editingSectionIdx = -1">✓ 完成</button>
                         </div>
                         <div class="edit-content-wrap">
@@ -177,6 +177,9 @@
                 </div>
                 <button class="btn-insert-section" @click="addSection(editSections.length)">+ 插入段落</button>
             </div>
+
+            <!-- 文件库弹窗 -->
+            <FileLibrary v-if="showFileLibrary" @close="showFileLibrary = false" @select="onFileSelected" />
         </div>
 
         <div class="back-link" v-if="pageData && !loading && !isEditing"><a href="#" @click.prevent="scrollToTop">🔝 回到最顶上</a></div>
@@ -194,6 +197,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import ThemeToggle from '@/components/ThemeToggle.vue';
+import FileLibrary from '@/components/FileLibrary.vue';
 import { authFetch } from '@/utils/request';
 import {
     PageSection, parseSections, mergeSections,
@@ -235,6 +239,8 @@ const editTitle = ref('');
 const editSections = ref<PageSection[]>([]);
 const editingSectionIdx = ref(-1);
 const saving = ref(false);
+const showFileLibrary = ref(false);
+const fileLibrarySectionIdx = ref(0);
 
 // ===== 点赞 / 评论 状态 =====
 const pageLikeCount = ref(0);
@@ -434,9 +440,27 @@ function wrapText(idx: number, before: string, after: string) {
 function insertLink(idx: number) {
     const url = prompt('输入链接地址:', 'https://'); if (url) wrapText(idx, '[', `](${url})`);
 }
-function insertImage(idx: number) {
-    const url = prompt('输入图片地址:', '/resource/users/'); if (!url) return;
-    editSections.value[idx].content += `\n![${prompt('输入图片描述:', '图片') || '图片'}](${url})`; saveToLocal();
+
+/**
+ * 打开文件库弹窗，用户选择文件后插入 Markdown 格式内容。
+ * 图片 → ![文件名](url)
+ * 视频 → ![文件名](url)（marked 渲染器自动转为 <video>）
+ * 其他文件 → [文件名](url)
+ */
+function insertFile(idx: number) {
+    fileLibrarySectionIdx.value = idx;
+    showFileLibrary.value = true;
+}
+
+function onFileSelected(file: any) {
+    const idx = fileLibrarySectionIdx.value;
+    if (file.type === 'image' || file.type === 'video') {
+        editSections.value[idx].content += `\n![${file.name}](${file.url})`;
+    } else {
+        editSections.value[idx].content += `\n[${file.name}](${file.url})`;
+    }
+    showFileLibrary.value = false;
+    saveToLocal();
 }
 
 // 总标题变更时刷新所见所得预览

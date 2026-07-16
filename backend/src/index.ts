@@ -16,6 +16,8 @@ import adminRouter from './routes/admin';
 import bindPhone from './routes/bindPhone';
 import minecraftRouter from './routes/minecraft';
 import pagesRouter from './routes/pages';
+import filesRouter from './routes/files';
+
 dotenv.config();
 
 const { PORT, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET } = process.env;
@@ -30,7 +32,6 @@ if (!JWT_SECRET) throw new Error('JWT_SECRET is not defined');
 const app = express();
 const port = parseInt(PORT, 10);
 
-// 初始化数据库连接池
 initPool({
     host: DB_HOST,
     user: DB_USER,
@@ -42,21 +43,22 @@ initPool({
 });
 
 app.use(cors());
-app.use(express.json());
 app.set('trust proxy', true);
 
-// 公开静态文件：Markdown 中的 /resource/users/{id}/xxx.png 等用户上传文件
+// 文件上传路由必须在 express.json() 之前注册，避免 multipart 被当作 JSON 解析
+app.use('/api/users', filesRouter);
+
+app.use(express.json());
+
 app.use('/users', express.static(path.join(__dirname, '../public/users')));
 
-// 健康检查（无需认证）
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', message: 'Your TypeScript server is running!' });
-    console.log('真实 IP:', req.ip);
+    console.log('real IP:', req.ip);
     console.log('X-Forwarded-For:', req.headers['x-forwarded-for']);
     console.log('X-Real-IP:', req.headers['x-real-ip']);
 });
 
-// 登录（无需认证）
 app.post('/api/login', async (req, res) => {
     const { battletag, password } = req.body;
     const { pool } = await import('./utils/db');
@@ -65,14 +67,13 @@ app.post('/api/login', async (req, res) => {
         [battletag]
     );
     const user = rows[0];
-    if (!user) return res.status(401).json({ error: '用户不存在' });
+    if (!user) return res.status(401).json({ error: 'user not found' });
     
     const isValid = await bcrypt.compare(password, user.password_hash);
-    if (!isValid) return res.status(401).json({ error: '密码错误' });
+    if (!isValid) return res.status(401).json({ error: 'wrong password' });
     
-    // 检查手机号是否为空
     if (!user.phone || user.phone.trim() === '') {
-        return res.status(403).json({ error: '请先绑定手机号' });
+        return res.status(403).json({ error: 'please bind phone first' });
     }
     
     const token = jwt.sign(
@@ -88,17 +89,6 @@ app.post('/api/login', async (req, res) => {
     res.json({ token, battletag: user.battletag });
 });
 
-
-/**
- * GET /api/heroeslist
- * 功能：获取所有英雄列表（无需 token）
- * 返回示例：
- * [
- *   { "id": 1, "name": "wuyang", "zh_name": "无漾", "role": "support" },
- *   { "id": 2, "name": "kiriko", "zh_name": "雾子", "role": "support" },
- *   ...
- * ]
- */
 app.get('/api/heroeslist', async (req, res) => {
     try {
         const [rows] = await pool.query<any[]>(
@@ -106,23 +96,22 @@ app.get('/api/heroeslist', async (req, res) => {
         );
         res.json(rows);
     } catch (error) {
-        console.error('获取英雄列表失败:', error);
-        res.status(500).json({ error: '服务器错误' });
+        console.error('get heroes list error:', error);
+        res.status(500).json({ error: 'server error' });
     }
 });
 
 app.use('/api/minecraft', minecraftRouter);
 app.use('/api/bind-phone', bindPhone);
-app.use('/api', userRouter);          // 用户相关
-app.use('/api', pagesRouter);          // 文档页面（放在 like/evaluation 之前，避免被全局 auth 拦截）
-app.use('/api', likeRouter);          // 点赞（全局 auth，拦截整个 /api/**）
-app.use('/api', evaluationRouter);     // 评价（同上，全局 auth）
-app.use('/api/user', rankRouter);      // 用户段位更新
-app.use('/api/user', heroesRouter);    // 用户英雄更新
+app.use('/api', userRouter);
+app.use('/api', pagesRouter);
+app.use('/api', likeRouter);
+app.use('/api', evaluationRouter);
+app.use('/api/user', rankRouter);
+app.use('/api/user', heroesRouter);
 app.use('/api/v2', dashenProfileRouter);
 app.use('/api/admin', adminRouter);
 
-
 app.listen(port, () => {
-    console.log(`🚀 Server is running at http://localhost:${port}`);
+    console.log('Server is running at http://localhost:' + port);
 });

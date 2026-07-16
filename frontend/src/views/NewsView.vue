@@ -26,9 +26,9 @@
                 <span class="meta-date">{{ formatDate(page.updated_at) }}</span>
               </div>
               <div class="card-actions" @click.stop>
-                <button :class="['card-action-btn', { liked: page.is_liked }]" @click="toggleLike(page)">{{ page.is_liked ? '🐮' : '🐮' }} {{ page._like_count }}</button>
-                <button class="card-action-btn" @click="toggleLikeList(page)"> {{ page._showLikeList ? '收起' : '点赞列表' }}</button>
-                <button class="card-action-btn" @click="toggleComments(page)">💬 {{ page._showComments ? '收起' : '评论' }}<span v-if="page._comment_count">({{ page._comment_count }})</span></button>
+                <button :class="['card-action-btn', { liked: page.is_liked }]" @click="toggleLike(page)">{{ page.is_liked ? '👍' : '👍' }} {{ page._like_count }}</button>
+                <button class="card-action-btn" @click="toggleLikeList(page)">👤 {{ page._showLikeList ? '收起' : '赞' }}</button>
+                <button class="card-action-btn" @click="toggleComments(page)">💬 {{ page._showComments ? '收起' : '评' }}<span v-if="page._comment_count">({{ page._comment_count }})</span></button>
 
 
                 <template v-if="isAdmin && showAdmin">
