@@ -170,7 +170,7 @@ function formatSize(bytes: number): string {
 <style scoped>
 .file-library-overlay {
   position: fixed; top:0; left:0; right:0; bottom:0;
-  background: rgba(0,0,0,0.4); z-index:99999;
+  background: rgba(0,0,0,0.78); z-index:99999;
   display: flex; align-items: center; justify-content: center;
 }
 .file-library-panel {

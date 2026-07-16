@@ -351,7 +351,7 @@ async function fetchPage() {
             const token = localStorage.getItem('authToken');
             if (token) {
                 const p = JSON.parse(atob(token.split('.')[1]));
-                isAuthor.value = p.userId === pageData.value.author_id;
+                isAuthor.value = p.userId === pageData.value.author_id || p.role === 'ADMIN';
             }
         } catch {}
         // 页面加载成功后获取点赞和评论数据
@@ -448,7 +448,7 @@ function insertLink(idx: number) {
  * 其他文件 → [文件名](url)
  */
 function insertFile(idx: number) {
-    // 检查光标是否在行首，否则跳到行尾再换行
+    // 检查光标是否在行首，否则提醒用户换行
     const ta = document.querySelectorAll('.edit-textarea')[idx] as HTMLTextAreaElement | undefined;
     if (ta) {
         const pos = ta.selectionStart;
@@ -456,15 +456,12 @@ function insertFile(idx: number) {
         if (pos > 0 && content[pos - 1] !== '\n') {
             const ok = confirm('光标不在行首，插入内容会接在当前行末尾。是否先换行？');
             if (ok) {
-                // 找到当前行末尾（下一个 \n 或字符串结尾）
-                const lineEnd = content.indexOf('\n', pos);
-                const insertAt = lineEnd === -1 ? content.length : lineEnd + 1;
                 editSections.value[idx].content =
-                    content.slice(0, insertAt) + '\n' + content.slice(insertAt);
+                    content.slice(0, pos) + '\n' + content.slice(pos);
                 saveToLocal();
                 requestAnimationFrame(() => {
                     ta.focus();
-                    ta.setSelectionRange(insertAt, insertAt);
+                    ta.setSelectionRange(pos + 1, pos + 1);
                 });
             }
         }

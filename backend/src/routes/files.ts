@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import express, { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import fs from 'fs';
 import path from 'path';
@@ -73,8 +73,8 @@ router.delete('/files/:filename', authenticateToken, (req: AuthRequest, res: Res
   }
 });
 
-// 重命名文件
-router.patch('/files/:filename/rename', authenticateToken, (req: AuthRequest, res: Response) => {
+// 重命名文件（需显式解析 JSON body，因为 filesRouter 挂载在 app.use(express.json()) 之前）
+router.patch('/files/:filename/rename', express.json(), authenticateToken, (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
     const oldName = String(req.params.filename);
