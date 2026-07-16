@@ -235,7 +235,7 @@ onUnmounted(() => {
 
 .test-element {
   height: 100px;
-  background: var(--accent, #42b983);
+  background: var(--accent, #bbbbbb);
   color: var(--bg-primary, #ffffff);
   border-radius: 20px;
   display: flex;

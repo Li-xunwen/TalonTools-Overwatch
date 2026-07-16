@@ -496,7 +496,65 @@ onUnmounted(() => {
 </script>
 
 <style>
-@import '../style/main.css';
+
+
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Microsoft YaHei', Arial, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background 0.3s, color 0.3s;
+}
+
+
+
+/* 
+   已删除以下海报相关样式：
+   - .poster-wrapper
+   - .poster-container
+   - .play-hero
+   - .hero1 ~ .hero5
+*/
+
+.content-area {
+    position: relative;
+    z-index: 3;
+    padding: 50px 20px;
+    width: 100%;
+    max-width: 1800px;
+    margin: 0 auto;
+    background: var(--bg-secondary);
+    
+}
+
+.section {
+    margin-bottom: 40px;
+    padding: 30px;
+    background: var(--card-bg);
+    border-radius: 15px;
+    box-shadow: 0 0 20px var(--shadow-color);
+}
+
+
+.top-tip-text {
+    top: 0;
+    font-size: clamp(5px, 4vw + 1rem, 64px);
+    text-align: center;
+    padding: 10px 5px 10px;
+    margin: 0;
+    color: var(--text-primary);
+    font-weight: bold;
+    letter-spacing: 1.5px;
+    background: var(--bg-secondary);
+}
+
+
 
 .join-play {
     position: relative;

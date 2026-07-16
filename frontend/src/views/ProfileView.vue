@@ -856,8 +856,6 @@ onMounted(() => {
 })
 </script>
 <style scoped>
-@import "../style/main.css";
-
 .profile-page {
   min-height: 100vh;
   padding-bottom: 90px;
