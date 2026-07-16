@@ -24,7 +24,10 @@
                 <button class="card-action-btn" @click="toggleLike(page)">{{ page.is_liked ? '👍' : '👍' }} {{ page._like_count }}</button>
                 <button class="card-action-btn" @click="toggleLikeList(page)">👤 {{ page._showLikeList ? '收起' : '赞' }}</button>
                 <button class="card-action-btn" @click="toggleComments(page)">💬 {{ page._showComments ? '收起' : '评' }}<span v-if="page._comment_count">({{ page._comment_count }})</span></button>
-                <button v-if="isAdmin && page.status !== 2 && page.status !== 3" class="card-action-btn card-action-approve" @click="approvePage(page)">✅ 通过</button>
+                <template v-if="isAdmin">
+                  <button v-if="page.status !== 2 && page.status !== 3" class="card-action-btn card-action-approve" @click="approvePage(page)">✅ 通过审核</button>
+                  <button v-if="page.status === 1 || page.status === 2" class="card-action-btn card-action-draft" @click="draftPage(page)">↩️ 打回草稿</button>
+                </template>
               </div>
               <div class="card-expand" @click.stop>
                 <div v-if="page._showLikeList" class="expand-box">
@@ -88,9 +91,9 @@
   <div :class="['fab-area', { hidden: !fabVisible }]">
     <Transition name="fan">
       <div v-if="showFabMenu" class="fab-items">
-        <button class="fab-item" @click.stop>文章</button>
-        <button class="fab-item" @click.stop>视频</button>
-        <button class="fab-item" @click.stop>图集</button>
+        <button class="fab-item" @click.stop="createNewArticle">文章</button>
+        <button class="fab-item" @click.stop="showFabMenu = false">视频</button>
+        <button class="fab-item" @click.stop="showFabMenu = false">图集</button>
       </div>
     </Transition>
     <button class="fab-btn" @click="showFabMenu = !showFabMenu">
@@ -103,6 +106,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import ThemeToggle from '@/components/ThemeToggle.vue'
@@ -124,6 +128,7 @@ interface P {
 const loading = ref(true)
 const pages = ref<P[]>([])
 const isAdmin = ref(false)
+const router = useRouter()
 const showFabMenu = ref(false)
 const fabVisible = ref(true)
 const lastScrollY = ref(0)
@@ -260,6 +265,21 @@ async function submitInlineReply(p: P, c: any) {
 async function toggleInlineCommentLike(p: P, c: any) {
   const m = c.is_liked ? 'unlike' : 'like'
   try { const r = await authFetch(`/api/pages/comments/${c.id}/${m}`, { method: 'POST' }); if (r.ok) { const d = await r.json(); c.is_liked = !c.is_liked; c.like_count = d.count } } catch {}
+}
+
+async function draftPage(p: P) {
+  if (!confirm(`将 "${p.title}" 打回草稿？`)) return
+  try {
+    const r = await authFetch(`/api/pages/${p.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 4 }) })
+    if (r.ok) { p.status = 4; alert('已打回草稿') } else { const e = await r.json(); alert(e.error || '失败') }
+  } catch { alert('网络错误') }
+}
+
+function createNewArticle() {
+  const template = `# 文章标题\n## 1. 标题\n![图片示例](/resource/user/0/example.jpg)\n## 2. 标题\n![视频示例](/resource/user/0/example.mp4)`
+  sessionStorage.setItem('newPageTemplate', template)
+  showFabMenu.value = false
+  router.push('/pages/new')
 }
 
 async function toggleInlineReplyLike(p: P, r: any) {
@@ -421,6 +441,8 @@ async function toggleInlineReplyLike(p: P, r: any) {
 .card-action-btn:hover { border-color: var(--button-bg); color: var(--button-bg); }
 .card-action-approve { border-color: #16a34a; color: #16a34a; }
 .card-action-approve:hover { background: #f0fdf4; }
+.card-action-draft { border-color: #f59e0b; color: #f59e0b; }
+.card-action-draft:hover { background: #fffbeb; }
 
 .card-expand { flex: 1; overflow-y: auto; min-height: 0; }
 .card-expand::-webkit-scrollbar { width: 3px; }

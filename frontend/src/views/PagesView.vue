@@ -202,22 +202,25 @@ import {
     loadEditCache, saveEditCache, clearEditCache, isCacheStale,
 } from '@/utils/pageEditor';
 
-// Markdown 图片链接指向视频文件时,转成 <video> 标签
-function imgToVideo(html: string): string {
-    return html.replace(
-        /<img\s+[^>]*?src="([^"]+\.(mp4|webm|ogv|mov))"[^>]*>/gi,
-        (_match, src: string, ext: string) => {
-            const typeMap: Record<string, string> = {
-                mp4: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', mov: 'video/quicktime',
-            };
-            return `<video controls preload="metadata" playsinline width="100%"><source src="${src}" type="${typeMap[ext.toLowerCase()] || 'video/mp4'}"></video>`;
-        }
-    );
-}
+// marked 自定义渲染 — 视频扩展名直接输出 <video>
+const VIDEO_EXT = /\.(mp4|webm|ogv|mov)$/i;
+const TYPE_MAP: Record<string, string> = { mp4: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', mov: 'video/quicktime' };
+
+const renderer = new marked.Renderer();
+renderer.image = ({ href, text }) => {
+    if (VIDEO_EXT.test(href)) {
+        const ext = href.match(VIDEO_EXT)![1].toLowerCase();
+        const type = TYPE_MAP[ext] || 'video/mp4';
+        return `<video controls playsinline muted width="100%" src="${href}"></video>`;
+    }
+    return `<img src="${href}" alt="${text}">`;
+};
+
+marked.setOptions({ renderer, breaks: true });
 
 const VIDEO_ALLOW = {
     ADD_TAGS: ['img', 'video', 'source'],
-    ADD_ATTR: ['target', 'rel', 'controls', 'preload', 'playsinline', 'type', 'src', 'width'],
+    ADD_ATTR: ['target', 'rel', 'controls', 'preload', 'playsinline', 'type', 'src', 'width', 'muted'],
 };
 
 const route = useRoute();
@@ -266,10 +269,9 @@ const policeNumber = import.meta.env.VITE_POLICE_NUMBER || '沪公网安备 3101
 
 const renderedContent = computed(() => {
     if (!pageData.value?.content) return '';
-    let html = marked.parse(pageData.value.content, { async: false, breaks: true }) as string;
+    let html = marked.parse(pageData.value.content, { async: false }) as string;
     // 移除第一个 <h1>(标题已在外部 .title 渲染,避免重复)
     html = html.replace(/<h1[^>]*>[\s\S]*?<\/h1>/, '');
-    html = imgToVideo(html);
     html = html.replace(/<h2/g, '</div><div class="markdown-section"><h2');
     html = html.replace(/^<\/div><div class="markdown-section"><h2/, '<div class="markdown-section"><h2');
     if (/markdown-section/.test(html)) html += '</div>';
@@ -306,15 +308,29 @@ const renderedTitlePreview = computed(() => {
 
 const renderPreview = (md: string): string => {
     if (!md) return '';
-    // breaks: true — 单换行按 <br> 渲染，所见即所得
-    let html = marked.parse(md, { async: false, breaks: true }) as string;
-    html = imgToVideo(html);
+    let html = marked.parse(md, { async: false }) as string;
     return DOMPurify.sanitize(html, VIDEO_ALLOW);
 };
 
 async function fetchPage() {
     const id = route.params.id;
-    if (!id) { error.value = '页面不存在'; loading.value = false; return; }
+
+    // 新建文章（用 route.path 判断，避免首次挂载时 params 未就绪）
+    if (route.path === '/pages/new' || id === 'new') {
+      const template = sessionStorage.getItem('newPageTemplate') || '';
+      sessionStorage.removeItem('newPageTemplate');
+      const titleMatch = template.match(/^#\s+(.+?)(?:\n|$)/);
+      const fallbackTitle = titleMatch ? titleMatch[1].trim() : '新文章';
+      pageData.value = { id: 'new', title: fallbackTitle, content: template, author_name: '', updated_at: new Date().toISOString() };
+      isAuthor.value = true;
+      loading.value = false;
+      nextTick(() => enterEditMode());
+      return;
+    }
+
+    // 路由未就绪时跳过 API 请求
+    if (!id || id === 'new') { error.value = ''; loading.value = false; return; }
+
     loading.value = true; error.value = ''; isAuthError.value = false; pageData.value = null;
     try {
         const res = await authFetch(`/api/pages/${id}`);
@@ -447,6 +463,11 @@ function clearCache() {
 
 async function submitForReview() {
     if (!confirm('提交后页面将进入审核状态,确定提交?')) return;
+    // 新建文章先 POST 到后端获取真实 ID
+    if (pageData.value?.id === 'new') {
+      const created = await createPageOnServer();
+      if (!created) return;
+    }
     saving.value = true;
     try {
         const content = buildContent();
@@ -459,6 +480,11 @@ async function submitForReview() {
 }
 
 async function saveAsDraft() {
+    // 新建文章先 POST 到后端获取真实 ID
+    if (pageData.value?.id === 'new') {
+      const created = await createPageOnServer();
+      if (!created) return;
+    }
     saving.value = true;
     try {
         const content = buildContent();
@@ -468,6 +494,30 @@ async function saveAsDraft() {
         if (!st.ok) { alert('状态更新失败'); return; }
         clearCache(); await fetchPage(); isEditing.value = false; alert('已保存为草稿');
     } finally { saving.value = false; }
+}
+
+async function createPageOnServer(): Promise<boolean> {
+  saving.value = true;
+  try {
+    const content = buildContent();
+    const res = await authFetch('/api/pages', {
+      method: 'POST',
+      body: JSON.stringify({ title: editTitle.value, content })
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ error: '创建失败' }));
+      alert('创建失败:' + (e.error || ''));
+      return false;
+    }
+    const data = await res.json();
+    pageData.value.id = data.id || data.pageId;
+    return true;
+  } catch {
+    alert('网络错误，创建失败');
+    return false;
+  } finally {
+    saving.value = false;
+  }
 }
 
 function confirmDiscard() { if (!confirm('存在未提交的修改')) return; clearCache(); isEditing.value = false; editingSectionIdx.value = -1; }
