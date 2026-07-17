@@ -54,7 +54,7 @@ app.use('/users', express.static(path.join(__dirname, '../public/users')));
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', message: 'Your TypeScript server is running!' });
-    console.log('real IP:', req.ip);
+    console.log('真实 IP:', req.ip);
     console.log('X-Forwarded-For:', req.headers['x-forwarded-for']);
     console.log('X-Real-IP:', req.headers['x-real-ip']);
 });
@@ -67,15 +67,16 @@ app.post('/api/login', async (req, res) => {
         [battletag]
     );
     const user = rows[0];
-    if (!user) return res.status(401).json({ error: 'user not found' });
-    
+    if (!user) return res.status(401).json({ error: '用户不存在' });
+
     const isValid = await bcrypt.compare(password, user.password_hash);
-    if (!isValid) return res.status(401).json({ error: 'wrong password' });
-    
+    if (!isValid) return res.status(401).json({ error: '密码错误' });
+
+    // 检查手机号是否为空
     if (!user.phone || user.phone.trim() === '') {
-        return res.status(403).json({ error: 'please bind phone first' });
+        return res.status(403).json({ error: '请先绑定手机号' });
     }
-    
+
     const token = jwt.sign(
         { userId: user.id, battletag: user.battletag, role: user.role },
         JWT_SECRET,
@@ -96,8 +97,8 @@ app.get('/api/heroeslist', async (req, res) => {
         );
         res.json(rows);
     } catch (error) {
-        console.error('get heroes list error:', error);
-        res.status(500).json({ error: 'server error' });
+        console.error('获取英雄列表失败:', error);
+        res.status(500).json({ error: '服务器错误' });
     }
 });
 
@@ -113,5 +114,5 @@ app.use('/api/v2', dashenProfileRouter);
 app.use('/api/admin', adminRouter);
 
 app.listen(port, () => {
-    console.log('Server is running at http://localhost:' + port);
+    console.log('🚀 Server is running at http://localhost:' + port);
 });
