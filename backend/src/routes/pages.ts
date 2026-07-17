@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { pool } from '../utils/db';
+import { pool, userEventLogger } from '../utils/db';
 import jwt from 'jsonwebtoken';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
@@ -46,7 +46,6 @@ router.post('/pages', authenticateToken, async (req: AuthRequest, res: Response)
         }
 
         const pageType = typeof type === 'number' ? type : 1;
-        // 视频/图集类型默认审核中，其他默认完全开放
         const pageStatus = (pageType === 2 || pageType === 3) ? 1 : 3;
         const pageDescription = description || null;
 
@@ -58,6 +57,14 @@ router.post('/pages', authenticateToken, async (req: AuthRequest, res: Response)
 
         const insertId = (result as any)[0].insertId;
         const page = await getPageById(insertId);
+
+        // 操作日志：创建页面
+        userEventLogger.logEvent({
+            userId,
+            eventType: 'page_create',
+            eventData: { pageId: page.id, title: page.title },
+            ipAddress: req.ip,
+        });
 
         res.status(201).json({
             id: page.id,
@@ -84,7 +91,6 @@ router.get('/pages', async (req: Request, res: Response) => {
         const currentUser = parseUser(req);
         const isAdmin = currentUser?.role === 'ADMIN';
 
-        // 未登录/普通用户只看 status=2(已发布) 和 status=3(完全开放)
         const allowedStatuses = isAdmin ? [0, 1, 2, 3, 4] : [2, 3];
 
         const [rows] = await pool.query<any[]>(
@@ -99,7 +105,6 @@ router.get('/pages', async (req: Request, res: Response) => {
             [allowedStatuses]
         );
 
-        // 当前用户是否已点赞每条页面
         const userId = currentUser?.userId;
         let likedPageIds: Set<number> = new Set();
         if (userId && rows.length > 0) {
@@ -146,7 +151,6 @@ router.get('/pages/:id', async (req: Request, res: Response) => {
         const page = await getPageById(pageId);
         if (!page) return res.status(404).json({ error: '页面不存在' });
 
-        // 检查文章类型：仅 type=1（文档）和 type=2（视频）可通过此接口访问（兼容旧数据 type 为 NULL 的情况）
         if (page.type !== null && page.type !== 1 && page.type !== 2 && page.type !== 3) {
             return res.status(404).json({ error: '页面不存在' });
         }
@@ -155,19 +159,18 @@ router.get('/pages/:id', async (req: Request, res: Response) => {
         const isAdmin = currentUser?.role === 'ADMIN';
         const isAuthor = currentUser?.userId === page.author_id;
 
-        // 根据 status 校验访问权限
         switch (page.status) {
-            case 3:  // 完全开放
+            case 3:
                 break;
-            case 2:  // 已发布
+            case 2:
                 break;
-            case 1:  // 审核中
+            case 1:
                 if (!isAdmin) return res.status(403).json({ error: '权限不足' });
                 break;
-            case 0:  // 已删除
+            case 0:
                 if (!isAdmin) return res.status(403).json({ error: '权限不足' });
                 break;
-            case 4:  // 草稿
+            case 4:
                 if (!isAuthor && !isAdmin) return res.status(403).json({ error: '权限不足' });
                 break;
             default:
@@ -232,6 +235,15 @@ router.put('/pages/:id', async (req: Request, res: Response) => {
         );
 
         const updated = await getPageById(pageId);
+
+        // 操作日志：修改页面
+        userEventLogger.logEvent({
+            userId: currentUser.userId,
+            eventType: 'page_update',
+            eventData: { pageId },
+            ipAddress: req.ip,
+        });
+
         res.json({
             id: updated.id,
             title: updated.title,
@@ -262,6 +274,7 @@ router.patch('/pages/:id/status', async (req: Request, res: Response) => {
         const page = await getPageById(pageId);
         if (!page) return res.status(404).json({ error: '页面不存在' });
 
+        const oldStatus = page.status;
         const isAdmin = currentUser.role === 'ADMIN';
         const isAuthor = currentUser.userId === page.author_id;
 
@@ -281,6 +294,14 @@ router.patch('/pages/:id/status', async (req: Request, res: Response) => {
         }
 
         await pool.query('UPDATE pages SET status = ? WHERE id = ?', [newStatus, pageId]);
+
+        // 操作日志：修改页面状态
+        userEventLogger.logEvent({
+            userId: currentUser.userId,
+            eventType: 'page_status_change',
+            eventData: { pageId, oldStatus, newStatus },
+            ipAddress: req.ip,
+        });
 
         res.json({
             id: pageId,
@@ -354,6 +375,14 @@ router.post('/pages/:id/like', authenticateToken, async (req: AuthRequest, res: 
             [pageId, pageId]
         );
 
+        // 操作日志：点赞页面
+        userEventLogger.logEvent({
+            userId,
+            eventType: 'like',
+            eventData: { targetType: 'page', action: 'like', targetId: pageId },
+            ipAddress: req.ip,
+        });
+
         res.json({ count: countRows[0].cnt, is_liked: true });
     } catch (error) {
         console.error('点赞失败:', error);
@@ -381,6 +410,14 @@ router.post('/pages/:id/unlike', authenticateToken, async (req: AuthRequest, res
              WHERE page_id = ? AND target_type = 'page' AND target_id = ?`,
             [pageId, pageId]
         );
+
+        // 操作日志：取消点赞页面
+        userEventLogger.logEvent({
+            userId,
+            eventType: 'like',
+            eventData: { targetType: 'page', action: 'unlike', targetId: pageId },
+            ipAddress: req.ip,
+        });
 
         res.json({ count: countRows[0].cnt, is_liked: false });
     } catch (error) {
@@ -530,6 +567,15 @@ router.post('/pages/:id/comments', authenticateToken, async (req: AuthRequest, r
         );
 
         const comment = rows[0];
+
+        // 操作日志：发表评论
+        userEventLogger.logEvent({
+            userId,
+            eventType: 'comment_create',
+            eventData: { pageId, commentId: comment.id },
+            ipAddress: req.ip,
+        });
+
         res.status(201).json({
             id: comment.id,
             parent_id: comment.parent_id,
@@ -601,6 +647,15 @@ router.post('/pages/comments/:cid/reply', authenticateToken, async (req: AuthReq
         );
 
         const reply = rows[0];
+
+        // 操作日志：回复评论（也作为 comment_create 记录）
+        userEventLogger.logEvent({
+            userId,
+            eventType: 'comment_create',
+            eventData: { pageId: parent.page_id, parentId, commentId: reply.id },
+            ipAddress: req.ip,
+        });
+
         res.status(201).json({
             id: reply.id,
             parent_id: reply.parent_id,
@@ -644,6 +699,15 @@ router.delete('/pages/comments/:cid', authenticateToken, async (req: AuthRequest
         }
 
         await pool.query('UPDATE pages_comments SET deleted = 1 WHERE id = ?', [commentId]);
+
+        // 操作日志：删除评论
+        userEventLogger.logEvent({
+            userId,
+            eventType: 'comment_delete',
+            eventData: { commentId, pageId: rows[0].page_id },
+            ipAddress: req.ip,
+        });
+
         res.json({ message: '删除成功' });
     } catch (error) {
         console.error('删除评论失败:', error);
@@ -685,6 +749,14 @@ router.post('/pages/comments/:cid/like', authenticateToken, async (req: AuthRequ
             [commentId]
         );
 
+        // 操作日志：点赞评论
+        userEventLogger.logEvent({
+            userId,
+            eventType: 'like',
+            eventData: { targetType: 'comment', action: 'like', targetId: commentId },
+            ipAddress: req.ip,
+        });
+
         res.json({ count: countRows[0].cnt, is_liked: true });
     } catch (error) {
         console.error('评论点赞失败:', error);
@@ -713,6 +785,14 @@ router.post('/pages/comments/:cid/unlike', authenticateToken, async (req: AuthRe
              WHERE target_type = 'comment' AND target_id = ?`,
             [commentId]
         );
+
+        // 操作日志：取消点赞评论
+        userEventLogger.logEvent({
+            userId,
+            eventType: 'like',
+            eventData: { targetType: 'comment', action: 'unlike', targetId: commentId },
+            ipAddress: req.ip,
+        });
 
         res.json({ count: countRows[0].cnt, is_liked: false });
     } catch (error) {

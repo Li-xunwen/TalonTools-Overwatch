@@ -1,5 +1,6 @@
 import express, { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { userEventLogger } from '../utils/db';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
@@ -56,6 +57,14 @@ router.post('/files/upload', authenticateToken, (req: AuthRequest, res: Response
       return { name: f.originalname, size: f.size, type, ext, url: '/resource/users/' + req.user!.userId + '/' + encodeURIComponent(f.originalname) };
     });
 
+    // 操作日志：上传文件
+    userEventLogger.logEvent({
+      userId: req.user!.userId,
+      eventType: 'file_upload',
+      eventData: { fileCount: files.length, names: files.map(f => f.name) },
+      ipAddress: req.ip,
+    });
+
     res.json({ files, count: files.length });
   });
 });
@@ -70,6 +79,15 @@ router.delete('/files/:filename', authenticateToken, (req: AuthRequest, res: Res
     const filePath = path.join(USERS_DIR, String(userId), filename);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'not found' });
     fs.unlinkSync(filePath);
+
+    // 操作日志：删除文件
+    userEventLogger.logEvent({
+      userId: req.user!.userId,
+      eventType: 'file_delete',
+      eventData: { filename },
+      ipAddress: req.ip,
+    });
+
     res.json({ message: 'deleted' });
   } catch (error) {
     res.status(500).json({ error: 'server error' });
@@ -113,6 +131,14 @@ router.patch('/files/:filename/rename', express.json(), authenticateToken, (req:
     let type: 'image' | 'video' | 'other' = 'other';
     if (['.jpg','.jpeg','.png','.gif','.webp','.svg','.bmp'].includes(ext)) type = 'image';
     else if (['.mp4','.webm','.ogv','.mov','.avi','.mkv'].includes(ext)) type = 'video';
+
+    // 操作日志：重命名文件
+    userEventLogger.logEvent({
+      userId: req.user!.userId,
+      eventType: 'file_rename',
+      eventData: { oldName, newName: newName.trim() },
+      ipAddress: req.ip,
+    });
 
     res.json({
       name: newName.trim(),

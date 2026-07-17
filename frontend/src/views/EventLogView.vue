@@ -146,7 +146,18 @@ const eventTypes = [
   'create_user',
   'dashen-quick-strength',
   'dashen-competitive-strength',
-  'SMS_REQUEST'
+  'SMS_REQUEST',
+  // 文件操作
+  'file_upload',
+  'file_delete',
+  'file_rename',
+  // 页面操作
+  'page_create',
+  'page_update',
+  'page_status_change',
+  // 评论操作
+  'comment_create',
+  'comment_delete',
 ];
 
 const loading = ref(false);

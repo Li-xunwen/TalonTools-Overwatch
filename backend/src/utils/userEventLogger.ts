@@ -16,6 +16,17 @@ export type EventType =
   | 'dashen-quick-strength'
   | 'dashen-competitive-strength'
   | 'SMS_REQUEST'
+  // file operations
+  | 'file_upload'
+  | 'file_delete'
+  | 'file_rename'
+  // page operations
+  | 'page_create'
+  | 'page_update'
+  | 'page_status_change'
+  // comment operations
+  | 'comment_create'
+  | 'comment_delete'
 ;
 
 export interface EventLogOptions {

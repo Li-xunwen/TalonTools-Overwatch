@@ -314,7 +314,7 @@ const adminNewBattletag = ref('')
 
 const inviteText = computed(() => {
   const pwd = adminNewPassword.value.trim() || '123'
-  return `${props.user.username} 你的黑爪账号已经创建，访问http://47.116.35.79/来和小伙伴一起开黑吧，进来记得修改常用英雄。默认密码是${pwd}`
+  return `${props.user.username} 你的黑爪账号已经创建，访问www.nodebeta.top来和小伙伴一起开黑吧，进来记得修改常用英雄。默认密码是${pwd}`
 })
 
 // 段位列表
