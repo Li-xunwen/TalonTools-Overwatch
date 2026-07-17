@@ -22,6 +22,20 @@
           <button class="fl-btn fl-btn-close" @click="$emit('close')">关闭</button>
         </div>
       </div>
+
+      <!-- ====== 上传进度条 ====== -->
+      <div v-if="uploadProgress.visible" class="fl-upload-progress">
+        <div class="fl-upload-progress-left">
+          <span class="fl-upload-count-done">{{ uploadProgress.completed }}</span>
+          <span class="fl-upload-count-sep">/</span>
+          <span class="fl-upload-count-total">{{ uploadProgress.total }}</span>
+        </div>
+        <div class="fl-upload-progress-track">
+          <div class="fl-upload-progress-fill" :style="{ width: uploadProgress.currentPercent + '%' }"></div>
+        </div>
+        <div class="fl-upload-progress-right">{{ uploadProgress.currentPercent }}%</div>
+      </div>
+
       <div class="fl-body">
         <div v-if="loading" class="fl-loading">加载中...</div>
         <div v-else-if="files.length === 0" class="fl-empty">暂无文件</div>
@@ -77,11 +91,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 
 interface FileItem {
   name: string; size: number; type: string;
   ext: string; url: string;
+}
+
+interface UploadProgressState {
+  visible: boolean;
+  total: number;
+  completed: number;
+  currentPercent: number;
 }
 
 const props = withDefaults(defineProps<{
@@ -100,6 +121,14 @@ const selectedFile = ref('');
 const renamingFile = ref<string | null>(null);
 const renameValue = ref('');
 
+// 上传进度状态
+const uploadProgress = reactive<UploadProgressState>({
+  visible: false,
+  total: 0,
+  completed: 0,
+  currentPercent: 0,
+});
+
 // 多选状态
 const multiSelectedKeys = ref<Set<string>>(new Set());
 const multiSelectedOrder = ref<Map<string, number>>(new Map());
@@ -110,9 +139,8 @@ let lastHoveredKey = '';
 let swipeStartX = 0;
 let swipeStartY = 0;
 let swipeDirection: 'none' | 'horizontal' | 'vertical' = 'none';
-const SWIPE_THRESHOLD = 10; // 像素阈值，超过才判定方向
+const SWIPE_THRESHOLD = 10;
 
-// 修复 UTF-8 字节被误解析为 Latin-1 导致的中文乱码
 function fixEncoding(str: string): string {
   try {
     return decodeURIComponent(escape(str));
@@ -173,12 +201,10 @@ function addToMultiSelect(name: string) {
 
 function removeFromMultiSelect(name: string) {
   if (!multiSelectedKeys.value.has(name)) return;
-  const removedOrder = multiSelectedOrder.value.get(name) || 0;
   const next = new Set(multiSelectedKeys.value);
   next.delete(name);
   multiSelectedKeys.value = next;
 
-  // 重新编号
   const order = new Map(multiSelectedOrder.value);
   order.delete(name);
   const sorted = [...order.entries()].sort((a, b) => a[1] - b[1]);
@@ -205,7 +231,7 @@ function confirmMultiSelect() {
   emit('select', selectedFiles);
 }
 
-// ===== 滑动选择（pointer events）=====
+// ===== 滑动选择 =====
 function onGridPointerDown(e: PointerEvent) {
   isSwiping = true;
   swipeStartX = e.clientX;
@@ -226,22 +252,20 @@ function getFileFromPoint(x: number, y: number): FileItem | null {
 
 function onGridPointerMove(e: PointerEvent) {
   if (!isSwiping) return;
-
-  // 判断滑动方向
   const dx = Math.abs(e.clientX - swipeStartX);
   const dy = Math.abs(e.clientY - swipeStartY);
 
   if (swipeDirection === 'none') {
     if (dx > SWIPE_THRESHOLD || dy > SWIPE_THRESHOLD) {
       if (dx > dy) {
-        swipeDirection = 'horizontal'; // 横向→滑动多选
+        swipeDirection = 'horizontal';
       } else {
-        swipeDirection = 'vertical';   // 纵向→让滚动条工作
+        swipeDirection = 'vertical';
         isSwiping = false;
         return;
       }
     } else {
-      return; // 还没超过阈值，等待
+      return;
     }
   }
 
@@ -292,30 +316,85 @@ function cancelRename() {
   renameValue.value = '';
 }
 
+// ===== 上传（带进度） =====
 async function onUpload(e: Event) {
   const input = e.target as HTMLInputElement;
   if (!input.files || !input.files.length) return;
-  const fd = new FormData();
-  for (const f of input.files) fd.append('file', f);
-  try {
-    const res = await api('/api/users/files/upload', { method: 'POST', body: fd });
-    if (res.ok) {
-      loading.value = true;
-      try {
-        const r = await api('/api/users/files');
-        if (r.ok) files.value = (await r.json()).files || [];
-      } catch {}
-      loading.value = false;
-    } else {
-      const e = await res.json().catch(() => ({}));
-      if (e.error) alert('上传失败: ' + e.error);
+
+  const fileList = Array.from(input.files);
+  const total = fileList.length;
+
+  // 显示进度条
+  uploadProgress.visible = true;
+  uploadProgress.total = total;
+  uploadProgress.completed = 0;
+  uploadProgress.currentPercent = 0;
+
+  // 逐个上传，每个文件使用 XHR 获取实时进度
+  for (let i = 0; i < total; i++) {
+    const file = fileList[i];
+    const fd = new FormData();
+    fd.append('file', file);
+
+    try {
+      await uploadSingleFile(fd, i, total);
+      uploadProgress.completed++;
+    } catch (err: any) {
+      console.error('上传失败:', file.name, err);
+      alert(`上传失败: ${file.name}`);
     }
+  }
+
+  // 上传完毕，刷新文件列表
+  try {
+    const res = await api('/api/users/files');
+    if (res.ok) files.value = (await res.json()).files || [];
   } catch {}
-  input.value = '';
+
+  // 延迟隐藏进度条
+  setTimeout(() => {
+    uploadProgress.visible = false;
+    uploadProgress.currentPercent = 0;
+  }, 1000);
 }
 
+function uploadSingleFile(fd: FormData, _index: number, _total: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem('authToken');
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/users/files/upload');
+
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        uploadProgress.currentPercent = Math.round((event.loaded / event.total) * 100);
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        let errMsg = '上传失败';
+        try {
+          const body = JSON.parse(xhr.responseText);
+          if (body.error) errMsg = body.error;
+        } catch {}
+        reject(new Error(errMsg));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('网络错误'));
+    xhr.send(fd);
+  });
+}
+
+// ===== 删除 =====
 async function deleteSelected() {
-  const target = multiSelect
+  const target = props.multiSelect
     ? [...multiSelectedKeys.value]
     : (selectedFile.value ? [selectedFile.value] : []);
   if (target.length === 0) return;
@@ -370,6 +449,58 @@ function formatSize(bytes: number): string {
 .fl-btn-insert { border-color: var(--button-bg, #42b983) !important; color: var(--button-bg, #42b983) !important; }
 .fl-btn-del { border-color: #ef4444 !important; color: #ef4444 !important; }
 .fl-btn-close { background: var(--bg-secondary, #f5f5f5) !important; }
+
+/* ====== 上传进度条 ====== */
+.fl-upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 20px;
+  background: #f0f7ff;
+  border-bottom: 1px solid #dbeafe;
+}
+.fl-upload-progress-left {
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: #374151;
+}
+.fl-upload-count-done {
+  color: #1877f2;
+  font-weight: 700;
+}
+.fl-upload-count-sep {
+  color: #9ca3af;
+  margin: 0 1px;
+}
+.fl-upload-count-total {
+  color: #9ca3af;
+}
+.fl-upload-progress-track {
+  flex: 1;
+  height: 8px;
+  background: #e0e7ff;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.fl-upload-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #1877f2, #6366f1);
+  border-radius: 4px;
+  transition: width 0.15s ease;
+}
+.fl-upload-progress-right {
+  flex-shrink: 0;
+  min-width: 40px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1877f2;
+  font-variant-numeric: tabular-nums;
+}
+
 .fl-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; background: var(--card-bg, #fff); }
 .fl-loading, .fl-empty { text-align: center; padding: 60px 0; color: var(--accent, #999); }
 .fl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; user-select: none; min-width: 0; }
@@ -381,12 +512,10 @@ function formatSize(bytes: number): string {
 }
 .fl-item:hover { border-color: var(--button-bg, #1877f2); }
 .fl-item.selected { border-color: var(--button-bg, #1877f2); background: color-mix(in srgb, var(--button-bg, #1877f2) 8%, transparent); }
-/* 多选选中态：更醒目的边框 */
 .fl-item.multi-sel {
   border-color: var(--button-bg, #1877f2) !important;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--button-bg, #1877f2) 30%, transparent);
 }
-/* 多选编号角标 */
 .fl-order-badge {
   position: absolute; top: 4px; right: 4px; z-index: 2;
   width: 22px; height: 22px; border-radius: 50%;
