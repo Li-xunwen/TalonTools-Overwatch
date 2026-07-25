@@ -65,7 +65,7 @@
                 <span class="meta-date">{{ formatDate(page.updated_at) }}</span>
               </div>
               <div class="card-actions" @click.stop>
-                <button :class="['card-action-btn', { liked: page.is_liked }]" @click="toggleLike(page)">{{ page.is_liked ? '👍' : '👍' }} {{ page._like_count }}</button>
+                <button :class="['card-action-btn', { liked: page.is_liked }]" @click="toggleLike(page)">{{ page.is_liked ? '🐮' : '🐮' }} {{ page._like_count }}</button>
                 <button class="card-action-btn" @click="toggleLikeList(page)">👤 {{ page._showLikeList ? '收起' : '赞' }}</button>
                 <button class="card-action-btn" @click="toggleComments(page)">💬 {{ page._showComments ? '收起' : '评' }}<span v-if="page._comment_count">({{ page._comment_count }})</span></button>
 
@@ -98,7 +98,7 @@
                     </div>
                     <div class="ic-body">{{ c.content }}</div>
                     <div class="ic-acts">
-                      <button class="ic-act" @click="toggleInlineCommentLike(page, c)" :class="{ on: c.is_liked }">{{ c.is_liked ? '👍' : '👍' }} {{ c.like_count }}</button>
+                      <button class="ic-act" @click="toggleInlineCommentLike(page, c)" :class="{ on: c.is_liked }">{{ c.is_liked ? '🐮' : '🐮' }} {{ c.like_count }}</button>
                       <button class="ic-act" @click="startInlineReply(page, c, null)">回复</button>
                     </div>
                     <div v-if="c.replies && c.replies.length" class="ic-replies">
@@ -110,7 +110,7 @@
                         </div>
                         <div class="ic-body"><span v-if="r.reply_to_user_name" class="rto">回复@{{ r.reply_to_user_name }} </span>{{ r.content }}</div>
                         <div class="ic-acts">
-                          <button class="ic-act" @click="toggleInlineReplyLike(page, r)" :class="{ on: r.is_liked }">{{ r.is_liked ? '👍' : '👍' }} {{ r.like_count }}</button>
+                          <button class="ic-act" @click="toggleInlineReplyLike(page, r)" :class="{ on: r.is_liked }">{{ r.is_liked ? '🐮' : '🐮' }} {{ r.like_count }}</button>
                           <button class="ic-act" @click="startInlineReply(page, c, r)">回复</button>
                         </div>
                       </div>
@@ -412,7 +412,7 @@ async function deleteMyPage(p: P) {
 }
 
 function createNewArticle() {
-  const template = `# 文章标题\n## 1. 标题\n![图片示例](/resource/user/0/example.jpg)\n## 2. 标题\n![视频示例](/resource/user/0/example.mp4)`
+  const template = `# 文章标题\n## 1. 标题\n![图片示例](/resource/users/0/example.jpg)\n## 2. 标题\n![视频示例](/resource/users/0/example.mp4)`
   sessionStorage.setItem('newPageTemplate', template)
   showFabMenu.value = false
   router.push('/pages/new')

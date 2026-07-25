@@ -5,12 +5,16 @@
     <ThemeToggle />
     <!-- Toast -->
     <Toast :message="toastMessage" :duration="3000" />
-    <!-- 编辑按钮 -->
+    <!-- 顶部按钮：左（编辑资料）右（文件库） -->
     <div class="top-actions">
-      <button class="edit-btn" @click="toggleEdit">
+      <button class="top-action-btn" @click="toggleEdit">
         {{ isEditing ? '取消编辑' : '编辑资料' }}
       </button>
+      <button class="top-action-btn" @click="showFileLibrary = true">
+        📁 文件库
+      </button>
     </div>
+    <div class="content-area">
     <!-- Loading -->
     <div v-if="loading" class="loading">
       加载中...
@@ -166,6 +170,7 @@
           </div>
         </div>
       </div>
+
       <!-- 登出 -->
       <div class="logout-section">
         <button class="logout-btn" @click="logout">
@@ -173,6 +178,11 @@
         </button>
       </div>
     </div>
+
+    </div>
+
+    <!-- 文件库弹窗 -->
+    <FileLibrary v-if="showFileLibrary" @close="showFileLibrary = false" />
 
     <!-- Hero Picker -->
     <div v-if="showHeroPicker" class="hero-picker">
@@ -267,6 +277,7 @@ import Toast from '@/components/Toast.vue'
 import { authFetch } from '@/utils/request'
 import BottomNav from '@/components/BottomNav.vue'
 import { useRouter } from 'vue-router';
+import FileLibrary from '@/components/FileLibrary.vue';
 /* =========================
    类型定义
 ========================= */
@@ -310,6 +321,9 @@ const selectedField = ref('')
 const isChangingPassword = ref(false)
 const newPassword = ref('')
 const confirmPassword = ref('')
+
+// 文件库
+const showFileLibrary = ref(false)
 
 const router = useRouter();
 const isAdmin = computed(() => profile.value.role === 'ADMIN' || profile.value.role === 'MODERATOR');
@@ -861,6 +875,15 @@ onMounted(() => {
   padding-bottom: 90px;
 }
 
+.profile-page .content-area {
+  position: relative;
+  z-index: 3;
+  padding: 50px 20px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
 /* =========================
    主体
 ========================= */
@@ -881,30 +904,25 @@ onMounted(() => {
    编辑按钮
 ========================= */
 
-.edit-btn {
-  position: fixed;
-  top: 18px;
-  left: 20px;
-  z-index: 100;
+.top-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 30px;
+  margin-bottom: 12px;
+}
+
+.top-action-btn {
   border: none;
   border-radius: 10px;
   padding: 10px 16px;
   cursor: pointer;
   font-size: 14px;
   color: #000;
-  /* 浅色模式默认背景（深蓝色，确保对比度） */
   background: #2c6bff47;
+  transition: opacity .2s;
 }
-
-/* 深色模式下按钮背景（亮蓝色） */
-.dark-theme .edit-btn {
-  background: #2c6bff47;
-  color: #fff;
-}
-
-/* 如果你使用 data-theme 属性，则改为 */
-[data-theme="dark"] .edit-btn {
-  background: #2c6bff47;
+.top-action-btn:hover {
+  opacity: .7;
 }
 
 /* =========================
@@ -1339,7 +1357,6 @@ onMounted(() => {
   cursor: pointer;
   font-size: 16px;
 }
-
 
 /* 修改密码区域 */
 .change-password-section {

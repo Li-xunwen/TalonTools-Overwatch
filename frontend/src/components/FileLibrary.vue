@@ -37,6 +37,13 @@
       </div>
 
       <div class="fl-body">
+        <!-- ❕ 隐私提示按钮（文件列表右上角） -->
+        <button class="fl-privacy-btn" @click="showPrivacy = !showPrivacy" :class="{ active: showPrivacy }">❕</button>
+        <!-- 隐私提示内容 -->
+        <div v-if="showPrivacy" class="fl-privacy-notice">
+          <p>🔒 你上传的文件仅你自己可见。上传的图片和视频可用于文章编辑，文件会保存在服务器上。</p>
+          <p>请勿上传违反法律法规的内容，本站保留删除违规文件的权利。</p>
+        </div>
         <div v-if="loading" class="fl-loading">加载中...</div>
         <div v-else-if="files.length === 0" class="fl-empty">暂无文件</div>
         <div v-else
@@ -85,6 +92,7 @@
             </div>
           </div>
         </div>
+
       </div>
     </div>
   </div>
@@ -120,6 +128,7 @@ const loading = ref(true);
 const selectedFile = ref('');
 const renamingFile = ref<string | null>(null);
 const renameValue = ref('');
+const showPrivacy = ref(false);
 
 // 上传进度状态
 const uploadProgress = reactive<UploadProgressState>({
@@ -324,13 +333,11 @@ async function onUpload(e: Event) {
   const fileList = Array.from(input.files);
   const total = fileList.length;
 
-  // 显示进度条
   uploadProgress.visible = true;
   uploadProgress.total = total;
   uploadProgress.completed = 0;
   uploadProgress.currentPercent = 0;
 
-  // 逐个上传，每个文件使用 XHR 获取实时进度
   for (let i = 0; i < total; i++) {
     const file = fileList[i];
     const fd = new FormData();
@@ -345,13 +352,11 @@ async function onUpload(e: Event) {
     }
   }
 
-  // 上传完毕，刷新文件列表
   try {
     const res = await api('/api/users/files');
     if (res.ok) files.value = (await res.json()).files || [];
   } catch {}
 
-  // 延迟隐藏进度条
   setTimeout(() => {
     uploadProgress.visible = false;
     uploadProgress.currentPercent = 0;
@@ -501,7 +506,28 @@ function formatSize(bytes: number): string {
   font-variant-numeric: tabular-nums;
 }
 
-.fl-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; background: var(--card-bg, #fff); }
+.fl-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; background: var(--card-bg, #fff); position: relative; }
+
+/* ❕ 隐私提示按钮（fl-body 右上角） */
+.fl-privacy-btn {
+  position: sticky;
+  top: 0;
+  float: right;
+  z-index: 2;
+  padding: 4px 10px;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  background: var(--card-bg, #fff);
+  color: #f59e0b;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all .15s;
+  margin-bottom: 4px;
+}
+.fl-privacy-btn.active {
+  background: #f59e0b;
+  color: #fff;
+}
 .fl-loading, .fl-empty { text-align: center; padding: 60px 0; color: var(--accent, #999); }
 .fl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; user-select: none; min-width: 0; }
 .fl-item {
@@ -546,5 +572,23 @@ function formatSize(bytes: number): string {
   background: var(--card-bg, #fff);
   color: var(--text-primary, #333);
   outline: none;
+}
+
+/* ====== 隐私提示 ====== */
+.fl-privacy-notice {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 10px;
+  border: 1px solid var(--input-border, #ddd);
+}
+.fl-privacy-notice p {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--accent, #666);
+  margin: 0;
+}
+.fl-privacy-notice p:first-child {
+  margin-bottom: 6px;
 }
 </style>
