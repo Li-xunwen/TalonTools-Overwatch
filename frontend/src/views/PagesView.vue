@@ -19,9 +19,10 @@
             <div class="top-nav-bar">
                 <a href="javascript:void(0)" @click="$router.back()" class="nav-link back-prev">← 返回上一页</a>
                 <button v-if="isAuthor" class="nav-link btn-edit" @click="enterEditMode">✏️ 编辑</button>
+                <button v-if="isAuthor" class="nav-link btn-transfer" @click="showTransferDialog = true">🔄 转让作者</button>
                 <router-link to="/main" class="nav-link back-home">返回首页 →</router-link>
             </div>
-            <h1 class="title">{{ pageData.title }}</h1>
+            <h1 class="title" v-html="renderedPageTitle"></h1>
             <div class="meta-info">
                 <span class="meta-author">
                     <img :src="getAvatarUrl(pageData.author_name)" class="meta-avatar" @error="handleAvatarError" alt="" />
@@ -135,12 +136,29 @@
                 <button class="act-btn act-discard" @click="confirmDiscard">撤销修改</button>
             </div>
 
+            <!-- ===== 编辑模式切换：全文编辑 / 按章节编辑 ===== -->
+            <div class="edit-mode-toggle">
+                <button
+                    class="mode-btn"
+                    :class="{ active: editMode === 'section' }"
+                    @click="switchToSectionMode">
+                    📖 按章节编辑
+                </button>
+                <button
+                    class="mode-btn"
+                    :class="{ active: editMode === 'full' }"
+                    @click="switchToFullMode">
+                    📝 全文编辑
+                </button>
+            </div>
+
             <div class="edit-title-row">
                 <input v-model="editTitle" class="edit-title-input" placeholder="页面标题" @input="onTitleChange" />
                 <div class="title-preview" v-if="editTitle.trim()" v-html="renderedTitlePreview"></div>
             </div>
 
-            <div class="edit-sections">
+            <!-- ===== 按章节编辑模式（默认） ===== -->
+            <div v-show="editMode === 'section'" class="edit-sections">
                 <div v-for="(section, idx) in editSections" :key="section.id" class="edit-section-wrapper">
                     <button v-if="idx > 0" class="btn-insert-section" @click="addSection(idx)">+ 插入段落</button>
                     <div v-if="!section.heading" class="edit-preamble">
@@ -178,9 +196,37 @@
                 <button class="btn-insert-section" @click="addSection(editSections.length)">+ 插入段落</button>
             </div>
 
+            <!-- ===== 全文编辑模式 ===== -->
+            <div v-show="editMode === 'full'" class="full-edit-wrap">
+                <div class="full-edit-toolbar">
+                    <button class="tb-btn" @click="wrapFullText('**', '**')"><b>B</b></button>
+                    <button class="tb-btn" @click="wrapFullText('*', '*')"><i>I</i></button>
+                    <button class="tb-btn" @click="wrapFullText('`', '`')">代码</button>
+                    <button class="tb-btn" @click="insertLinkFull">🔗 链接</button>
+                    <button class="tb-btn" @click="insertFileFull">📁 插入文件</button>
+                </div>
+                <textarea
+                    v-model="fullTextContent"
+                    class="full-edit-textarea"
+                    placeholder="全文 Markdown 内容（# 标题 + 正文）"
+                    @input="onFullTextInput"
+                ></textarea>
+                <div class="full-edit-preview-label">📋 全文预览</div>
+                <div class="full-edit-preview" v-html="fullPreviewHtml"></div>
+            </div>
+
             <!-- 文件库弹窗 -->
             <FileLibrary v-if="showFileLibrary" @close="showFileLibrary = false" @select="onFileSelected" />
+
         </div>
+
+        <!-- 转让作者弹窗（独立于阅读/编辑模式块，可随时弹出） -->
+        <TransferAuthorDialog
+            v-if="showTransferDialog"
+            :pageId="pageData.id"
+            @close="showTransferDialog = false"
+            @transferred="onTransferComplete"
+        />
 
         <div class="back-link" v-if="pageData && !loading && !isEditing"><a href="#" @click.prevent="scrollToTop">🔝 回到最顶上</a></div>
         <div class="footer-beian">
@@ -198,6 +244,7 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import ThemeToggle from '@/components/ThemeToggle.vue';
 import FileLibrary from '@/components/FileLibrary.vue';
+import TransferAuthorDialog from '@/components/TransferAuthorDialog.vue';
 import { authFetch } from '@/utils/request';
 import {
     PageSection, parseSections, mergeSections,
@@ -241,6 +288,34 @@ const editingSectionIdx = ref(-1);
 const saving = ref(false);
 const showFileLibrary = ref(false);
 const fileLibrarySectionIdx = ref(0);
+
+// ===== 转让作者 =====
+const showTransferDialog = ref(false);
+
+function onTransferComplete(payload: { newAuthorId: number; newAuthorName: string }) {
+    pageData.value.author_id = payload.newAuthorId;
+    pageData.value.author_name = payload.newAuthorName;
+    isAuthor.value = false;
+    showTransferDialog.value = false;
+    alert('转让成功');
+}
+
+// ===== 编辑模式切换 =====
+const editMode = ref<'section' | 'full'>('section');    // 默认按章节编辑
+const fullTextContent = ref('');                         // 全文编辑模式的完整 Markdown 文本
+
+// 全文编辑模式的预览 HTML
+const fullPreviewHtml = computed(() => {
+    if (!fullTextContent.value.trim()) return '';
+    let html = marked.parse(fullTextContent.value, { async: false }) as string;
+    // 与 page 页预览保持一致：移除第一个 <h1>（标题已在上方单独渲染）
+    html = html.replace(/<h1[^>]*>[\s\S]*?<\/h1>/, '');
+    // 包裹 <h2> 段落为 .markdown-section
+    html = html.replace(/<h2/g, '</div><div class="markdown-section"><h2');
+    html = html.replace(/^<\/div><div class="markdown-section"><h2/, '<div class="markdown-section"><h2');
+    if (/markdown-section/.test(html)) html += '</div>';
+    return DOMPurify.sanitize(html, VIDEO_ALLOW);
+});
 
 // ===== 点赞 / 评论 状态 =====
 const pageLikeCount = ref(0);
@@ -306,10 +381,17 @@ const isLoggedIn = computed(() => !!localStorage.getItem('authToken'));
 
 const statusLabel = (s: number): string => ({ 0: '已删除', 1: '审核中', 2: '已发布', 3: '完全开放', 4: '草稿' })[s] || '未知';
 
-// 总标题所见所得预览
+// 总标题所见所得预览（编辑器）
 const renderedTitlePreview = computed(() => {
     if (!editTitle.value.trim()) return '';
     const html = marked.parse(`# ${editTitle.value}`, { async: false }) as string;
+    return DOMPurify.sanitize(html, VIDEO_ALLOW);
+});
+
+// page 页阅读模式的标题（支持 Markdown 内联格式）
+const renderedPageTitle = computed(() => {
+    if (!pageData.value?.title) return '';
+    const html = marked.parseInline(pageData.value.title, { async: false }) as string;
     return DOMPurify.sanitize(html, VIDEO_ALLOW);
 });
 
@@ -370,6 +452,7 @@ function getUserId(): number | null {
 
 function enterEditMode() {
     editTitle.value = pageData.value.title;
+    editMode.value = 'section'; // 默认进入按章节编辑模式
     const uid = getUserId();
     if (uid) {
         const cache = loadEditCache(pageData.value.id, uid);
@@ -379,6 +462,11 @@ function enterEditMode() {
                 try {
                     const t = localStorage.getItem(`talon_page_title_${pageData.value.id}_${uid}`);
                     if (t !== null) editTitle.value = t;
+                } catch {}
+                // 恢复全文缓存
+                try {
+                    const ft = localStorage.getItem(`talon_page_fulltext_${pageData.value.id}_${uid}`);
+                    if (ft !== null) fullTextContent.value = ft;
                 } catch {}
                 isEditing.value = true;
                 return;
@@ -395,9 +483,96 @@ function enterEditMode() {
         content = content.replace(/^#\s+.+?(?:\n|$)/, '').trim();
     }
     editSections.value = parseSections(content);
+    // 初始化全文内容
+    fullTextContent.value = buildFullTextFromSections();
     isEditing.value = true;
     window.scrollTo({ top: 0 });
 }
+
+/** 从当前编辑状态构建完整的 Markdown 文本（含 # 标题） */
+function buildFullTextFromSections(): string {
+    return buildContent();
+}
+
+// ===== 编辑模式切换函数 =====
+
+/** 切换到全文编辑模式：将章节数据合并为完整 Markdown 文本 */
+function switchToFullMode() {
+    if (editMode.value === 'full') return;
+    fullTextContent.value = buildContent();
+    editMode.value = 'full';
+}
+
+/** 切换到按章节编辑模式：将全文 Markdown 解析回章节结构 */
+function switchToSectionMode() {
+    if (editMode.value === 'section') return;
+    // 从全文内容中提取标题
+    const titleMatch = fullTextContent.value.match(/^#\s+(.+?)(?:\n|$)/);
+    let body = fullTextContent.value;
+    if (titleMatch) {
+        editTitle.value = titleMatch[1].trim();
+        body = body.replace(/^#\s+.+?(?:\n|$)/, '').trim();
+    }
+    editSections.value = parseSections(body);
+    editMode.value = 'section';
+    saveToLocal();
+}
+
+/** 全文编辑器的 input 回调：同步 title 变化 */
+function onFullTextInput() {
+    // 尝试从全文内容中提取标题并更新 editTitle
+    const titleMatch = fullTextContent.value.match(/^#\s+(.+?)(?:\n|$)/);
+    if (titleMatch) {
+        editTitle.value = titleMatch[1].trim();
+    }
+    saveToLocal();
+}
+
+// ===== 全文编辑工具栏 =====
+
+function wrapFullText(before: string, after: string) {
+    const ta = document.querySelector('.full-edit-textarea') as HTMLTextAreaElement;
+    if (!ta) return;
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    fullTextContent.value =
+        fullTextContent.value.slice(0, s) +
+        before + fullTextContent.value.slice(s, e) + after +
+        fullTextContent.value.slice(e);
+    saveToLocal();
+    requestAnimationFrame(() => {
+        ta.focus();
+        ta.setSelectionRange(s + before.length, e + before.length);
+    });
+}
+
+function insertLinkFull() {
+    const url = prompt('输入链接地址:', 'https://');
+    if (url) wrapFullText('[', `](${url})`);
+}
+
+function insertFileFull() {
+    const ta = document.querySelector('.full-edit-textarea') as HTMLTextAreaElement | undefined;
+    if (ta) {
+        const pos = ta.selectionStart;
+        const content = fullTextContent.value;
+        if (pos > 0 && content[pos - 1] !== '\n') {
+            const ok = confirm('光标不在行首，插入内容会接在当前行末尾。是否先换行？');
+            if (ok) {
+                fullTextContent.value =
+                    content.slice(0, pos) + '\n' + content.slice(pos);
+                saveToLocal();
+                requestAnimationFrame(() => {
+                    ta.focus();
+                    ta.setSelectionRange(pos + 1, pos + 1);
+                });
+            }
+        }
+    }
+    fileLibrarySectionIdx.value = -1; // 标记为全文模式
+    showFileLibrary.value = true;
+}
+
+// ===== 原章节编辑操作 =====
 
 const MAX_HISTORY = 50;
 
@@ -448,7 +623,7 @@ function insertLink(idx: number) {
  * 其他文件 → [文件名](url)
  */
 function insertFile(idx: number) {
-    // 检查光标是否在行首，否则跳到行尾再换行
+    // 检查光标是否在行首，否则提醒用户换行
     const ta = document.querySelectorAll('.edit-textarea')[idx] as HTMLTextAreaElement | undefined;
     if (ta) {
         const pos = ta.selectionStart;
@@ -456,15 +631,12 @@ function insertFile(idx: number) {
         if (pos > 0 && content[pos - 1] !== '\n') {
             const ok = confirm('光标不在行首，插入内容会接在当前行末尾。是否先换行？');
             if (ok) {
-                // 找到当前行末尾（下一个 \n 或字符串结尾）
-                const lineEnd = content.indexOf('\n', pos);
-                const insertAt = lineEnd === -1 ? content.length : lineEnd + 1;
                 editSections.value[idx].content =
-                    content.slice(0, insertAt) + '\n' + content.slice(insertAt);
+                    content.slice(0, pos) + '\n' + content.slice(pos);
                 saveToLocal();
                 requestAnimationFrame(() => {
                     ta.focus();
-                    ta.setSelectionRange(insertAt, insertAt);
+                    ta.setSelectionRange(pos + 1, pos + 1);
                 });
             }
         }
@@ -475,7 +647,10 @@ function insertFile(idx: number) {
 
 function onFileSelected(file: any) {
     const idx = fileLibrarySectionIdx.value;
-    if (file.type === 'image' || file.type === 'video') {
+    if (idx === -1) {
+        // 全文编辑模式
+        fullTextContent.value += `\n![${file.name}](${file.url})`;
+    } else if (file.type === 'image' || file.type === 'video') {
         editSections.value[idx].content += `\n![${file.name}](${file.url})`;
     } else {
         editSections.value[idx].content += `\n[${file.name}](${file.url})`;
@@ -489,6 +664,11 @@ function onTitleChange() { saveToLocal(); }
 
 // 构建完整 Markdown 内容:总标题 + 各段落
 function buildContent(): string {
+    if (editMode.value === 'full') {
+        // 全文编辑模式：直接使用全文内容
+        return fullTextContent.value.trim();
+    }
+    // 章节编辑模式：合并章节
     const merged = mergeSections(editSections.value);
     const t = editTitle.value.trim();
     return t ? `# ${t}\n\n${merged}` : merged;
@@ -498,12 +678,17 @@ function saveToLocal() {
     const uid = getUserId(); if (!uid || !pageData.value) return;
     saveEditCache({ pageId: pageData.value.id, sections: editSections.value, savedAt: Date.now(), userId: uid, originalUpdatedAt: pageData.value.updated_at });
     try { localStorage.setItem(`talon_page_title_${pageData.value.id}_${uid}`, editTitle.value); } catch {}
+    // 保存全文编辑缓存
+    try { localStorage.setItem(`talon_page_fulltext_${pageData.value.id}_${uid}`, fullTextContent.value); } catch {}
 }
 function clearCache() {
     const uid = getUserId();
     if (uid && pageData.value) {
         clearEditCache(pageData.value.id, uid);
-        try { localStorage.removeItem(`talon_page_title_${pageData.value.id}_${uid}`); } catch {}
+        try {
+            localStorage.removeItem(`talon_page_title_${pageData.value.id}_${uid}`);
+            localStorage.removeItem(`talon_page_fulltext_${pageData.value.id}_${uid}`);
+        } catch {}
     }
 }
 
@@ -672,7 +857,7 @@ async function submitReply(comment: PageComment) {
             method: 'POST',
             body: JSON.stringify({ content: replyContent.value.trim(), reply_to_user_id: replyToUserId }),
         });
-        if (r.ok) {
+        if (res.ok) {
             cancelReply();
             fetchComments();
         } else {
@@ -709,7 +894,7 @@ async function toggleReplyLike(reply: CommentReply) {
 // 使所有 <video> 可点击播放（绕过 Chromium 控件交互 bug）
 function bindVideoPlay() {
   nextTick(() => {
-    document.querySelectorAll('.page-view video, .markdown-section video').forEach(v => {
+    document.querySelectorAll('.page-view video, .markdown-section video, .full-edit-preview video').forEach(v => {
       const video = v as HTMLVideoElement;
       if (!video.dataset._bound) {
         video.dataset._bound = '1';
@@ -734,7 +919,7 @@ onUpdated(() => { bindVideoPlay(); });
 watch(() => route.fullPath, () => { fetchPage(); });
 </script>
 
-<!-- ===== 方案 A：scoped 样式 — 已移除所有 !important CSS 变量重写，依赖 theme.css ===== -->
+<!-- ===== scoped 样式 ===== -->
 <style scoped>
 * { box-sizing: border-box; }
 .page-view { min-height: 100vh; background: var(--bg-color); padding: 40px 20px 0; position: relative; display: flex; flex-direction: column; }
@@ -759,6 +944,8 @@ watch(() => route.fullPath, () => { fetchPage(); });
 .nav-link:hover { opacity: .7; text-decoration: underline; }
 .btn-edit { color: var(--button-bg); font-size: 14px; padding: 4px 14px; border: 1px solid var(--button-bg); border-radius: 48px; }
 .btn-edit:hover { background: var(--button-bg); color: #fff; text-decoration: none; }
+.btn-transfer { color: #f59e0b; font-size: 14px; padding: 4px 14px; border: 1px solid #f59e0b; border-radius: 48px; margin-left: 6px; }
+.btn-transfer:hover { background: #f59e0b; color: #fff; text-decoration: none; }
 .edit-nav-bar { display: flex; justify-content: space-between; align-items: center; }
 .edit-action-bar { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 16px 0 24px; }
 .act-btn { padding: 6px 16px; border-radius: 48px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all .2s; }
@@ -769,6 +956,35 @@ watch(() => route.fullPath, () => { fetchPage(); });
 .act-draft:hover:not(:disabled) { background: rgba(66,185,131,.08); }
 .act-discard { border-color: #ef4444; color: #ef4444; background: transparent; }
 .act-discard:hover:not(:disabled) { background: #fef2f2; }
+
+/* ===== 编辑模式切换按钮 ===== */
+.edit-mode-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+.mode-btn {
+    padding: 8px 20px;
+    border: 2px solid var(--input-border);
+    border-radius: 48px;
+    background: transparent;
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+}
+.mode-btn:hover {
+    border-color: var(--button-bg);
+    color: var(--button-bg);
+}
+.mode-btn.active {
+    border-color: var(--button-bg);
+    background: var(--button-bg);
+    color: #fff;
+}
+
 .title { text-align: center; font-size: 28px; font-weight: 700; background: linear-gradient(135deg,var(--text-primary) 0%,var(--button-bg) 100%); background-clip: text; -webkit-background-clip: text; color: transparent; margin-bottom: 12px; }
 .meta-info { text-align: center; font-size: 14px; color: var(--accent); margin-bottom: 32px; border-bottom: 1px solid var(--input-border); padding-bottom: 16px; }
 .meta-author { display: inline; }
@@ -847,7 +1063,7 @@ watch(() => route.fullPath, () => { fetchPage(); });
 .edit-textarea { width: 100%; border: 1px solid var(--input-border); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.65; font-family: inherit; background: var(--card-bg); color: var(--text-primary); resize: vertical; outline: none; transition: border-color .2s; }
 .edit-textarea:focus, .edit-focused { border-color: var(--button-bg); }
 
-/* === 实时预览面板 - 图片缩放预览(不裁剪,完整显示) === */
+/* === 实时预览面板 === */
 .live-preview {
     margin-top: 12px;
     padding: 14px 16px;
@@ -861,8 +1077,6 @@ watch(() => route.fullPath, () => { fetchPage(); });
     overflow-wrap: break-word;
 }
 .live-preview p { margin-bottom: 8px; color: var(--accent); }
-/* 图片自适应缩放:宽图缩小至面板宽度,不裁剪,保持宽高比 */
-/* 使用 :deep() 穿透 v-html,否则 scoped CSS 不会命中动态插入的 <img> */
 .live-preview :deep(img) {
     max-width: 100%;
     height: auto;
@@ -885,6 +1099,79 @@ watch(() => route.fullPath, () => { fetchPage(); });
 
 .btn-edit-float { position: absolute; top: 8px; right: 8px; background: var(--card-bg); border: 1px solid var(--input-border); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 14px; opacity: .6; transition: opacity .2s; }
 .btn-edit-float:hover { opacity: 1; }
+
+
+
+/* ===== 全文编辑模式 ===== */
+.full-edit-wrap { margin-bottom: 24px; }
+.full-edit-toolbar { display: flex; gap: 6px; padding: 8px 0; margin-bottom: 8px; flex-wrap: wrap; }
+.full-edit-textarea {
+    width: 100%;
+    min-height: 400px;
+    border: 1px solid var(--input-border);
+    border-radius: 12px;
+    padding: 16px;
+    font-size: 14px;
+    line-height: 1.7;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    resize: vertical;
+    outline: none;
+    transition: border-color .2s;
+}
+.full-edit-textarea:focus {
+    border-color: var(--button-bg);
+}
+.full-edit-preview-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 20px 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--input-border);
+}
+.full-edit-preview {
+    padding: 16px 20px;
+    background: var(--card-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 12px;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--text-primary);
+    max-width: 100%;
+    overflow-wrap: break-word;
+}
+.full-edit-preview p { margin-bottom: 12px; color: var(--accent); }
+.full-edit-preview h1 { font-size: 26px; font-weight: 700; text-align: center; margin-bottom: 12px; color: var(--text-primary); }
+.full-edit-preview h2 { font-size: 22px; font-weight: 600; margin-top: 28px; margin-bottom: 14px; padding-left: 12px; border-left: 5px solid var(--button-bg); color: var(--text-primary); }
+.full-edit-preview h3, .full-edit-preview h4 { font-weight: 600; margin-top: 24px; margin-bottom: 12px; padding-left: 12px; border-left: 5px solid var(--button-bg); color: var(--text-primary); }
+.full-edit-preview :deep(img) {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 16px auto;
+    border-radius: 8px;
+    box-shadow: 0 6px 14px var(--shadow-color);
+    object-fit: scale-down;
+}
+.full-edit-preview :deep(video) {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 16px auto;
+    border-radius: 8px;
+    box-shadow: 0 6px 14px var(--shadow-color);
+}
+.full-edit-preview :deep(code) { background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+.full-edit-preview :deep(pre) { background: var(--bg-secondary); padding: 16px 20px; border-radius: 16px; overflow-x: auto; }
+.full-edit-preview :deep(a) { color: var(--button-bg); text-decoration: none; font-weight: 500; }
+.full-edit-preview :deep(ul), .full-edit-preview :deep(ol) { padding-left: 24px; margin: 12px 0; }
+.full-edit-preview :deep(li) { margin-bottom: 6px; }
+.full-edit-preview :deep(blockquote) { margin: 16px 0; padding: 12px 20px; background: var(--bg-secondary); border-left: 4px solid var(--button-bg); border-radius: 8px; }
+.full-edit-preview :deep(table) { width: 100%; border-collapse: collapse; }
+.full-edit-preview :deep(th), .full-edit-preview :deep(td) { padding: 10px 14px; border: 1px solid var(--input-border); text-align: left; }
+
 .back-link { text-align: center; margin-top: 48px; padding-top: 28px; border-top: 1px solid var(--input-border); }
 .back-link a { color: var(--button-bg); text-decoration: none; font-weight: 600; transition: all .2s; font-size: 15px; }
 .back-link a:hover { opacity: .75; text-decoration: underline; letter-spacing: .3px; }
@@ -907,6 +1194,7 @@ watch(() => route.fullPath, () => { fetchPage(); });
     .interact-btn { font-size: 13px; padding: 6px 12px; }
     .comments-section { padding: 0; }
     .comment-item { padding: 14px; }
+    .full-edit-textarea { min-height: 300px; }
 }
 
 /* ========== 点赞 / 评论 样式 ========== */
@@ -1167,7 +1455,7 @@ html[data-theme="dark"] .status-4,
 .dark .status-4 { background: #1e1b4b; color: #a5b4fc; }
 </style>
 
-<!-- ===== scoped 样式已接管全部暗色；非 scoped 的 .markdown-section 同样移除 !important 暗色覆盖 ===== -->
+<!-- ===== 非 scoped 的全局段管理器样式 ===== -->
 <style>
 .markdown-section { background: var(--bg-secondary); border-radius: 16px; padding: 24px 28px; margin-bottom: 28px; box-shadow: 0 2px 8px var(--shadow-color); }
 .markdown-section:last-child { margin-bottom: 0; }

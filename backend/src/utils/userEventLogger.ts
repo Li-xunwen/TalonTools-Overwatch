@@ -24,6 +24,7 @@ export type EventType =
   | 'page_create'
   | 'page_update'
   | 'page_status_change'
+  | 'page_transfer'
   // comment operations
   | 'comment_create'
   | 'comment_delete'

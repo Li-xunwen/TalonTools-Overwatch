@@ -84,28 +84,61 @@ router.post('/pages', authenticateToken, async (req: AuthRequest, res: Response)
 });
 
 // =================================================================
-// GET /api/pages — 获取页面列表（公开：已审核；管理员：全部）
+// GET /api/pages — 获取页面列表
+//   公开用户：status=2,3 的页面
+//   已登录用户（自己）：还包含 author_id 为自己的 status=1,2,3,4（不含 0）
+//   管理员：全部 status
 // =================================================================
 router.get('/pages', async (req: Request, res: Response) => {
     try {
         const currentUser = parseUser(req);
         const isAdmin = currentUser?.role === 'ADMIN';
-
-        const allowedStatuses = isAdmin ? [0, 1, 2, 3, 4] : [2, 3];
-
-        const [rows] = await pool.query<any[]>(
-            `SELECT p.id, p.title, LEFT(p.content, 3000) AS content_preview, p.author_id, u.battletag AS author_name,
-                    p.updated_at, p.status, p.type, p.description,
-                    (SELECT COUNT(*) FROM pages_likes
-                     WHERE page_id = p.id AND target_type = 'page' AND target_id = p.id) AS like_count
-             FROM pages p
-             JOIN users u ON p.author_id = u.id
-             WHERE (p.type IS NULL OR p.type IN (1, 2, 3)) AND p.status IN (?)
-             ORDER BY p.updated_at DESC`,
-            [allowedStatuses]
-        );
-
         const userId = currentUser?.userId;
+
+        let query: string;
+        let params: any[];
+
+        if (isAdmin) {
+            // 管理员：返回全部状态
+            query = `SELECT p.id, p.title, LEFT(p.content, 3000) AS content_preview, p.author_id, u.battletag AS author_name,
+                            p.updated_at, p.status, p.type, p.description,
+                            (SELECT COUNT(*) FROM pages_likes
+                             WHERE page_id = p.id AND target_type = 'page' AND target_id = p.id) AS like_count
+                     FROM pages p
+                     JOIN users u ON p.author_id = u.id
+                     WHERE (p.type IS NULL OR p.type IN (1, 2, 3))
+                     ORDER BY p.updated_at DESC`;
+            params = [];
+        } else if (userId) {
+            // 已登录非管理员：公开页面(status=2,3) + 自己的页面(status=1,2,3,4，不含0)
+            query = `SELECT p.id, p.title, LEFT(p.content, 3000) AS content_preview, p.author_id, u.battletag AS author_name,
+                            p.updated_at, p.status, p.type, p.description,
+                            (SELECT COUNT(*) FROM pages_likes
+                             WHERE page_id = p.id AND target_type = 'page' AND target_id = p.id) AS like_count
+                     FROM pages p
+                     JOIN users u ON p.author_id = u.id
+                     WHERE (p.type IS NULL OR p.type IN (1, 2, 3))
+                       AND (
+                           p.status IN (2, 3)
+                           OR (p.author_id = ? AND p.status IN (1, 2, 3, 4))
+                       )
+                     ORDER BY p.updated_at DESC`;
+            params = [userId];
+        } else {
+            // 未登录：仅公开页面
+            query = `SELECT p.id, p.title, LEFT(p.content, 3000) AS content_preview, p.author_id, u.battletag AS author_name,
+                            p.updated_at, p.status, p.type, p.description,
+                            (SELECT COUNT(*) FROM pages_likes
+                             WHERE page_id = p.id AND target_type = 'page' AND target_id = p.id) AS like_count
+                     FROM pages p
+                     JOIN users u ON p.author_id = u.id
+                     WHERE (p.type IS NULL OR p.type IN (1, 2, 3)) AND p.status IN (2, 3)
+                     ORDER BY p.updated_at DESC`;
+            params = [];
+        }
+
+        const [rows] = await pool.query<any[]>(query, params);
+
         let likedPageIds: Set<number> = new Set();
         if (userId && rows.length > 0) {
             const pageIds = rows.map((r: any) => r.id);
@@ -165,7 +198,7 @@ router.get('/pages/:id', async (req: Request, res: Response) => {
             case 2:
                 break;
             case 1:
-                if (!isAdmin) return res.status(403).json({ error: '权限不足' });
+                if (!isAdmin && !isAuthor) return res.status(403).json({ error: '权限不足' });
                 break;
             case 0:
                 if (!isAdmin) return res.status(403).json({ error: '权限不足' });
@@ -797,6 +830,87 @@ router.post('/pages/comments/:cid/unlike', authenticateToken, async (req: AuthRe
         res.json({ count: countRows[0].cnt, is_liked: false });
     } catch (error) {
         console.error('取消评论点赞失败:', error);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+// =================================================================
+// GET /api/users/search?q= — 搜索用户（用于转让作者）
+// =================================================================
+router.get('/users/search', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const q = (req.query.q as string || '').trim();
+        if (!q || q.length < 1) {
+            return res.json({ users: [] });
+        }
+        const [rows] = await pool.query<any[]>(
+            `SELECT id, battletag FROM users WHERE battletag LIKE ? ORDER BY battletag ASC LIMIT 20`,
+            [`%${q}%`]
+        );
+        res.json({ users: rows });
+    } catch (error) {
+        console.error('搜索用户失败:', error);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+// =================================================================
+// POST /api/pages/:id/transfer — 转让页面作者
+// =================================================================
+router.post('/pages/:id/transfer', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const pageId = parseInt(String(req.params.id), 10);
+        if (isNaN(pageId) || pageId < 1) {
+            return res.status(400).json({ error: '无效的页面 ID' });
+        }
+
+        const currentUserId = req.user!.userId;
+        const page = await getPageById(pageId);
+        if (!page) return res.status(404).json({ error: '页面不存在' });
+
+        // 仅作者或管理员可转让
+        const isAdmin = req.user!.role === 'ADMIN';
+        if (currentUserId !== page.author_id && !isAdmin) {
+            return res.status(403).json({ error: '只有作者可以转让此页面' });
+        }
+
+        const { target_user_id } = req.body;
+        if (!target_user_id || typeof target_user_id !== 'number') {
+            return res.status(400).json({ error: '缺少目标用户 ID' });
+        }
+
+        // 检查目标用户是否存在
+        const [userRows] = await pool.query<any[]>(
+            'SELECT id, battletag FROM users WHERE id = ?',
+            [target_user_id]
+        );
+        if (userRows.length === 0) {
+            return res.status(404).json({ error: '目标用户不存在' });
+        }
+
+        // 不能转让给自己
+        if (target_user_id === page.author_id) {
+            return res.status(400).json({ error: '不能转让给自己' });
+        }
+
+        // 执行转让
+        await pool.query('UPDATE pages SET author_id = ? WHERE id = ?', [target_user_id, pageId]);
+
+        // 操作日志
+        userEventLogger.logEvent({
+            userId: currentUserId,
+            eventType: 'page_transfer',
+            eventData: { pageId, oldAuthorId: page.author_id, newAuthorId: target_user_id },
+            ipAddress: req.ip,
+        });
+
+        res.json({
+            message: '转让成功',
+            new_author_id: target_user_id,
+            new_author_name: userRows[0].battletag,
+        });
+    } catch (error) {
+        console.error('转让页面失败:', error);
         res.status(500).json({ error: '服务器错误' });
     }
 });

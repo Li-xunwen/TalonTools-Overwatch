@@ -19,7 +19,7 @@
               <template v-if="page.type === 2">
                 <div class="video-card-header">
                   <span class="video-badge">视频</span>
-                  <span class="card-title">{{ page.title }}</span>
+                  <span class="card-title" v-html="page._renderedTitle"></span>
                   <span v-if="page.status === 4" class="status-tag draft">草稿</span>
                   <span v-else-if="page.status === 1" class="status-tag review">审核中</span>
                   <span v-else-if="page.status === 0" class="status-tag deleted">已删除</span>
@@ -35,7 +35,7 @@
               <template v-else-if="page.type === 3">
                 <div class="video-card-header">
                   <span class="album-badge">图集</span>
-                  <span class="card-title">{{ page.title }}</span>
+                  <span class="card-title" v-html="page._renderedTitle"></span>
                   <span v-if="page.status === 4" class="status-tag draft">草稿</span>
                   <span v-else-if="page.status === 1" class="status-tag review">审核中</span>
                   <span v-else-if="page.status === 0" class="status-tag deleted">已删除</span>
@@ -53,7 +53,7 @@
 
               <!-- 文档类型：原有渲染 -->
               <template v-else>
-                <span class="card-title">{{ page.title }}<span v-if="page.status === 4" class="status-tag draft">草稿</span><span v-else-if="page.status === 1" class="status-tag review">审核中</span><span v-else-if="page.status === 0" class="status-tag deleted">已删除</span></span>
+                <span class="card-title"><span v-html="page._renderedTitle"></span><span v-if="page.status === 4" class="status-tag draft">草稿</span><span v-else-if="page.status === 1" class="status-tag review">审核中</span><span v-else-if="page.status === 0" class="status-tag deleted">已删除</span></span>
                 <div class="card-preview" v-if="page._renderedPreview" v-html="page._renderedPreview"></div>
                 <div class="card-preview card-preview-empty" v-else>暂无内容</div>
               </template>
@@ -245,8 +245,12 @@ async function fetchPages() {
             previewHtml = DOMPurify.sanitize(h)
           } catch { previewHtml = p.content_preview.substring(0, 200) }
         }
+        let renderedTitle = p.title
+        try {
+          renderedTitle = DOMPurify.sanitize(marked.parseInline(p.title, { async: false }) as string)
+        } catch {}
         return {
-          ...p, _renderedPreview: previewHtml, _like_count: p.like_count, _likeUsers: [],
+          ...p, _renderedPreview: previewHtml, _renderedTitle: renderedTitle, _like_count: p.like_count, _likeUsers: [],
           _showLikeList: false, _comments: [], _commentsLoaded: false, _showComments: false,
           _newComment: '', _replyingToId: null, _replyingToName: '', _replyContent: '', _comment_count: 0
         }
