@@ -4,7 +4,7 @@
         <div class="privacy-container">
             <router-link to="/">返回首页</router-link>
             <h1 class="title">鸣谢名单 </h1>
-            <div class="update-time">📅 最后更新：2026年6月15日</div>
+            <div class="update-time">📅 最后更新：2026年7月25日</div>
 
             <!-- 感谢引言 -->
             <section class="section">
@@ -103,6 +103,16 @@
                 <h2>💎 赞助者与支持者 · 信任的力量</h2>
                 <div class="thanks-grid">
                     <div class="thanks-card">
+                        <div class="card-name">宋哈娜#51473</div>
+                        <div class="card-role">金牌赞助</div>
+                        <div class="card-desc">￥116.66</div>
+                    </div>
+                     <div class="thanks-card">
+                        <div class="card-name">Vanki#51189</div>
+                        <div class="card-role">金牌赞助</div>
+                        <div class="card-desc">￥108.88</div>
+                    </div>
+                    <div class="thanks-card">
                         <div class="card-name">北风夕何#5606</div>
                         <div class="card-role">金牌赞助</div>
                         <div class="card-desc">￥88</div>
@@ -113,9 +123,9 @@
                         <div class="card-desc">￥86</div>
                     </div>
                     <div class="thanks-card">
-                        <div class="card-name">宋哈娜#51473</div>
+                        <div class="card-name">雨姐无敌大汉脚#5965</div>
                         <div class="card-role">金牌赞助</div>
-                        <div class="card-desc">￥66.66</div>
+                        <div class="card-desc">￥52</div>
                     </div>
                     <div class="thanks-card">
                         <div class="card-name">血腥灬玛丽#5847</div>
@@ -128,9 +138,24 @@
                         <div class="card-desc">￥50</div>
                     </div>
                     <div class="thanks-card">
-                        <div class="card-name">雨姐无敌大汉脚#5965</div>
+                        <div class="card-name">阿霜#51515</div>
                         <div class="card-role">金牌赞助</div>
-                        <div class="card-desc">￥27</div>
+                        <div class="card-desc">￥30</div>
+                    </div>
+                    <div class="thanks-card">
+                        <div class="card-name">kerosene#51139</div>
+                        <div class="card-role">金牌赞助</div>
+                        <div class="card-desc">￥30</div>
+                    </div>
+                    <div class="thanks-card">
+                        <div class="card-name">火星土豆侠#5376</div>
+                        <div class="card-role">银牌赞助</div>
+                        <div class="card-desc">￥20</div>
+                    </div>
+                    <div class="thanks-card">
+                        <div class="card-name">青悟#5691</div>
+                        <div class="card-role">赞助</div>
+                        <div class="card-desc">￥17</div>
                     </div>
                     <div class="thanks-card">
                         <div class="card-name">帅帅的牛皮蛋#5349</div>
@@ -148,14 +173,9 @@
                         <div class="card-desc">￥10</div>
                     </div>
                     <div class="thanks-card">
-                        <div class="card-name">Vanki#51189</div>
+                        <div class="card-name">HaibaraAi#51715</div>
                         <div class="card-role">赞助</div>
-                        <div class="card-desc">￥8.88</div>
-                    </div>
-                    <div class="thanks-card">
-                        <div class="card-name">青悟#5691</div>
-                        <div class="card-role">比赛赞助</div>
-                        <div class="card-desc">￥7</div>
+                        <div class="card-desc">￥10</div>
                     </div>
                     <div class="thanks-card">
                         <div class="card-name">咖喱味咖喱酱#5531</div>
