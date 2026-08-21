@@ -16,6 +16,7 @@
         </div>
         <button class="image-viewer-close" @click="close">✕</button>
         <button class="image-viewer-rotate" @click.stop="rotate">⟳</button>
+        <button class="image-viewer-download" @click.stop="download">⬇</button>
       </div>
     </Transition>
   </Teleport>
@@ -38,6 +39,32 @@ const rotateDeg = ref(0)
 
 function rotate() {
   rotateDeg.value = (rotateDeg.value + 90) % 360
+}
+
+async function download() {
+  try {
+    const res = await fetch(props.src)
+    if (!res.ok) throw new Error('下载失败')
+    const blob = await res.blob()
+
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filenameFromSrc(props.src)
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+function filenameFromSrc(src: string) {
+  const path = src.split('?')[0]
+  const name = path.split('/').pop()
+  if (name) return name
+  return 'image.png'
 }
 
 // 每次打开图片或切换图片时重置旋转角度
@@ -126,6 +153,29 @@ const close = () => {
 }
 
 .image-viewer-rotate:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.image-viewer-download {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+  z-index: 10000;
+}
+
+.image-viewer-download:hover {
   background: rgba(0, 0, 0, 0.8);
 }
 

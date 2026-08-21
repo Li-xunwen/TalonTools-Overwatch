@@ -55,7 +55,9 @@
                 <div class="rank-level">
                   {{ profile.rank_open_6v6.level }}
                 </div>
-
+                <span v-if="isEditing" class="edit-rank-btn" title="编辑段位">
+                  ✏️
+                </span>
               </template>
               <div v-else class="empty-rank">
                 +
@@ -74,6 +76,9 @@
                 <div class="rank-level">
                   {{ profile.rank_tank_5v5.level }}
                 </div>
+                <span v-if="isEditing" class="edit-rank-btn" title="编辑段位">
+                  ✏️
+                </span>
               </template>
               <div v-else class="empty-rank">
                 +
@@ -89,11 +94,12 @@
             <div class="profile-rank" @click="openRankPicker('rank_dps_5v5')">
               <template v-if="profile.rank_dps_5v5">
                 <img :src="getRankImage(profile.rank_dps_5v5.rank)">
-
                 <div class="rank-level">
                   {{ profile.rank_dps_5v5.level }}
                 </div>
-
+                <span v-if="isEditing" class="edit-rank-btn" title="编辑段位">
+                  ✏️
+                </span>
               </template>
               <div v-else class="empty-rank">
                 +
@@ -112,6 +118,9 @@
                 <div class="rank-level">
                   {{ profile.rank_support_5v5.level }}
                 </div>
+                <span v-if="isEditing" class="edit-rank-btn" title="编辑段位">
+                  ✏️
+                </span>
               </template>
               <div v-else class="empty-rank">
                 +
@@ -1077,6 +1086,24 @@ onMounted(() => {
   cursor: pointer;
 }
 
+.edit-rank-btn {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 22px;
+  height: 22px;
+  background: var(--accent);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  font-size: 11px;
+  color: white;
+  border: 2px solid var(--surface);
+  pointer-events: none;
+}
+
 /* =========================
    英雄区域
 ========================= */
@@ -1096,18 +1123,20 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .hero-slot {
+  flex: 0 1 auto;
   width: 50px;
-  height: 50px;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
   position: relative;
 }
 
 .profile-hero-icon {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
 }
 
 .profile-hero-icon img {
@@ -1134,8 +1163,9 @@ onMounted(() => {
 }
 
 .empty-slot {
-  width: 50px;
-  height: 50px;
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
 
   border: 2px dashed #888;
   border-radius: 12px;
