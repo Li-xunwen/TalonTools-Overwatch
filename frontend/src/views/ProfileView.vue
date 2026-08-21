@@ -365,6 +365,7 @@ const ranks = [
   'silver',
   'gold',
   'platinum',
+  'emeraldTier',
   'diamond',
   'master',
   'grandmaster',
