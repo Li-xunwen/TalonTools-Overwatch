@@ -14,7 +14,6 @@
         📁 文件库
       </button>
     </div>
-    <div class="content-area">
     <!-- Loading -->
     <div v-if="loading" class="loading">
       加载中...
@@ -177,8 +176,6 @@
           退出登录
         </button>
       </div>
-    </div>
-
     </div>
 
     <!-- 文件库弹窗 -->
@@ -872,14 +869,10 @@ onMounted(() => {
 </script>
 <style scoped>
 .profile-page {
-  min-height: 100vh;
-  padding-bottom: 90px;
-}
-
-.profile-page .content-area {
   position: relative;
   z-index: 3;
-  padding: 50px 20px;
+  min-height: 100vh;
+  padding: 20px 20px 90px;
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
@@ -892,7 +885,7 @@ onMounted(() => {
 .profile-container {
   max-width: 900px;
   margin: 0 auto;
-  padding: 80px 20px 40px;
+  padding: 40px 20px 40px;
 }
 
 .loading {
