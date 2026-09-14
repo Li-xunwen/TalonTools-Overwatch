@@ -5,7 +5,19 @@
       <div class="top-tip-text">⚡游戏⚡</div>
 
       <!-- Minecraft 安装版面 -->
-      <div class="section minecraft-section">
+      <div class="section game-section">
+        <!-- 谁是守望先锋卧底入口（置于我的世界板块上方） -->
+        <div class="undercover-entry" @click="goUndercover">
+          <div class="undercover-icon">🕵️</div>
+          <h2 class="section-title">谁是守望先锋卧底</h2>
+          <p class="undercover-desc">
+            谁是卧底 · 守望先锋专场，找出潜伏在队伍里的那个卧底，进入房间开一局
+          </p>
+          <span class="undercover-enter">点击进入</span>
+        </div>
+
+        <div class="section-divider"></div>
+
         <h2 class="section-title">⛏️ 我的世界 (Minecraft) 安装</h2>
         <div class="minecraft-content">
           <p>欢迎来到黑爪旗下的Minecraft！我们提供 <strong>Java版 1.21.4</strong>服务器。</p>
@@ -54,9 +66,17 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import BottomNav from '@/components/BottomNav.vue'
 import FooterBar from '@/components/FooterBar.vue'
+
+const router = useRouter()
+
+// 跳转到「谁是守望先锋卧底」页
+function goUndercover() {
+  router.push('/Undercover')
+}
 
 const serverStatus = ref<any>(null)
 let refreshTimer: number | null = null
@@ -84,7 +104,7 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 <style scoped>
 .news-page .content-area { padding-top: 20px; }
 
-.minecraft-section {
+.game-section {
   text-align: center;
   background: var(--card-bg);
   border-radius: 32px;
@@ -92,6 +112,57 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
   margin: 20px 0;
   box-shadow: var(--shadow);
   transition: transform 0.2s;
+}
+
+/* ========== 谁是守望先锋卧底入口 ========== */
+.undercover-entry {
+  cursor: pointer;
+  border-radius: 24px;
+  padding: 24px 16px;
+  transition: 0.2s ease;
+}
+
+.undercover-entry:hover {
+  transform: translateY(-3px);
+  background: var(--section-bg);
+}
+
+.undercover-entry:active {
+  transform: translateY(-1px);
+}
+
+.undercover-icon {
+  font-size: 56px;
+  line-height: 1;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
+}
+
+.undercover-desc {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  opacity: 0.85;
+  margin: 12px auto 0;
+  max-width: 520px;
+}
+
+.undercover-enter {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 8px 22px;
+  border-radius: 48px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(135deg, #2c3e66, #1f2c4b);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+.section-divider {
+  height: 1px;
+  max-width: 82%;
+  margin: 28px auto 32px;
+  background: var(--glass-border, rgba(0, 0, 0, 0.08));
 }
 
 .minecraft-subtitle {

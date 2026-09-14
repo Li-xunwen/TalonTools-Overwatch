@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import http from 'http';
 import path from 'path';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -15,8 +16,10 @@ import dashenProfileRouter from './routes/dashenProfile';
 import adminRouter from './routes/admin';
 import bindPhone from './routes/bindPhone';
 import minecraftRouter from './routes/minecraft';
+import undercoverRouter from './routes/undercover';
 import pagesRouter from './routes/pages';
 import filesRouter from './routes/files';
+import { initUndercoverWs } from './ws/undercoverWs';
 
 dotenv.config();
 
@@ -103,6 +106,7 @@ app.get('/api/heroeslist', async (req, res) => {
 });
 
 app.use('/api/minecraft', minecraftRouter);
+app.use('/api/undercover', undercoverRouter);
 app.use('/api/bind-phone', bindPhone);
 app.use('/api', userRouter);
 app.use('/api', pagesRouter);
@@ -113,6 +117,10 @@ app.use('/api/user', heroesRouter);
 app.use('/api/v2', dashenProfileRouter);
 app.use('/api/admin', adminRouter);
 
-app.listen(port, () => {
+// 用 http server 同时承载 Express 与「谁是守望先锋卧底」的 WebSocket 会话
+const server = http.createServer(app);
+initUndercoverWs(server);
+
+server.listen(port, () => {
     console.log('🚀 Server is running at http://localhost:' + port);
 });

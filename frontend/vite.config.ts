@@ -42,6 +42,8 @@ export default defineConfig({
       '/api': {
         target: apiProxyTarget,
         changeOrigin: true,
+        // 「谁是守望先锋卧底」房间的 WebSocket 会话也走 /api 代理
+        ws: true,
         configure: (proxy, _options) => {
           proxy.on('proxyReq', (proxyReq, req, _res) => {
             if (req.headers['x-real-ip']) {

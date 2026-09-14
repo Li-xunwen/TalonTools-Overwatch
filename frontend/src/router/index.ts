@@ -15,6 +15,18 @@ const routes = [
     meta: { requiresAuth: false },
   },
   {
+    path: '/Undercover',
+    name: 'Undercover',
+    component: () => import('../views/UndercoverView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/Undercover/room/:roomNo',
+    name: 'UndercoverRoom',
+    component: () => import('../views/UndercoverRoomView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/main',
     name: 'Main',
     component: () => import('../views/MainView.vue'),

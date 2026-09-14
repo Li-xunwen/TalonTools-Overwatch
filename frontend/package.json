@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gen:maps": "node scripts/generate-map-manifest.mjs"
   },
   "dependencies": {
     "dompurify": "^3.2.4",
