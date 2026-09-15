@@ -1126,6 +1126,8 @@ function switchMode(mode: InputMode) {
 
   // 语音模式：emoji 不显示，并提前把麦克风流预热好（按下即可录音）
   showEmojiPanel.value = false
+  // 顺手在用户手势里把音频上下文唤醒，保证录音/发送音效能出声（iOS 要求）
+  getSfxContext()
   void ensureMicStream().then((stream) => {
     // 权限被拒时退回文字模式，避免停在无法录音的状态
     if (!stream && inputMode.value === 'voice') inputMode.value = 'text'
@@ -1179,7 +1181,10 @@ async function ensureMicStream(): Promise<MediaStream | null> {
   }
 
   micStreamPromise = (async () => {
-    const pending = navigator.mediaDevices.getUserMedia({ audio: true })
+    // 显式开启回声消除：录音提示音是外放的，靠 AEC 保证它不会被录进语音里
+    const pending = navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    })
     const stream = await withTimeout(pending, MIC_ACQUIRE_TIMEOUT_MS)
 
     if (!stream) {
@@ -1687,6 +1692,73 @@ watch(
 )
 
 /* =========================
+   录音提示音 / 发送音效
+   Web Audio 合成短音，不需要素材文件也没有加载延迟；
+   音频上下文在按下的手势里创建，不受浏览器自动播放限制。
+   （麦克风默认开着回声消除，扬声器放出的提示音基本不会被录进语音里）
+========================= */
+let sfxContext: AudioContext | null = null
+
+function getSfxContext(): AudioContext | null {
+  const Ctor =
+    window.AudioContext ??
+    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!Ctor) return null
+
+  if (!sfxContext) sfxContext = new Ctor()
+  if (sfxContext.state === 'suspended') void sfxContext.resume()
+  return sfxContext
+}
+
+// 播放一个短音：freq 起始频率，toFreq 结束频率（不等时做滑音），duration 毫秒
+function playTone(
+  freq: number,
+  toFreq: number,
+  duration: number,
+  delaySeconds = 0,
+  gain = 0.09
+) {
+  const context = getSfxContext()
+  if (!context) return
+
+  const startAt = context.currentTime + delaySeconds
+  const endAt = startAt + duration / 1000
+  const osc = context.createOscillator()
+  const volume = context.createGain()
+
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(freq, startAt)
+  if (toFreq !== freq) osc.frequency.exponentialRampToValueAtTime(toFreq, endAt)
+
+  // 淡入淡出，避免「啪」的爆音
+  volume.gain.setValueAtTime(0.0001, startAt)
+  volume.gain.exponentialRampToValueAtTime(gain, startAt + 0.012)
+  volume.gain.exponentialRampToValueAtTime(0.0001, endAt)
+
+  osc.connect(volume).connect(context.destination)
+  osc.start(startAt)
+  osc.stop(endAt + 0.02)
+}
+
+// 开始录音：上扬双音「嘀嘟」
+function playRecordStartSfx() {
+  playTone(740, 740, 0.07)
+  playTone(1180, 1180, 0.09, 0.07)
+}
+
+// 语音发送成功：短促下滑「嗖」
+function playVoiceSendSfx() {
+  playTone(1380, 900, 0.1)
+  playTone(680, 680, 0.08, 0.09, 0.07)
+}
+
+// 离开房间页时释放音频上下文，避免一直占着音频会话
+function closeSfxContext() {
+  void sfxContext?.close()
+  sfxContext = null
+}
+
+/* =========================
    语音录制（最长 15 秒，base64 发送）
 ========================= */
 const VOICE_MAX_SECONDS = 15
@@ -1776,6 +1848,8 @@ async function startRecording(event: HoldEvent) {
   cancelRecord.value = false
   // 按下瞬间就给反馈：按钮立刻变成「正在启动…」，不会再出现「按了没反应」
   isPreparing.value = true
+  // 在按下的手势里同步唤醒音频上下文（iOS 上异步回调里创建会没声音）
+  getSfxContext()
   // 先加锁，再申请权限（同步执行，不给浏览器的长按菜单留窗口）
   lockPageSelection(true)
   // 输入法还停留在输入框上时，长按可能会顺带弹出「复制 / emoji」面板，先把焦点收掉
@@ -1836,6 +1910,8 @@ async function startRecording(event: HoldEvent) {
   isRecording.value = true
   recordStartedAt = Date.now()
   recordingSeconds.value = 0
+  // 开始录音提示音
+  playRecordStartSfx()
 
   // 到 15 秒自动结束并发送
   recordTimer = window.setInterval(() => {
@@ -1941,6 +2017,8 @@ async function uploadRecording() {
       channel: chatChannel.value,
       voice: { dataUrl, duration: Number(pendingVoiceDuration.toFixed(1)) }
     })
+    // 发送成功音效
+    playVoiceSendSfx()
     scrollChatToBottom()
   } catch (error) {
     console.error(error)
@@ -2203,6 +2281,7 @@ function deactivatePage() {
   window.removeEventListener('focus', reportBackground)
   window.removeEventListener('blur', reportBackground)
   window.removeEventListener('scroll', onChatScroll)
+  closeSfxContext()
   closeSocket()
 }
 
