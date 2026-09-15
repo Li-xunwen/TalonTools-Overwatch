@@ -1712,6 +1712,41 @@ const ITEM_IMPACT_ICON: Record<ItemType, string> = {
   rose: '/ico/玫瑰花绽放.svg'
 }
 
+// 道具音效（frontend/public/audio）：命中瞬间播放
+const ITEM_SOUND: Record<ItemType, string> = {
+  egg: '/audio/砸鸡蛋.mp3',
+  rose: '/audio/玫瑰.mp3'
+}
+
+const itemAudioTemplates = new Map<ItemType, HTMLAudioElement>()
+
+function playItemSound(item: ItemType) {
+  let template = itemAudioTemplates.get(item)
+  if (!template) {
+    template = new Audio(ITEM_SOUND[item])
+    template.preload = 'auto'
+    itemAudioTemplates.set(item, template)
+  }
+
+  // 每次命中播一份副本，支持多人同时被砸/被献花
+  const audio = template.cloneNode(true) as HTMLAudioElement
+  // 跟随「音量增益」设置（元素音量上限为 1）
+  audio.volume = Math.min(Math.max(sfxVolumeScale(), 0), 1)
+  void audio.play().catch((error) => {
+    console.error('道具音效播放失败（可能被浏览器自动播放策略拦截）', error)
+  })
+}
+
+// 预热：进入房间时先把两个音效下载好，避免第一次命中才有延迟
+function preloadItemSounds() {
+  for (const item of ITEMS) {
+    if (itemAudioTemplates.has(item.type)) continue
+    const audio = new Audio(ITEM_SOUND[item.type])
+    audio.preload = 'auto'
+    itemAudioTemplates.set(item.type, audio)
+  }
+}
+
 const ITEM_COOLDOWN_MS = 3000
 const RING_LENGTH = 2 * Math.PI * 16   // 与模板里 r=16 对应
 
@@ -1853,6 +1888,9 @@ function playItemAnimation(event: ItemEvent) {
 
 // 命中：鸡蛋破碎 / 玫瑰花绽放，并让目标头像抖一下
 function playItemImpact(event: ItemEvent, x: number, y: number, size: number) {
+  // 命中音效（public/audio 里的 mp3）
+  playItemSound(event.item)
+
   const host = document.createElement('div')
   host.className = `item-impact ${event.item}`
   host.style.left = `${x}px`
@@ -2689,6 +2727,8 @@ function activatePage() {
   window.addEventListener('scroll', onChatScroll, { passive: true })
   // 常驻的非 passive touchmove：拖动卡片时用它阻止页面滚动（详见 onCardPressTouchMove）
   window.addEventListener('touchmove', onCardPressTouchMove, { passive: false })
+  // 预热道具音效，第一次砸鸡蛋 / 献花也不用等下载
+  preloadItemSounds()
   // 回到房间页且处于语音模式时，重新预热麦克风
   if (inputMode.value === 'voice') void ensureMicStream()
   connect()
