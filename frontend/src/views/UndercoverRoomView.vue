@@ -1,6 +1,5 @@
 <template>
   <div class="room-page news-page">
-    <ThemeToggle />
     <Toast :message="toastMessage" :duration="3000" />
 
     <!-- 已选地图作为页面背景（毛玻璃模糊） -->
@@ -11,30 +10,23 @@
     ></div>
 
     <div class="content-area">
-      <!-- 房间标题卡片 -->
+      <!-- 顶栏：左侧退出房间，中间为缩小后的观战席（不再显示房间号与房间标题） -->
       <div class="room-header">
-        <div class="room-header-main">
-          <div class="room-no">{{ room?.roomNo ?? roomNo }}</div>
-          <div class="room-title">{{ room?.name ?? '正在连接房间...' }}</div>
-        </div>
-        <button class="leave-btn" @click="handleExitClick">退出房间</button>
-      </div>
+        <button class="leave-btn" @click="handleExitClick">退出</button>
 
-      <div v-if="!room" class="list-tip">
-        {{ errorMessage || '正在连接房间会话...' }}
-      </div>
-
-      <template v-else>
-        <!-- 观战席：1 × 6，位于顶栏与队伍栏之间 -->
-        <div class="spectator-row">
-            <div
-              v-for="(slot, index) in room.spectators"
-              :key="`spectator-${index}`"
+        <!-- 观战席：1 × 5，整行最高 60px -->
+        <div v-if="room" class="spectator-row">
+          <div
+            v-for="(slot, index) in room.spectators"
+            :key="`spectator-${index}`"
             class="seat spectator-slot"
             :data-user-id="slot?.userId"
+            data-team="spectator"
+            :data-seat-index="index"
             :class="{ empty: !slot, mine: isMine(slot) }"
-              @click="onSeatClick('spectator', index, slot, $event)"
-            >
+            @click="onSeatClick('spectator', index, slot, $event)"
+            @pointerdown="onCardPointerDown($event, 'spectator', index, slot)"
+          >
             <!-- 仅头像在上，标签在下；点击他人卡片弹出选项卡 -->
             <UndercoverMemberSlot
               :member="slot"
@@ -46,6 +38,62 @@
           </div>
         </div>
 
+        <!-- 道具：收起时只显示道具图标，点击展开悬浮窗；
+             选中后收起悬浮窗，图标变为鸡蛋 / 玫瑰花并开始 3 秒倒计时 -->
+        <div class="item-dock" @click.stop>
+          <button
+            class="item-trigger"
+            :class="{ active: !!activeItem }"
+            :title="activeItem ? activeItemTitle : '道具'"
+            @click="toggleItemPanel"
+          >
+            <!-- 倒计时圆环：3 秒内逐渐减少 -->
+            <svg v-if="activeItem" class="item-ring" viewBox="0 0 36 36">
+              <circle class="ring-track" cx="18" cy="18" r="16" />
+              <circle
+                class="ring-progress"
+                cx="18"
+                cy="18"
+                r="16"
+                :stroke-dasharray="RING_LENGTH"
+                :stroke-dashoffset="RING_LENGTH * itemProgress"
+              />
+            </svg>
+            <img class="item-icon" :src="itemTriggerIcon" :alt="activeItemTitle">
+          </button>
+
+          <!-- 悬浮窗：鸡蛋 / 玫瑰花 -->
+          <div v-if="showItemPanel" class="item-panel">
+            <button
+              v-for="item in ITEMS"
+              :key="item.type"
+              class="item-option"
+              :title="item.title"
+              @click="selectItem(item.type)"
+            >
+              <img class="item-icon" :src="item.icon" :alt="item.title">
+            </button>
+          </div>
+
+          <span v-if="activeItem && !showItemPanel" class="item-tip">
+            点击目标头像{{ activeItem === 'egg' ? '砸鸡蛋' : '献花' }}
+            <b class="item-count">×</b>{{ itemRemainSeconds }}
+          </span>
+        </div>
+
+        <!-- 设置：深色模式 / 自动播放语音 / 音量增益 -->
+        <div class="settings-dock">
+          <button class="settings-trigger" title="设置" @click="showSettings = true">
+            <img class="settings-icon" src="/ico/设置.svg" alt="设置">
+          </button>
+        </div>
+      </div>
+
+      <div v-if="!room" class="list-tip">
+        {{ errorMessage || '正在连接房间会话...' }}
+      </div>
+
+      <template v-else>
         <!-- 左右两个队伍栏 -->
         <div class="battle-area">
           <template v-for="team in teamKeys" :key="team">
@@ -293,6 +341,7 @@
                   :data-seat-index="index"
                   :class="{ empty: !slot, mine: isMine(slot) }"
                   @click="onSeatClick(team, index, slot, $event)"
+                  @pointerdown="onCardPointerDown($event, team, index, slot)"
                 >
                   <!-- 成员展示与观战席共用同一个组件 -->
                   <UndercoverMemberSlot
@@ -314,36 +363,6 @@
               >+</button>
             </section>
           </template>
-        </div>
-
-        <!-- 道具栏：38px 高，位于队伍列表与聊天列表之间 -->
-        <div class="item-bar">
-          <button
-            v-for="item in ITEMS"
-            :key="item.type"
-            class="item-btn"
-            :class="{ active: activeItem === item.type }"
-            :title="item.title"
-            @click="selectItem(item.type)"
-          >
-            <!-- 倒计时圆环：3 秒内逐渐减少 -->
-            <svg v-if="activeItem === item.type" class="item-ring" viewBox="0 0 36 36">
-              <circle class="ring-track" cx="18" cy="18" r="16" />
-              <circle
-                class="ring-progress"
-                cx="18"
-                cy="18"
-                r="16"
-                :stroke-dasharray="RING_LENGTH"
-                :stroke-dashoffset="RING_LENGTH * itemProgress"
-              />
-            </svg>
-            <img class="item-icon" :src="item.icon" :alt="item.title">
-          </button>
-
-          <span v-if="activeItem" class="item-tip">
-            点击目标头像{{ activeItem === 'egg' ? '砸鸡蛋' : '献花' }}（{{ itemRemainSeconds }}s）
-          </span>
         </div>
 
         <!-- 聊天栏：记录区最高 100px 可上下滚动，下方为输入框 + emoji + 发送 -->
@@ -461,14 +480,33 @@
       v-if="dialogMember"
       :member="dialogMember"
       :is-host="isOwner"
+      :has-map-right="hasMapRightFor(dialogMember)"
       :origin="dialogOrigin"
       @close="closeUserDialog"
       @private="startPrivateMessage(dialogMember)"
+      @request-swap="requestSeatSwapWith(dialogMember)"
       @switch-team="switchMemberTeam(dialogMember)"
       @to-spectator="moveMemberToSpectator(dialogMember)"
       @transfer-owner="transferOwnerToMember(dialogMember)"
       @copy="copyBattletag"
     />
+
+    <!-- 对方申请与你交换位置：同意 / 拒绝 -->
+    <div v-if="swapRequest" class="swap-mask">
+      <div class="swap-panel">
+        <p class="swap-title">
+          <b>{{ swapRequest.fromDisplayName }}</b> 申请与你交换位置
+        </p>
+        <p class="swap-hint">同意后你们两人的席位（队伍 / 观战席）会互换</p>
+        <div class="swap-actions">
+          <button class="swap-btn" @click="respondSeatSwap(false)">拒绝</button>
+          <button class="swap-btn primary" @click="respondSeatSwap(true)">同意</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 设置：深色模式 / 自动播放语音 / 音量增益 -->
+    <UndercoverSettingsDialog v-if="showSettings" @close="showSettings = false" />
 
     <!-- 房主强制添加成员：搜索悬浮框 -->
     <div v-if="addMemberTeam" class="add-member-mask" @click="closeAddMember">
@@ -562,12 +600,18 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onActivated, onDeactivated, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import ThemeToggle from '@/components/ThemeToggle.vue'
 import Toast from '@/components/Toast.vue'
 import UndercoverMemberSlot from '@/components/UndercoverMemberSlot.vue'
 import UndercoverUserDialog from '@/components/UndercoverUserDialog.vue'
 import UndercoverMapPicker from '@/components/UndercoverMapPicker.vue'
-import type { ChatMessage, RoomState, SeatMember } from '@/types/undercover'
+import UndercoverSettingsDialog from '@/components/UndercoverSettingsDialog.vue'
+import { useRoomSettings } from '@/composables/useRoomSettings'
+import type {
+  ChatMessage,
+  RoomState,
+  SeatMember,
+  SeatSwapRequestInfo
+} from '@/types/undercover'
 import type { GameState } from '@/types/undercover'
 import { ALL_MAP_NAMES, MAP_CATEGORIES } from '@/data/owMaps'
 import type { ItemEvent, ItemType } from '@/types/undercover'
@@ -602,6 +646,227 @@ let pageActive = false
 const isOwner = computed(
   () => myUserId.value !== null && room.value?.ownerUserId === myUserId.value
 )
+
+/* =========================
+   房主拖动卡片：长按生成副本卡片，拖到目标席位松手交换位置
+========================= */
+const LONG_PRESS_MS = 350
+// 手指自然抖动容忍度：超过这个位移才认为是「滑动」而不是长按
+const DRAG_MOVE_TOLERANCE_PX = 12
+
+interface CardPressState {
+  userId: number
+  seat: TeamKey | 'spectator'
+  seatIndex: number
+  rect: DOMRect
+  offsetX: number
+  offsetY: number
+  card: HTMLElement
+}
+
+let cardPress: CardPressState | null = null
+let cardDragGhost: HTMLElement | null = null
+let cardDragTarget: HTMLElement | null = null
+let longPressTimer: number | null = null
+let pressStartX = 0
+let pressStartY = 0
+// 拖动结束后紧跟的 click 要忽略，避免又弹出选项卡 / 又移动一次
+let suppressNextSeatClick = false
+
+function clearLongPressTimer() {
+  if (longPressTimer !== null) {
+    clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+}
+
+function removeCardPressListeners() {
+  window.removeEventListener('pointermove', onCardPressMove)
+  window.removeEventListener('pointerup', onCardPressEnd)
+  window.removeEventListener('pointercancel', onCardPressCancel)
+}
+
+// 拖动期间必须拦下 touchmove 的默认行为：否则浏览器会把手势判成页面滚动，
+// 一边滚动一边发 pointercancel 把拖动掐掉。
+// 注意：这个监听必须在「手指按下那一刻」就已经存在，浏览器才会把 touchmove
+// 标记为可取消（touch-action 是按下瞬间定死的，拖动中再改 body 已经来不及），
+// 所以它在页面激活期间常驻，只在真正拖动时 preventDefault。
+function onCardPressTouchMove(event: TouchEvent) {
+  if (!cardDragGhost) return
+
+  event.preventDefault()
+
+  // 冗余：即使 pointermove 被浏览器吞掉，也靠触摸事件继续让副本卡片跟随手指
+  const touch = event.touches[0]
+  if (!touch) return
+  moveGhostTo(touch.clientX, touch.clientY)
+  updateCardDragTarget(touch.clientX, touch.clientY)
+}
+
+// 冗余：pointerup 万一没送到，靠 touchend 结束拖动
+function onCardPressTouchEnd() {
+  if (cardDragGhost) onCardPressEnd()
+}
+
+// 长按开始拖动（房主专用）
+function onCardPointerDown(
+  event: PointerEvent,
+  team: TeamKey | 'spectator',
+  index: number,
+  slot: SeatMember | null
+) {
+  if (!isOwner.value || !room.value || room.value.game.rosterLocked) return
+  if (!slot) return
+  // 道具倒计时内点击卡片是「使用道具」，不启动拖动
+  if (activeItem.value) return
+  // 鼠标只响应左键
+  if (event.pointerType === 'mouse' && event.button !== 0) return
+
+  const card = event.currentTarget as HTMLElement | null
+  if (!card) return
+
+  const rect = card.getBoundingClientRect()
+  cardPress = {
+    userId: slot.userId,
+    seat: team,
+    seatIndex: index,
+    rect,
+    offsetX: event.clientX - rect.left,
+    offsetY: event.clientY - rect.top,
+    card
+  }
+  pressStartX = event.clientX
+  pressStartY = event.clientY
+
+  window.addEventListener('pointermove', onCardPressMove)
+  window.addEventListener('pointerup', onCardPressEnd)
+  window.addEventListener('pointercancel', onCardPressCancel)
+  clearLongPressTimer()
+  longPressTimer = window.setTimeout(startCardDrag, LONG_PRESS_MS)
+}
+
+function onCardPressMove(event: PointerEvent) {
+  if (!cardPress) return
+
+  if (!cardDragGhost) {
+    // 还没进入拖动：位移超过阈值就当作滑动，取消长按
+    const distance = Math.hypot(event.clientX - pressStartX, event.clientY - pressStartY)
+    if (distance > DRAG_MOVE_TOLERANCE_PX) cancelCardPress()
+    return
+  }
+
+  // 拖动中：禁止页面滚动 + 副本卡片跟随手指
+  event.preventDefault()
+
+  // 鼠标在窗口外松开时 pointerup 会丢，按「没有按键按下」兜底收尾
+  if (event.pointerType === 'mouse' && event.buttons === 0) {
+    onCardPressEnd()
+    return
+  }
+
+  moveGhostTo(event.clientX, event.clientY)
+  updateCardDragTarget(event.clientX, event.clientY)
+}
+
+// 生成副本卡片（克隆原卡片，随手指移动）
+function startCardDrag() {
+  clearLongPressTimer()
+  if (!cardPress) return
+
+  const { card, rect } = cardPress
+  const ghost = card.cloneNode(true) as HTMLElement
+  ghost.classList.add('card-drag-ghost')
+  ghost.classList.remove('drag-over')
+  ghost.style.width = `${rect.width}px`
+  ghost.style.height = `${rect.height}px`
+  document.body.appendChild(ghost)
+  cardDragGhost = ghost
+  card.classList.add('card-drag-source')
+
+  // 拖动期间：整页禁止滚动与文本选择
+  lockPageSelection('drag', true)
+  window.addEventListener('touchend', onCardPressTouchEnd)
+
+  moveGhostTo(pressStartX, pressStartY)
+  updateCardDragTarget(pressStartX, pressStartY)
+}
+
+function moveGhostTo(clientX: number, clientY: number) {
+  if (!cardDragGhost || !cardPress) return
+  const left = clientX - cardPress.offsetX
+  const top = clientY - cardPress.offsetY
+  cardDragGhost.style.transform = `translate(${left}px, ${top}px)`
+}
+
+// 找出指针下方的席位格子并高亮
+function updateCardDragTarget(clientX: number, clientY: number) {
+  const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null
+  const slot = element?.closest<HTMLElement>('[data-team][data-seat-index]') ?? null
+  if (slot === cardDragTarget) return
+
+  cardDragTarget?.classList.remove('drag-over')
+  cardDragTarget = slot
+  cardDragTarget?.classList.add('drag-over')
+}
+
+function cleanupCardDrag() {
+  window.removeEventListener('touchend', onCardPressTouchEnd)
+  cardDragTarget?.classList.remove('drag-over')
+  cardDragTarget = null
+  cardPress?.card.classList.remove('card-drag-source')
+  cardDragGhost?.remove()
+  cardDragGhost = null
+  lockPageSelection('drag', false)
+}
+
+function cancelCardPress() {
+  clearLongPressTimer()
+  removeCardPressListeners()
+  cleanupCardDrag()
+  cardPress = null
+}
+
+function onCardPressCancel() {
+  cancelCardPress()
+}
+
+// 松手：命中目标席位则吸附过去并交换位置
+function onCardPressEnd() {
+  clearLongPressTimer()
+  removeCardPressListeners()
+
+  const press = cardPress
+  const wasDragging = !!cardDragGhost
+  const target = cardDragTarget
+
+  cleanupCardDrag()
+  cardPress = null
+
+  if (!wasDragging || !press) return
+
+  // 拖动结束后的 click 一律忽略
+  suppressNextSeatClick = true
+  window.setTimeout(() => {
+    suppressNextSeatClick = false
+  }, 400)
+
+  if (!target) {
+    showToast('请拖到目标席位后松手')
+    return
+  }
+
+  const team = target.dataset.team as TeamKey | 'spectator' | undefined
+  const targetIndex = Number(target.dataset.seatIndex)
+  if (!team || !Number.isInteger(targetIndex)) return
+  if (team === press.seat && targetIndex === press.seatIndex) return
+
+  send({
+    type: 'hostDragSeat',
+    userId: press.userId,
+    seat: team,
+    index: targetIndex
+  })
+}
 
 /* =========================
    ID 颜色：按「我」与对方的席位关系
@@ -664,6 +929,7 @@ const iGotMapRight = computed(
 )
 const panelMode = ref<'' | 'members' | 'undercover'>('')
 const showMapPicker = ref(false)
+const showSettings = ref(false)
 const mapPickerMode = ref<'choose' | 'vote' | 'recommend'>('choose')
 
 // 选图组件里选了地图（choose = 直接选图；vote = 投票）
@@ -991,6 +1257,23 @@ function handleMessage(event: MessageEvent) {
     case 'item':
       // 道具动画：房间内所有人都会收到
       if (msg.event) playItemAnimation(msg.event as ItemEvent)
+      break
+
+    case 'swapSent':
+      showToast(`已向 ${msg.toDisplayName ?? '对方'} 发送交换位置申请，等待同意`)
+      break
+
+    case 'swapRequest':
+      // 对方申请与你交换位置 → 弹确认框
+      if (msg.request) swapRequest.value = msg.request as SeatSwapRequestInfo
+      break
+
+    case 'swapResult':
+      showToast(
+        msg.accepted
+          ? `${msg.byDisplayName ?? '对方'} 同意与你交换位置`
+          : `${msg.byDisplayName ?? '对方'} 拒绝了交换位置`
+      )
       break
 
     default:
@@ -1435,11 +1718,43 @@ const RING_LENGTH = 2 * Math.PI * 16   // 与模板里 r=16 对应
 const activeItem = ref<ItemType | ''>('')
 const itemProgress = ref(0)
 const itemRemainSeconds = ref(3)
+// 道具悬浮窗是否展开（收起时按钮只显示道具图标）
+const showItemPanel = ref(false)
+
+// 收起状态显示道具图标；选中后变为鸡蛋 / 玫瑰花
+const itemTriggerIcon = computed(() => {
+  if (!activeItem.value) return '/ico/道具.svg'
+  return ITEMS.find((item) => item.type === activeItem.value)?.icon ?? '/ico/道具.svg'
+})
+
+const activeItemTitle = computed(() => {
+  const found = ITEMS.find((item) => item.type === activeItem.value)
+  return found ? found.title : '道具'
+})
 
 let itemTimer: number | null = null
 
+// 悬浮窗开关（点空白处自动收起）
+function toggleItemPanel() {
+  if (showItemPanel.value) {
+    closeItemPanel()
+    return
+  }
+
+  showItemPanel.value = true
+  document.addEventListener('click', closeItemPanel)
+}
+
+function closeItemPanel() {
+  showItemPanel.value = false
+  document.removeEventListener('click', closeItemPanel)
+}
+
 // 点击道具：进入/重置 3 秒倒计时
 function selectItem(item: ItemType) {
+  // 选中后收起悬浮窗
+  closeItemPanel()
+
   activeItem.value = item
   itemProgress.value = 0
   itemRemainSeconds.value = 3
@@ -1468,6 +1783,7 @@ function stopItemTimer() {
   }
   activeItem.value = ''
   itemProgress.value = 0
+  closeItemPanel()
 }
 
 // 倒计时内点击目标头像 → 使用道具
@@ -1699,6 +2015,11 @@ watch(
 ========================= */
 let sfxContext: AudioContext | null = null
 
+// 音量增益（0~200%）换算成倍数，作用于录音提示音与语音播放
+function sfxVolumeScale(): number {
+  return Math.max(0, Math.min(Number(voiceVolume.value) || 0, 200)) / 100
+}
+
 function getSfxContext(): AudioContext | null {
   const Ctor =
     window.AudioContext ??
@@ -1726,13 +2047,16 @@ function playTone(
   const osc = context.createOscillator()
   const volume = context.createGain()
 
+  // 跟随「音量增益」设置（最小 0.0001，exponentialRamp 不接受 0）
+  const scaledGain = Math.max(gain * sfxVolumeScale(), 0.0001)
+
   osc.type = 'sine'
   osc.frequency.setValueAtTime(freq, startAt)
   if (toFreq !== freq) osc.frequency.exponentialRampToValueAtTime(toFreq, endAt)
 
   // 淡入淡出，避免「啪」的爆音
   volume.gain.setValueAtTime(0.0001, startAt)
-  volume.gain.exponentialRampToValueAtTime(gain, startAt + 0.012)
+  volume.gain.exponentialRampToValueAtTime(scaledGain, startAt + 0.012)
   volume.gain.exponentialRampToValueAtTime(0.0001, endAt)
 
   osc.connect(volume).connect(context.destination)
@@ -1803,12 +2127,20 @@ function clearDocumentSelection() {
   if (selection && !selection.isCollapsed) selection.removeAllRanges()
 }
 
+// 需要锁住整页手势的场景：录音（record）、长按拖动卡片（drag）
+const selectionLockReasons = new Set<string>()
 let selectionGuardActive = false
 
-function lockPageSelection(on: boolean) {
-  document.body.classList.toggle('is-recording', on)
-  if (on === selectionGuardActive) return
-  selectionGuardActive = on
+function lockPageSelection(reason: 'record' | 'drag', on: boolean) {
+  if (on) selectionLockReasons.add(reason)
+  else selectionLockReasons.delete(reason)
+
+  const locked = selectionLockReasons.size > 0
+  document.body.classList.toggle('is-recording', locked)
+  document.body.classList.toggle('is-card-dragging', selectionLockReasons.has('drag'))
+
+  if (locked === selectionGuardActive) return
+  selectionGuardActive = locked
 
   if (on) {
     // 捕获阶段拦截：长按选中、系统长按菜单、拖拽、上滑触发的页面滚动
@@ -1851,7 +2183,7 @@ async function startRecording(event: HoldEvent) {
   // 在按下的手势里同步唤醒音频上下文（iOS 上异步回调里创建会没声音）
   getSfxContext()
   // 先加锁，再申请权限（同步执行，不给浏览器的长按菜单留窗口）
-  lockPageSelection(true)
+  lockPageSelection('record', true)
   // 输入法还停留在输入框上时，长按可能会顺带弹出「复制 / emoji」面板，先把焦点收掉
   const focused = document.activeElement as HTMLElement | null
   if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA')) focused.blur()
@@ -1884,7 +2216,7 @@ async function startRecording(event: HoldEvent) {
   // 取流期间就松手了：什么都不做，锁在 endHold 里已经解除
   if (!holdActive) {
     removeHoldListeners()
-    lockPageSelection(false)
+    lockPageSelection('record', false)
     return
   }
 
@@ -1892,7 +2224,7 @@ async function startRecording(event: HoldEvent) {
   if (!stream) {
     holdActive = false
     removeHoldListeners()
-    lockPageSelection(false)
+    lockPageSelection('record', false)
     return
   }
 
@@ -1954,7 +2286,7 @@ function endHold(forceSend = false) {
   if (!isRecording.value) {
     cancelRecord.value = false
     // 在「申请权限 / 取流」窗口内就松手了：解除长按锁定
-    lockPageSelection(false)
+    lockPageSelection('record', false)
     return
   }
 
@@ -1970,7 +2302,7 @@ function abortRecording() {
   cancelRecord.value = false
   if (isRecording.value) stopRecording(false)
   // 可能停在「申请权限 / 取流」窗口，兜底解锁
-  lockPageSelection(false)
+  lockPageSelection('record', false)
   // 离开房间页面 / 切后台时释放预热流（关掉系统录音指示灯）
   closeMicStream()
 }
@@ -1980,7 +2312,7 @@ function stopRecording(send: boolean) {
 
   isRecording.value = false
   isPreparing.value = false
-  lockPageSelection(false)
+  lockPageSelection('record', false)
   pendingVoiceSend = send
   pendingVoiceDuration = Math.min((Date.now() - recordStartedAt) / 1000, VOICE_MAX_SECONDS)
 
@@ -2043,6 +2375,61 @@ const playingVoiceId = ref<number | null>(null)
 const voiceCache = new Map<number, string>()
 let lastAutoPlayedMessageId = 0
 
+// 本地偏好（设置弹窗里可改）：自动播放语音 / 音量增益
+const { autoPlayVoice, voiceVolume } = useRoomSettings()
+
+// 音量增益：≤100% 直接用元素音量；>100% 需要 Web Audio 增益节点
+let voiceAudioContext: AudioContext | null = null
+let voiceGainNode: GainNode | null = null
+
+function ensureVoiceGainNode(): GainNode | null {
+  if (voiceGainNode) return voiceGainNode
+
+  const audio = audioEl.value
+  if (!audio) return null
+
+  const Ctor =
+    window.AudioContext ??
+    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!Ctor) return null
+
+  try {
+    voiceAudioContext = new Ctor()
+    const source = voiceAudioContext.createMediaElementSource(audio)
+    voiceGainNode = voiceAudioContext.createGain()
+    source.connect(voiceGainNode).connect(voiceAudioContext.destination)
+    return voiceGainNode
+  } catch (error) {
+    console.error('初始化音量增益失败，退回元素音量', error)
+    voiceGainNode = null
+    return null
+  }
+}
+
+// 应用音量增益（0~200%）
+function applyVoiceVolume() {
+  const audio = audioEl.value
+  if (!audio) return
+
+  const percent = Math.max(0, Math.min(Number(voiceVolume.value) || 0, 200))
+
+  if (percent > 100) {
+    const gain = ensureVoiceGainNode()
+    if (gain) {
+      audio.volume = 1
+      gain.gain.value = percent / 100
+      return
+    }
+  }
+
+  // 不超过 100%：不动 Web Audio 路由，直接改元素音量更稳
+  audio.volume = Math.min(percent / 100, 1)
+  if (voiceGainNode) voiceGainNode.gain.value = Math.min(percent / 100, 1)
+}
+
+watch(voiceVolume, () => applyVoiceVolume())
+watch(audioEl, () => applyVoiceVolume())
+
 function stopVoice() {
   const audio = audioEl.value
   if (audio) {
@@ -2081,6 +2468,10 @@ async function playVoice(message: ChatMessage) {
   const audio = audioEl.value
   if (!audio || !src) return
 
+  // 音量增益 + 唤醒音频上下文（首次播放可能是自动播放，需要 resume）
+  applyVoiceVolume()
+  if (voiceAudioContext && voiceAudioContext.state === 'suspended') void voiceAudioContext.resume()
+
   audio.src = src
   audio.currentTime = 0
   playingVoiceId.value = voiceId
@@ -2116,6 +2507,8 @@ watch(
     if (latest.kind !== 'voice') return
     if (latest.userId === myUserId.value) return
     if (latest.id === lastAutoPlayedMessageId) return
+    // 设置里关掉自动播放后，只累计未读、不自动出声
+    if (!autoPlayVoice.value) return
 
     lastAutoPlayedMessageId = latest.id
     void playVoice(latest)
@@ -2127,6 +2520,16 @@ watch(
 ========================= */
 function isMine(slot: SeatMember | null): boolean {
   return !!slot && slot.userId === myUserId.value
+}
+
+// 该成员当前是否持有选图权（选项卡里展示「选图」标签用）
+function hasMapRightFor(member: SeatMember | null): boolean {
+  return (
+    !!member &&
+    !!game.value &&
+    game.value.state === 'map' &&
+    game.value.mapOwnerUserId === member.userId
+  )
 }
 
 // 点击他人卡片：以该卡头像为原点弹出选项卡
@@ -2145,12 +2548,33 @@ function closeUserDialog() {
   dialogMember.value = null
 }
 
+/* =========================
+   申请交换位置（对方同意后互换席位）
+========================= */
+const swapRequest = ref<SeatSwapRequestInfo | null>(null)
+
+function requestSeatSwapWith(member: SeatMember | null) {
+  if (!member) return
+  send({ type: 'requestSwap', userId: member.userId })
+}
+
+function respondSeatSwap(accept: boolean) {
+  const request = swapRequest.value
+  if (!request) return
+
+  send({ type: 'respondSwap', requestId: request.id, accept })
+  swapRequest.value = null
+}
+
 function onSeatClick(
   team: TeamKey | 'spectator',
   index: number,
   slot: SeatMember | null,
   event: MouseEvent
 ) {
+  // 刚结束拖动：忽略这次 click，避免又弹出选项卡 / 又移动一次
+  if (suppressNextSeatClick) return
+
   if (!room.value) return
 
   // 道具倒计时内：点谁就对谁使用道具
@@ -2263,6 +2687,8 @@ function activatePage() {
   window.addEventListener('blur', reportBackground)
   // 页面滚动也会影响「聊天窗口是否完整可见」，用于未读判定
   window.addEventListener('scroll', onChatScroll, { passive: true })
+  // 常驻的非 passive touchmove：拖动卡片时用它阻止页面滚动（详见 onCardPressTouchMove）
+  window.addEventListener('touchmove', onCardPressTouchMove, { passive: false })
   // 回到房间页且处于语音模式时，重新预热麦克风
   if (inputMode.value === 'voice') void ensureMicStream()
   connect()
@@ -2274,6 +2700,10 @@ function deactivatePage() {
   pageActive = false
 
   abortRecording()
+  // 拖动中断（切页面 / 切后台）时清掉副本卡片与滚动锁
+  cancelCardPress()
+  // 会话断开后残留的交换请求确认框直接丢弃
+  swapRequest.value = null
   stopItemTimer()
   stopOnlineHeartbeat()
   document.removeEventListener('visibilitychange', reportBackground)
@@ -2281,6 +2711,7 @@ function deactivatePage() {
   window.removeEventListener('focus', reportBackground)
   window.removeEventListener('blur', reportBackground)
   window.removeEventListener('scroll', onChatScroll)
+  window.removeEventListener('touchmove', onCardPressTouchMove)
   closeSfxContext()
   closeSocket()
 }
@@ -2322,7 +2753,7 @@ onUnmounted(deactivatePage)
 }
 
 /* =========================
-   房间标题卡片
+   顶栏（退出房间 + 观战席）
 ========================= */
 .room-header {
   position: relative;
@@ -2331,34 +2762,11 @@ onUnmounted(deactivatePage)
   justify-content: center;
   background: var(--card-bg);
   border-radius: 32px;
-  padding: 10px 16px;
-  /* 底部间距改为 0 */
-  margin: 0;
+  /* 加长顶栏：上下内边距加大 */
+  padding: 12px 16px;
+  /* 顶栏下方留 3px 间隔 */
+  margin: 0 0 3px;
   box-shadow: var(--shadow);
-}
-
-.room-header-main {
-  flex: 1;
-  min-width: 0;
-  text-align: center;
-}
-
-.room-no {
-  font-size: 1.3rem;
-  line-height: 1.25;
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: var(--text-primary);
-}
-
-.room-title {
-  font-size: 0.9rem;
-  opacity: 0.75;
-  color: var(--text-primary);
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .leave-btn {
@@ -2884,7 +3292,13 @@ onUnmounted(deactivatePage)
 .seat-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* 垂直间距在 10px 基础上减少 60% → 4px */
+  gap: 4px;
+}
+
+/* 队伍栏的人物卡片最大宽度 88px（观战席保持原有的 100px 上限） */
+.seat-list .seat {
+  max-width: 88px;
 }
 
 /* 席位容器：成员展示交给 UndercoverMemberSlot 组件（与观战席共用同一套显示） */
@@ -2894,6 +3308,8 @@ onUnmounted(deactivatePage)
   max-width: 100px;
   max-height: 80px;
   min-width: 0;
+  /* 只允许竖向滚动：横向滑动不会被浏览器判成横向平移（否则长按拖动会被 pointercancel 掐断） */
+  touch-action: pan-y;
   border-radius: 14px;
   background: var(--bg-secondary);
   box-shadow: inset 0 0 0 1px var(--glass-border);
@@ -2916,15 +3332,17 @@ onUnmounted(deactivatePage)
 }
 
 /* =========================
-   观战席
+   观战席（在顶栏内，1 × 5，整行最高 60px）
 ========================= */
-/* 观战席：1 × 6 居中排布，整行最高 80px（卡片本身也受 .seat 的 100 × 80 限制） */
+/* 观战席：1 × 5 居中排布（5 个位置固定，坐满后新玩家默认进队伍栏） */
 .spectator-row {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 100px));
+  grid-template-columns: repeat(5, minmax(0, 100px));
   justify-content: center;
   column-gap: 8px;
-  max-height: 80px;
+  align-items: stretch;
+  max-height: 60px;
+  width: 100%;
   /* 底部间距改为 0 */
   margin: 0;
 }
@@ -2932,11 +3350,99 @@ onUnmounted(deactivatePage)
 /* 观战席格子复用 .seat 卡片（stacked 变体：上方仅头像，下方只显示标签） */
 .spectator-slot {
   min-width: 0;
+  /* 顶栏里的观战席压缩：上下内边距收窄，整卡不超过 60px */
+  max-height: 60px;
+  padding: 3px 6px;
+}
+
+/* 观战席内部（子组件）跟着缩小：头像 36px、去掉 68px 的最小高度 */
+.spectator-row :deep(.member-slot) {
+  min-height: 0;
+  gap: 2px;
+}
+
+.spectator-row :deep(.member-avatar),
+.spectator-row :deep(.member-slot.empty .member-avatar),
+.spectator-row :deep(.member-slot.stacked.empty .member-avatar) {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+}
+
+.spectator-row :deep(.member-tag),
+.spectator-row :deep(.member-status) {
+  font-size: 0.6rem;
+  padding: 0 4px;
 }
 
 /* 观战席不显示虚线装饰框 */
 .spectator-slot.empty {
   border: none;
+}
+
+/* =========================
+   交换位置确认框
+========================= */
+.swap-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 3400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.swap-panel {
+  width: min(320px, 86vw);
+  padding: 20px 18px 16px;
+  border-radius: 22px;
+  background: var(--bg-primary);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35), inset 0 0 0 1px var(--glass-border);
+  text-align: center;
+}
+
+.swap-title {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.swap-hint {
+  margin: 8px 0 16px;
+  font-size: 0.8rem;
+  opacity: 0.7;
+  color: var(--text-primary);
+}
+
+.swap-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.swap-btn {
+  flex: 1;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.swap-btn.primary {
+  background: #2ecc71;
+  color: #06281a;
+  font-weight: 700;
+}
+
+.swap-btn:hover {
+  filter: brightness(1.06);
 }
 
 /* =========================
@@ -3074,24 +3580,103 @@ onUnmounted(deactivatePage)
    聊天栏
 ========================= */
 
-/* 道具栏：38px 高，位于队伍列表与聊天列表之间 */
-.item-bar {
+/* 道具：收起在顶栏最右侧，点击展开悬浮窗 */
+.settings-dock {
+  position: absolute;
+  /* 最右侧（道具按钮在它左边，间隔 8px） */
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 38px;
-  margin: 12px 0;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--bg-secondary);
-  box-shadow: inset 0 0 0 1px var(--glass-border);
 }
 
-.item-btn {
+.settings-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.settings-trigger:hover {
+  transform: translateY(-2px);
+}
+
+.settings-icon {
+  /* 设置 / 道具图标统一上限 35px */
+  width: 35px;
+  height: 35px;
+  max-width: 35px;
+  max-height: 35px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.item-dock {
+  position: absolute;
+  /* 紧挨设置按钮左侧（设置 44px + 8px 间距） */
+  right: 64px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+}
+
+.item-trigger {
   position: relative;
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.item-trigger:hover {
+  transform: translateY(-2px);
+}
+
+.item-trigger.active {
+  background: rgba(46, 204, 113, 0.16);
+}
+
+/* 悬浮窗：鸡蛋 / 玫瑰花，向右对齐在按钮下方 */
+.item-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 999px;
+  background: var(--bg-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), inset 0 0 0 1px var(--glass-border);
+}
+
+.item-option {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -3100,12 +3685,9 @@ onUnmounted(deactivatePage)
   transition: 0.15s ease;
 }
 
-.item-btn:hover {
+.item-option:hover {
   transform: translateY(-2px);
-}
-
-.item-btn.active {
-  background: rgba(46, 204, 113, 0.16);
+  background: var(--bg-secondary);
 }
 
 .item-icon {
@@ -3115,6 +3697,14 @@ onUnmounted(deactivatePage)
   /* 仅图标下移 2px，圆环等其它元素位置不变 */
   transform: translateY(2px);
   pointer-events: none;
+}
+
+/* 顶栏道具按钮里的图标同样上限 35px（悬浮窗里的选项图标保持小尺寸） */
+.item-trigger .item-icon {
+  width: 35px;
+  height: 35px;
+  max-width: 35px;
+  max-height: 35px;
 }
 
 /* 3 秒倒计时圆环（随进度减少） */
@@ -3141,12 +3731,23 @@ onUnmounted(deactivatePage)
 }
 
 .item-tip {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), inset 0 0 0 1px var(--glass-border);
   font-size: 0.78rem;
   color: #2ecc71;
   font-weight: 600;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+/* 剩余次数/倒计时前的「×」加粗 */
+.item-count {
+  font-weight: 800;
 }
 
 .chat-area {
@@ -3521,13 +4122,44 @@ onUnmounted(deactivatePage)
   }
 
   .room-header {
+    /* 窄屏把退出按钮放进流内，避免绝对定位压住第一格观战席 */
+    justify-content: flex-start;
+    gap: 8px;
     padding: 8px 12px;
   }
 
   .leave-btn {
+    position: static;
+    flex: 0 0 auto;
+    transform: none;
     left: 8px;
     padding: 6px 12px;
     font-size: 0.8rem;
+  }
+
+  .leave-btn:hover {
+    transform: scale(1.04);
+  }
+
+  /* 窄屏观战席：占满按钮右侧的剩余宽度，列间距收窄 */
+  .spectator-row {
+    flex: 1 1 auto;
+    min-width: 0;
+    column-gap: 4px;
+  }
+
+  /* 窄屏道具按钮也放进流内，避免压住最后一格观战席 */
+  .item-dock {
+    position: static;
+    flex: 0 0 auto;
+    transform: none;
+  }
+
+  /* 窄屏设置按钮同样放进流内 */
+  .settings-dock {
+    position: static;
+    flex: 0 0 auto;
+    transform: none;
   }
 }
 </style>

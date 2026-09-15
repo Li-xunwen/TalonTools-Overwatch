@@ -2,13 +2,28 @@
   <Teleport to="body">
     <div class="user-dialog-mask" @click="closeAnimated">
       <div ref="panelRef" class="user-dialog" :style="panelStyle" @click.stop>
-        <button class="dialog-title" title="点击复制完整 ID" @click="handleCopy">
-          <span class="title-id">{{ member.battletag }}</span>
-          <span class="copy-hint">点击复制</span>
-        </button>
+        <!-- 人物头像 + 状态标签 -->
+        <div class="dialog-user">
+          <img class="dialog-avatar" :src="member.avatar" :alt="member.displayName">
+
+          <div class="dialog-user-main">
+            <button class="dialog-title" title="点击复制完整 ID" @click="handleCopy">
+              <span class="title-id">{{ member.battletag }}</span>
+              <span class="copy-hint">点击复制</span>
+            </button>
+
+            <div v-if="hasTags" class="dialog-tags">
+              <span v-if="member.isOwner" class="dialog-tag">房主</span>
+              <span v-if="hasMapRight" class="dialog-tag tag-map-right">选图</span>
+              <span v-if="member.ready" class="dialog-tag tag-ready">准备</span>
+              <span v-if="statusTag" class="dialog-tag" :class="statusClass">{{ statusTag }}</span>
+            </div>
+          </div>
+        </div>
 
         <div class="dialog-items">
           <button class="dialog-item" @click="handleAction('private')">发送私密消息</button>
+          <button class="dialog-item" @click="handleAction('requestSwap')">申请交换位置</button>
           <template v-if="isHost">
             <button class="dialog-item" @click="handleAction('switchTeam')">切换队伍</button>
             <button class="dialog-item" @click="handleAction('toSpectator')">移动到观战席</button>
@@ -23,19 +38,34 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { SeatMember } from '@/types/undercover'
 
 const props = defineProps<{
   member: SeatMember
   isHost: boolean
+  /** 该成员当前是否持有选图权（由房间页根据对局状态传入） */
+  hasMapRight?: boolean
   /** 头像在屏幕上的位置与尺寸，用于「从头像位置缩放到页面中间」的动画 */
   origin: { x: number; y: number; size: number } | null
 }>()
 
+// 状态标签：断线优先于后台（与席位卡片保持一致）
+const statusTag = computed(() => {
+  if (!props.member.connected) return '断线'
+  return props.member.background ? '后台' : ''
+})
+
+const statusClass = computed(() => (props.member.connected ? 'background' : 'offline'))
+
+const hasTags = computed(
+  () => props.member.isOwner || !!props.hasMapRight || props.member.ready || !!statusTag.value
+)
+
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'private'): void
+  (e: 'requestSwap'): void
   (e: 'switchTeam'): void
   (e: 'toSpectator'): void
   (e: 'transferOwner'): void
@@ -96,12 +126,15 @@ function closeAnimated() {
 }
 
 // 选项点击：先播放收起动画，再执行动作
-function handleAction(action: 'private' | 'switchTeam' | 'toSpectator' | 'transferOwner') {
+function handleAction(
+  action: 'private' | 'requestSwap' | 'switchTeam' | 'toSpectator' | 'transferOwner'
+) {
   if (closing) return
   closeAnimated()
 
   window.setTimeout(() => {
     if (action === 'private') emit('private')
+    else if (action === 'requestSwap') emit('requestSwap')
     else if (action === 'switchTeam') emit('switchTeam')
     else if (action === 'toSpectator') emit('toSpectator')
     else emit('transferOwner')
@@ -135,16 +168,83 @@ function handleCopy() {
   will-change: transform, opacity;
 }
 
+/* 头部：头像 + 完整 ID + 状态标签 */
+.dialog-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.dialog-avatar {
+  flex: 0 0 54px;
+  width: 54px;
+  height: 54px;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-secondary);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+}
+
+.dialog-user-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  /* 给右上角关闭按钮留位，长 ID 不会钻到 ✕ 下面 */
+  padding-right: 24px;
+}
+
+/* 状态标签：房主 / 选图 / 准备 / 后台 / 断线（与席位卡片同一套配色） */
+.dialog-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.dialog-tag {
+  font-size: 0.7rem;
+  line-height: 1.3;
+  padding: 1px 7px;
+  border-radius: 20px;
+  background: #2c3e66;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.dialog-tag.tag-map-right {
+  background: #2ecc71;
+  color: #0a2a17;
+  font-weight: 700;
+}
+
+.dialog-tag.tag-ready {
+  background: rgba(46, 204, 113, 0.85);
+  color: #06281a;
+}
+
+.dialog-tag.background {
+  background: #f39c12;
+}
+
+.dialog-tag.offline {
+  background: #ff4d4f;
+}
+
 /* 标题：完整 ID，点击复制 */
 .dialog-title {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 2px;
   width: 100%;
-  padding: 4px 0 12px;
+  padding: 0;
   border: none;
-  border-bottom: 1px solid var(--glass-border);
   background: transparent;
   cursor: pointer;
   font-family: inherit;

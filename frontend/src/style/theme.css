@@ -380,6 +380,54 @@ body.is-recording * {
 }
 
 /* ==========================================
+   长按拖动卡片期间：整页禁止滚动 / 文本选择，
+   副本卡片（clone 出来的）跟随手指
+   ========================================== */
+body.is-card-dragging,
+body.is-card-dragging * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-drag: none !important;
+}
+
+body.is-recording,
+body.is-card-dragging {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+body.is-card-dragging {
+  cursor: grabbing;
+}
+
+/* 拖动中的副本卡片：绝对跟随手指，不拦截命中测试 */
+.card-drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 5000;
+  margin: 0;
+  pointer-events: none;
+  opacity: 0.92;
+  transform-origin: center;
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.35));
+  background: var(--bg-secondary);
+}
+
+/* 原卡片在拖动期间淡出 */
+.card-drag-source {
+  opacity: 0.35;
+}
+
+/* 指针下方的目标席位 */
+.seat.drag-over {
+  outline: 2px dashed var(--accent, #2ecc71);
+  outline-offset: 2px;
+  transform: translateY(-2px);
+}
+
+/* ==========================================
    录音按钮 / 录音浮层：任何状态下都不参与文本选择、
    长按菜单与拖拽（手机浏览器长按按钮文字会弹出「复制」菜单）
    ========================================== */

@@ -8,10 +8,10 @@ import { pool } from '../utils/db';
 // 每队席位数量（左队 6 / 右队 6）
 export const TEAM_SIZE = 6;
 
-// 观战席默认空位数量（3 × 2）
-export const SPECTATOR_MIN_SIZE = 6;
+// 观战席固定位置数量（1 × 5）
+export const SPECTATOR_MIN_SIZE = 5;
 
-// 房间人数上限（12 个队伍席位 + 6 个观战席 = 18）
+// 房间人数上限（12 个队伍席位 + 5 个观战席 = 17）
 export const ROOM_MAX_PLAYERS = TEAM_SIZE * 2 + SPECTATOR_MIN_SIZE;
 
 // 房间无用户后 1 分钟销毁
@@ -143,13 +143,26 @@ export interface Room {
     undercoverVote: { active: boolean; votes: Record<number, number> };   // 结算阶段投票：投票人 -> 目标（0 = 弃权）
     revealedUndercoverIds: number[];            // 公布结果后对所有人公开的卧底
     rosterLocked: boolean;                      // 进入准备阶段后锁定成员名单
+    swapRequests: Map<number, SeatSwapRequest>; // 待处理的位置交换申请（key = 被申请人）
 }
+
+// 位置交换申请（申请人 → 被申请人，同意后互换席位）
+export interface SeatSwapRequest {
+    id: number;
+    fromUserId: number;
+    toUserId: number;
+    at: number;
+}
+
+// 申请超时时间：30 秒内没有回应就失效
+const SEAT_SWAP_TTL_MS = 30 * 1000;
 
 const rooms = new Map<string, Room>();
 let roomSeq = 1;
 let chatSeq = 1;
 let voiceSeq = 1;
 let itemSeq = 1;
+let swapSeq = 1;
 
 /* =========================
    工具函数
@@ -200,22 +213,13 @@ function roomPlayerCount(room: Room): number {
     return count;
 }
 
-// 找第一个空席位：队伍席 0~5，观战席从 0 开始可向后扩展
+// 找第一个空席位：队伍席 0~5、观战席 0~4（位置固定，满员返回 -1）
 function firstFreeSeatIndex(room: Room, seat: SeatType): number {
-    const limit = isTeamSeat(seat) ? TEAM_SIZE : Math.max(SPECTATOR_MIN_SIZE, room.members.size + 1);
+    const limit = isTeamSeat(seat) ? TEAM_SIZE : SPECTATOR_MIN_SIZE;
     for (let i = 0; i < limit; i++) {
         if (!seatTaken(room, seat, i)) return i;
     }
-    return isTeamSeat(seat) ? -1 : limit;
-}
-
-// 观战席需要渲染的格子数：至少 8 个，已占用更多则按占用扩展
-function spectatorSlotCount(room: Room): number {
-    let maxIndex = -1;
-    for (const member of room.members.values()) {
-        if (member.seat === 'spectator' && member.seatIndex > maxIndex) maxIndex = member.seatIndex;
-    }
-    return Math.max(SPECTATOR_MIN_SIZE, maxIndex + 1);
+    return -1;
 }
 
 function seatSlots(room: Room, seat: SeatType, size: number) {
@@ -267,7 +271,7 @@ export function serializeRoom(room: Room) {
         maxPlayers: ROOM_MAX_PLAYERS,
         team1: { name: room.team1Name, slots: seatSlots(room, 'team1', TEAM_SIZE) },
         team2: { name: room.team2Name, slots: seatSlots(room, 'team2', TEAM_SIZE) },
-        spectators: seatSlots(room, 'spectator', spectatorSlotCount(room)),
+        spectators: seatSlots(room, 'spectator', SPECTATOR_MIN_SIZE),
         members: [...room.members.values()].map(serializeMember),
         chat: room.chat,
         game: {
@@ -365,7 +369,8 @@ export function createRoom(userId: number, battletag: string): Room {
         undercoverPickMode: '',
         undercoverVote: { active: false, votes: {} },
         revealedUndercoverIds: [],
-        rosterLocked: false
+        rosterLocked: false,
+        swapRequests: new Map()
     };
 
     rooms.set(room.roomNo, room);
@@ -516,7 +521,8 @@ export function getVoiceClip(room: Room, voiceId: number): VoiceClip | undefined
     return room.voiceClips.get(voiceId);
 }
 
-// 加入房间：默认进观战席；已在房间里则保持原席位
+// 加入房间：默认进观战席，观战席满 5 人后自动进队伍（先队伍1再队伍2）；
+// 已在房间里则保持原席位
 export function joinRoom(room: Room, userId: number, battletag: string): RoomMember | null {
     const existing = room.members.get(userId);
     if (existing) {
@@ -531,12 +537,24 @@ export function joinRoom(room: Room, userId: number, battletag: string): RoomMem
 
     if (room.members.size >= ROOM_MAX_PLAYERS) return null;
 
-    const seatIndex = firstFreeSeatIndex(room, 'spectator');
+    // 观战席 → 队伍1 → 队伍2，都满了说明房间已满
+    let seat: SeatType | null = null;
+    let seatIndex = -1;
+    for (const candidate of ['spectator', 'team1', 'team2'] as SeatType[]) {
+        const index = firstFreeSeatIndex(room, candidate);
+        if (index >= 0) {
+            seat = candidate;
+            seatIndex = index;
+            break;
+        }
+    }
+    if (!seat) return null;
+
     const member: RoomMember = {
         userId,
         battletag,
-        seat: 'spectator',
-        seatIndex: seatIndex < 0 ? 0 : seatIndex,
+        seat,
+        seatIndex,
         isOwner: room.ownerUserId === userId,
         connected: true,
         disconnectedSince: null,
@@ -587,6 +605,7 @@ export async function removeMember(room: Room, userId: number): Promise<RoomMemb
     if (!member) return null;
 
     room.members.delete(userId);
+    dropSeatSwapRequests(room, userId);
 
     if (room.ownerUserId === userId) await transferOwner(room);
     if (room.members.size === 0) room.emptySince = Date.now();
@@ -666,6 +685,9 @@ export function moveMemberSeat(
     if (isTeamSeat(seat) && seatIndex >= TEAM_SIZE) {
         return { ok: false, message: '该队伍席位不存在' };
     }
+    if (seat === 'spectator' && seatIndex >= SPECTATOR_MIN_SIZE) {
+        return { ok: false, message: '该观战席不存在' };
+    }
     if (member.seat === seat && member.seatIndex === seatIndex) {
         return { ok: true };
     }
@@ -702,6 +724,155 @@ export function moveOtherMemberSeat(
     target.seat = seat;
     target.seatIndex = seatIndex;
     return { ok: true };
+}
+
+// 申请与某位玩家交换位置：向对方推送确认请求，对方同意后才互换席位
+export function requestSeatSwap(
+    room: Room,
+    fromUserId: number,
+    toUserId: number
+): { ok: boolean; message?: string } {
+    if (room.rosterLocked) return { ok: false, message: '名单已经锁定，不可更换席位' };
+
+    const from = room.members.get(fromUserId);
+    const target = room.members.get(toUserId);
+    if (!from) return { ok: false, message: '你不在房间里' };
+    if (!target) return { ok: false, message: '该玩家已离开房间' };
+    if (fromUserId === toUserId) return { ok: false, message: '不能和自己交换位置' };
+    if (!target.connected) return { ok: false, message: '对方不在线，无法申请交换位置' };
+
+    // 同一时间只保留一条待处理申请（后发覆盖先发）
+    const request: SeatSwapRequest = {
+        id: swapSeq++,
+        fromUserId,
+        toUserId,
+        at: Date.now()
+    };
+    room.swapRequests.set(toUserId, request);
+
+    for (const ws of room.sockets.get(toUserId) ?? []) {
+        sendTo(ws, {
+            type: 'swapRequest',
+            request: {
+                id: request.id,
+                fromUserId,
+                fromBattletag: from.battletag,
+                fromDisplayName: nameWithoutIdNumber(from.battletag),
+                fromSeat: from.seat
+            }
+        });
+    }
+
+    return { ok: true };
+}
+
+// 被申请人回应交换位置：同意则互换双方席位
+export function respondSeatSwap(
+    room: Room,
+    userId: number,
+    requestId: number,
+    accept: boolean
+): {
+    ok: boolean;
+    message?: string;
+    accepted?: boolean;
+    fromUserId?: number;
+    fromBattletag?: string;
+} {
+    const request = room.swapRequests.get(userId);
+    if (!request || request.id !== requestId) return { ok: false, message: '交换请求已失效' };
+
+    room.swapRequests.delete(userId);
+
+    if (Date.now() - request.at > SEAT_SWAP_TTL_MS) return { ok: false, message: '交换请求已超时' };
+
+    const from = room.members.get(request.fromUserId);
+    const target = room.members.get(userId);
+    if (!from || !target) return { ok: false, message: '对方已离开房间' };
+
+    if (!accept) {
+        return { ok: true, accepted: false, fromUserId: from.userId, fromBattletag: from.battletag };
+    }
+
+    if (room.rosterLocked) return { ok: false, message: '名单已经锁定，不可更换席位' };
+
+    // 互换席位
+    const fromSeat = from.seat;
+    const fromIndex = from.seatIndex;
+    from.seat = target.seat;
+    from.seatIndex = target.seatIndex;
+    target.seat = fromSeat;
+    target.seatIndex = fromIndex;
+
+    return { ok: true, accepted: true, fromUserId: from.userId, fromBattletag: from.battletag };
+}
+
+// 成员离开时清掉与他相关的交换申请
+function dropSeatSwapRequests(room: Room, userId: number): void {
+    room.swapRequests.delete(userId);
+    for (const [targetId, request] of room.swapRequests) {
+        if (request.fromUserId === userId) room.swapRequests.delete(targetId);
+    }
+}
+
+// 房主拖拽卡片：把某个成员的卡片放到目标格子
+// - 目标格子有人 → 两人互换位置
+// - 目标格子是空位 → 直接移动过去
+export function hostDragToSeat(
+    room: Room,
+    byUserId: number,
+    sourceUserId: number,
+    targetSeat: SeatType,
+    targetSeatIndex: number
+): { ok: boolean; message?: string; swappedWithUserId?: number | null; moved?: boolean } {
+    if (room.rosterLocked) return { ok: false, message: '名单已经锁定，不可更换席位' };
+    if (room.ownerUserId !== byUserId) return { ok: false, message: '只有房主可以拖动交换位置' };
+
+    const source = room.members.get(sourceUserId);
+    if (!source) return { ok: false, message: '该玩家已离开房间' };
+
+    if (targetSeat !== 'team1' && targetSeat !== 'team2' && targetSeat !== 'spectator') {
+        return { ok: false, message: '席位类型无效' };
+    }
+    if (!Number.isInteger(targetSeatIndex) || targetSeatIndex < 0) {
+        return { ok: false, message: '席位编号无效' };
+    }
+    if (isTeamSeat(targetSeat) && targetSeatIndex >= TEAM_SIZE) {
+        return { ok: false, message: '该队伍席位不存在' };
+    }
+    if (targetSeat === 'spectator' && targetSeatIndex >= SPECTATOR_MIN_SIZE) {
+        return { ok: false, message: '该观战席不存在' };
+    }
+
+    // 放回原位：什么都不做
+    if (source.seat === targetSeat && source.seatIndex === targetSeatIndex) {
+        return { ok: true, swappedWithUserId: null, moved: false };
+    }
+
+    let occupant: RoomMember | null = null;
+    for (const member of room.members.values()) {
+        if (member.seat === targetSeat && member.seatIndex === targetSeatIndex) {
+            occupant = member;
+            break;
+        }
+    }
+
+    // 空位：直接移动
+    if (!occupant) {
+        source.seat = targetSeat;
+        source.seatIndex = targetSeatIndex;
+        return { ok: true, swappedWithUserId: null, moved: true };
+    }
+
+    // 有人：互换席位
+    const seat = source.seat;
+    const seatIndex = source.seatIndex;
+    source.seat = occupant.seat;
+    source.seatIndex = occupant.seatIndex;
+    occupant.seat = seat;
+    occupant.seatIndex = seatIndex;
+
+    return { ok: true, swappedWithUserId: occupant.userId, moved: false };
 }
 
 // 房主强制添加成员到指定队伍：按战网ID在 users 表里找人，人不在房间也能加
@@ -1261,6 +1432,11 @@ async function tick(): Promise<void> {
         const now = Date.now();
 
         for (const room of [...rooms.values()]) {
+            // 过期的交换位置申请直接丢弃
+            for (const [targetId, request] of [...room.swapRequests]) {
+                if (now - request.at > SEAT_SWAP_TTL_MS) room.swapRequests.delete(targetId);
+            }
+
             // 观战席玩家断线超过 1 分钟 → 清除；队伍栏玩家不因断线移除
             for (const member of [...room.members.values()]) {
                 if (member.connected || member.seat !== 'spectator') continue;

@@ -42,7 +42,9 @@ watch(() => props.message, (newMsg) => {
   padding: 8px 16px;
   border-radius: 8px;
   font-size: 14px;
-  z-index: 1000;
+  /* 永远压在所有浮层之上：选项卡遮罩（3000+）、毛玻璃 mask、地图选择器（3300）等
+     都带 backdrop-filter，层级低于它们时提示会被模糊掉 */
+  z-index: 100000;
   white-space: nowrap;
   pointer-events: none;
   backdrop-filter: blur(4px);

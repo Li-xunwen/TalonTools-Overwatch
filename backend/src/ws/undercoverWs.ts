@@ -12,6 +12,7 @@ import {
     forceAddMemberByTag,
     getRoomByNo,
     handleGameAction,
+    hostDragToSeat,
     joinRoom,
     leaveRoom,
     moveMemberSeat,
@@ -21,6 +22,8 @@ import {
     pushSystemMessage,
     pushVoiceMessage,
     renameTeam,
+    requestSeatSwap,
+    respondSeatSwap,
     sendTo,
     setMemberBackground,
     transferOwnerTo,
@@ -186,6 +189,64 @@ export function initUndercoverWs(server: HttpServer): void {
                     const result = moveOtherMemberSeat(room, ctx.userId, Number(msg.userId), msg.seat);
                     if (!result.ok) sendTo(ws, { type: 'error', message: result.message ?? '移动失败' });
                     else broadcastRoom(room);
+                    break;
+                }
+
+                case 'hostDragSeat': {
+                    const result = hostDragToSeat(
+                        room,
+                        ctx.userId,
+                        Number(msg.userId),
+                        msg.seat,
+                        Number(msg.index)
+                    );
+                    if (!result.ok) {
+                        sendTo(ws, { type: 'error', message: result.message ?? '拖动失败' });
+                        break;
+                    }
+                    broadcastRoom(room);
+                    break;
+                }
+
+                case 'requestSwap': {
+                    const targetUserId = Number(msg.userId);
+                    const result = requestSeatSwap(room, ctx.userId, targetUserId);
+                    if (!result.ok) {
+                        sendTo(ws, { type: 'error', message: result.message ?? '申请失败' });
+                        break;
+                    }
+                    sendTo(ws, {
+                        type: 'swapSent',
+                        toUserId: targetUserId,
+                        toDisplayName: nameWithoutIdNumber(room.members.get(targetUserId)?.battletag ?? '')
+                    });
+                    break;
+                }
+
+                case 'respondSwap': {
+                    const result = respondSeatSwap(
+                        room,
+                        ctx.userId,
+                        Number(msg.requestId),
+                        msg.accept === true
+                    );
+                    if (!result.ok) {
+                        sendTo(ws, { type: 'error', message: result.message ?? '处理失败' });
+                        break;
+                    }
+
+                    // 通知申请人结果
+                    const fromUserId = result.fromUserId;
+                    if (fromUserId !== undefined) {
+                        for (const targetWs of room.sockets.get(fromUserId) ?? []) {
+                            sendTo(targetWs, {
+                                type: 'swapResult',
+                                accepted: result.accepted === true,
+                                byDisplayName: nameWithoutIdNumber(ctx.battletag)
+                            });
+                        }
+                    }
+                    if (result.accepted) broadcastRoom(room);
                     break;
                 }
 

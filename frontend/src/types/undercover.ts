@@ -17,6 +17,15 @@ export interface RoomTeam {
   slots: (SeatMember | null)[]
 }
 
+// 位置交换申请（对方同意后互换席位）
+export interface SeatSwapRequestInfo {
+  id: number
+  fromUserId: number
+  fromBattletag: string
+  fromDisplayName: string
+  fromSeat: string
+}
+
 export interface ChatMessage {
   id: number
   system: boolean
