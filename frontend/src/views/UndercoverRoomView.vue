@@ -424,8 +424,11 @@
               class="record-btn"
               :class="{ recording: isRecording }"
               @pointerdown.prevent="startRecording"
+              @touchstart.prevent
+              @touchend.prevent
+              @dragstart.prevent
               @contextmenu.prevent
-            >{{ isRecording ? `松开结束 ${recordingSeconds.toFixed(1)}s / 15s` : '按住说话' }}</button>
+            ><span class="record-label">{{ isRecording ? `松开结束 ${recordingSeconds.toFixed(1)}s / 15s` : '按住说话' }}</span></button>
 
             <!-- 录音浮层：上滑到阈值后切换成红色 ✗ 取消提示 -->
             <div v-if="isRecording" class="record-hud" :class="{ cancel: cancelRecord }">
@@ -1649,8 +1652,41 @@ let holdActive = false
 let holdStartY = 0
 
 // 按住说话期间锁住整页的文本选择与长按菜单（手机上滑取消时容易触发系统「复制/选择」）
+// 注意：必须「按下瞬间同步」调用。申请麦克风权限 / getUserMedia 都是异步的，
+// 等拿到音频流再加锁时，浏览器早已用按下那一刻的状态弹出了长按菜单。
+function blockSelectionGesture(event: Event) {
+  event.preventDefault()
+}
+
+function clearDocumentSelection() {
+  const selection = window.getSelection()
+  if (selection && !selection.isCollapsed) selection.removeAllRanges()
+}
+
+let selectionGuardActive = false
+
 function lockPageSelection(on: boolean) {
   document.body.classList.toggle('is-recording', on)
+  if (on === selectionGuardActive) return
+  selectionGuardActive = on
+
+  if (on) {
+    // 捕获阶段拦截：长按选中、系统长按菜单、拖拽、上滑触发的页面滚动
+    document.addEventListener('selectstart', blockSelectionGesture, true)
+    document.addEventListener('contextmenu', blockSelectionGesture, true)
+    document.addEventListener('dragstart', blockSelectionGesture, true)
+    document.addEventListener('touchstart', blockSelectionGesture, { capture: true, passive: false })
+    document.addEventListener('touchmove', blockSelectionGesture, { capture: true, passive: false })
+    document.addEventListener('selectionchange', clearDocumentSelection)
+  } else {
+    document.removeEventListener('selectstart', blockSelectionGesture, true)
+    document.removeEventListener('contextmenu', blockSelectionGesture, true)
+    document.removeEventListener('dragstart', blockSelectionGesture, true)
+    document.removeEventListener('touchstart', blockSelectionGesture, true)
+    document.removeEventListener('touchmove', blockSelectionGesture, true)
+    document.removeEventListener('selectionchange', clearDocumentSelection)
+    clearDocumentSelection()
+  }
 }
 
 async function startRecording(event: PointerEvent) {
@@ -1659,10 +1695,29 @@ async function startRecording(event: PointerEvent) {
   holdActive = true
   holdStartY = event.clientY
   cancelRecord.value = false
+  // 先加锁，再申请权限（同步执行，不给浏览器的长按菜单留窗口）
+  lockPageSelection(true)
+  // 输入法还停留在输入框上时，长按可能会顺带弹出「复制 / emoji」面板，先把焦点收掉
+  const focused = document.activeElement as HTMLElement | null
+  if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA')) focused.blur()
+  // 监听也同步挂上：申请权限 / 取流是异步的，期间松手必须能被捕获，
+  // 否则「快速点一下」会被当成一直按住，录音停不下来
+  window.addEventListener('pointermove', onHoldMove)
+  window.addEventListener('pointerup', handlePointerEnd)
+  window.addEventListener('pointercancel', handlePointerEnd)
 
   // 录音前先确保拿到麦克风权限
   const granted = await requestMicPermission()
-  if (!holdActive || !granted) {
+
+  // 授权期间就松手了：什么都不做，锁在 endHold 里已经解除
+  if (!holdActive) {
+    removeHoldListeners()
+    lockPageSelection(false)
+    return
+  }
+
+  // 没拿到权限：放弃本次录音。手指还按着 → 保持锁定，等松手时统一解锁
+  if (!granted) {
     holdActive = false
     return
   }
@@ -1672,13 +1727,20 @@ async function startRecording(event: PointerEvent) {
   } catch (error) {
     console.error(error)
     showToast('无法访问麦克风，请检查浏览器权限')
+    if (!holdActive) {
+      removeHoldListeners()
+      lockPageSelection(false)
+      return
+    }
     holdActive = false
     return
   }
 
   // 申请权限 / 取流期间已经松手 → 不启动录音
   if (!holdActive) {
+    removeHoldListeners()
     releaseStream()
+    lockPageSelection(false)
     return
   }
 
@@ -1694,13 +1756,8 @@ async function startRecording(event: PointerEvent) {
   mediaRecorder.start()
 
   isRecording.value = true
-  lockPageSelection(true)
   recordStartedAt = Date.now()
   recordingSeconds.value = 0
-
-  window.addEventListener('pointermove', onHoldMove)
-  window.addEventListener('pointerup', handlePointerEnd)
-  window.addEventListener('pointercancel', handlePointerEnd)
 
   // 到 15 秒自动结束并发送
   recordTimer = window.setInterval(() => {
@@ -1732,6 +1789,8 @@ function endHold(forceSend = false) {
 
   if (!isRecording.value) {
     cancelRecord.value = false
+    // 在「申请权限 / 取流」窗口内就松手了：解除长按锁定
+    lockPageSelection(false)
     return
   }
 
@@ -1745,6 +1804,8 @@ function abortRecording() {
   removeHoldListeners()
   cancelRecord.value = false
   if (isRecording.value) stopRecording(false)
+  // 可能停在「申请权限 / 取流」窗口，兜底解锁
+  lockPageSelection(false)
 }
 
 function stopRecording(send: boolean) {
@@ -3011,6 +3072,11 @@ onUnmounted(deactivatePage)
   align-items: center;
   gap: 8px;
   margin-top: 10px;
+  /* 输入栏本身不可选中：Chrome 长按按钮时会把选区「向上找」到可选的祖先元素，
+     只让录音按钮 user-select:none 挡不住（下方 textarea 单独恢复可选中） */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .chat-input {
@@ -3028,6 +3094,10 @@ onUnmounted(deactivatePage)
   resize: none;
   max-height: 120px;
   overflow-y: auto;
+  /* 文字输入框仍然可以正常选中 / 复制 */
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .emoji-btn,

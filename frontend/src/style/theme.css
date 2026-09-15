@@ -376,4 +376,29 @@ body.is-recording * {
   user-select: none !important;
   -webkit-user-select: none !important;
   -webkit-touch-callout: none !important;
+  -webkit-user-drag: none !important;
+}
+
+/* ==========================================
+   录音按钮 / 录音浮层：任何状态下都不参与文本选择、
+   长按菜单与拖拽（手机浏览器长按按钮文字会弹出「复制」菜单）
+   ========================================== */
+.record-btn,
+.record-btn *,
+.record-hud,
+.record-hud * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-drag: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+.record-btn {
+  touch-action: none !important;
+}
+
+/* 按钮内的文字不参与命中测试：长按只会命中按钮本身，而不是文字节点 */
+.record-btn .record-label {
+  pointer-events: none;
 }
