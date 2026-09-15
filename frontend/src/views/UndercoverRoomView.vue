@@ -422,13 +422,14 @@
             <button
               v-else
               class="record-btn"
-              :class="{ recording: isRecording }"
+              :class="{ recording: isRecording, preparing: isPreparing }"
               @pointerdown.prevent="startRecording"
-              @touchstart.prevent
+              @touchstart.prevent="startRecording"
               @touchend.prevent
+              @mousedown.prevent="startRecording"
               @dragstart.prevent
               @contextmenu.prevent
-            ><span class="record-label">{{ isRecording ? `松开结束 ${recordingSeconds.toFixed(1)}s / 15s` : '按住说话' }}</span></button>
+            ><span class="record-label">{{ recordButtonLabel }}</span></button>
 
             <!-- 录音浮层：上滑到阈值后切换成红色 ✗ 取消提示 -->
             <div v-if="isRecording" class="record-hud" :class="{ cancel: cancelRecord }">
@@ -1117,15 +1118,17 @@ function switchMode(mode: InputMode) {
   inputMode.value = mode
 
   if (mode === 'text') {
+    // 回到文字模式：释放预热流，关掉系统录音指示灯
+    closeMicStream()
     nextTick(() => autoGrowInput())
     return
   }
 
-  // 语音模式：emoji 不显示，并在点击录音之前先把麦克风权限申请下来
+  // 语音模式：emoji 不显示，并提前把麦克风流预热好（按下即可录音）
   showEmojiPanel.value = false
-  void requestMicPermission().then((granted) => {
+  void ensureMicStream().then((stream) => {
     // 权限被拒时退回文字模式，避免停在无法录音的状态
-    if (!granted && inputMode.value === 'voice') inputMode.value = 'text'
+    if (!stream && inputMode.value === 'voice') inputMode.value = 'text'
   })
 }
 
@@ -1134,30 +1137,84 @@ function toggleMode() {
 }
 
 /* =========================
-   麦克风权限（进入语音模式 / 录音前先申请）
+   麦克风「预热」：进入语音模式时就拿到流并一直保留，
+   按下录音时只做 new MediaRecorder(stream).start()
+   ——避免每次按下都先等 getUserMedia（手机上通常 200~800ms，首次更久）
 ========================= */
-type MicPermission = 'unknown' | 'granted' | 'denied'
-const micPermission = ref<MicPermission>('unknown')
+// 取流兜底超时：浏览器/系统卡住时必须给用户一个结果，不能一直挂着
+const MIC_ACQUIRE_TIMEOUT_MS = 8000
 
-async function requestMicPermission(): Promise<boolean> {
-  if (micPermission.value === 'granted') return true
+let micStream: MediaStream | null = null
+let micStreamPromise: Promise<MediaStream | null> | null = null
+
+function withTimeout<T>(task: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => resolve(null), ms)
+    task.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        console.error(error)
+        resolve(null)
+      }
+    )
+  })
+}
+
+function isStreamLive(stream: MediaStream | null): stream is MediaStream {
+  return !!stream && stream.getAudioTracks().some((track) => track.readyState === 'live')
+}
+
+// 拿到（或复用）麦克风流；已预热时同步返回缓存，几乎不产生延迟
+async function ensureMicStream(): Promise<MediaStream | null> {
+  if (isStreamLive(micStream)) return micStream
+  if (micStreamPromise) return micStreamPromise
 
   if (!navigator.mediaDevices?.getUserMedia) {
     showToast('当前浏览器不支持录音')
-    return false
+    return null
   }
 
+  micStreamPromise = (async () => {
+    const pending = navigator.mediaDevices.getUserMedia({ audio: true })
+    const stream = await withTimeout(pending, MIC_ACQUIRE_TIMEOUT_MS)
+
+    if (!stream) {
+      // 超时（例如权限弹窗一直没处理）后才拿到流的话，立刻关掉，避免麦克风一直开着
+      void pending
+        .then((lateStream) => lateStream.getTracks().forEach((track) => track.stop()))
+        .catch(() => {})
+      showToast('无法访问麦克风，请检查浏览器权限')
+      return null
+    }
+
+    micStream = stream
+    return stream
+  })()
+
   try {
-    // 只申请权限：拿到流后立刻释放，真正录音时再取一次
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    stream.getTracks().forEach((track) => track.stop())
-    micPermission.value = 'granted'
-    return true
-  } catch (error) {
-    console.error(error)
-    micPermission.value = 'denied'
-    showToast('未获得麦克风权限，无法录音')
-    return false
+    return await micStreamPromise
+  } finally {
+    micStreamPromise = null
+  }
+}
+
+// 释放预热流（离开语音模式 / 离开页面 / 页面切后台时调用，关掉系统录音指示灯）
+function closeMicStream() {
+  micStream?.getTracks().forEach((track) => track.stop())
+  micStream = null
+}
+
+// 页面可见性变化：后台释放麦克风，回到前台且仍在语音模式则重新预热
+function onMicVisibilityChange() {
+  // 正在录音时不关（关了会让 MediaRecorder 报错、上传半截音频）
+  if (document.visibilityState === 'hidden') {
+    if (!isRecording.value) closeMicStream()
+  } else if (pageActive && inputMode.value === 'voice' && !isRecording.value) {
+    void ensureMicStream()
   }
 }
 
@@ -1633,13 +1690,24 @@ watch(
    语音录制（最长 15 秒，base64 发送）
 ========================= */
 const VOICE_MAX_SECONDS = 15
+// 短于这个时长的录音不发（纯点击/误触），并给一次提示
+const VOICE_MIN_SECONDS = 0.5
 const isRecording = ref(false)
+// 正在等麦克风流就绪（预热后这一步几乎瞬时完成，仅用于给按下瞬间的视觉反馈）
+const isPreparing = ref(false)
 const recordingSeconds = ref(0)
 
+// 按住时的按钮文案：预热后「正在启动…」几乎不可见，但保证按下一定有反馈
+const recordButtonLabel = computed(() => {
+  if (isPreparing.value) return '正在启动…'
+  if (isRecording.value) return `松开结束 ${recordingSeconds.value.toFixed(1)}s / 15s`
+  return '按住说话'
+})
+
 let mediaRecorder: MediaRecorder | null = null
-let mediaStream: MediaStream | null = null
 let recordedChunks: Blob[] = []
 let recordTimer: number | null = null
+let holdFailsafeTimer: number | null = null
 let recordStartedAt = 0
 let pendingVoiceDuration = 0
 let pendingVoiceSend = false
@@ -1689,64 +1757,74 @@ function lockPageSelection(on: boolean) {
   }
 }
 
-async function startRecording(event: PointerEvent) {
+type HoldEvent = PointerEvent | TouchEvent | MouseEvent
+
+// 取出手势的纵向坐标：Pointer 事件直接用 clientY，触摸事件取第一个触点
+function holdEventClientY(event: HoldEvent): number {
+  if ('touches' in event && event.touches.length > 0) return event.touches[0].clientY
+  if ('changedTouches' in event && event.changedTouches.length > 0) {
+    return event.changedTouches[0].clientY
+  }
+  return (event as MouseEvent).clientY ?? 0
+}
+
+async function startRecording(event: HoldEvent) {
   if (isRecording.value || holdActive) return
 
   holdActive = true
-  holdStartY = event.clientY
+  holdStartY = holdEventClientY(event)
   cancelRecord.value = false
+  // 按下瞬间就给反馈：按钮立刻变成「正在启动…」，不会再出现「按了没反应」
+  isPreparing.value = true
   // 先加锁，再申请权限（同步执行，不给浏览器的长按菜单留窗口）
   lockPageSelection(true)
   // 输入法还停留在输入框上时，长按可能会顺带弹出「复制 / emoji」面板，先把焦点收掉
   const focused = document.activeElement as HTMLElement | null
   if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA')) focused.blur()
+  // 指针捕获：手指/鼠标滑出窗口再松开也能收到 pointerup，
+  // 避免状态卡在「一直按住」导致之后按什么都不响应
+  try {
+    const target = event.currentTarget as HTMLElement | null
+    if (target && 'pointerId' in event) target.setPointerCapture?.(event.pointerId)
+  } catch {
+    // 某些浏览器不支持指针捕获，忽略
+  }
   // 监听也同步挂上：申请权限 / 取流是异步的，期间松手必须能被捕获，
   // 否则「快速点一下」会被当成一直按住，录音停不下来
   window.addEventListener('pointermove', onHoldMove)
   window.addEventListener('pointerup', handlePointerEnd)
   window.addEventListener('pointercancel', handlePointerEnd)
+  // 兜底：老内核（如部分内置浏览器）没有 Pointer Events，退回 touch / mouse 事件
+  window.addEventListener('touchmove', onHoldMove)
+  window.addEventListener('touchend', handlePointerEnd)
+  window.addEventListener('touchcancel', handlePointerEnd)
+  window.addEventListener('mousemove', onHoldMove)
+  window.addEventListener('mouseup', handlePointerEnd)
+  // 兜底：任何异常情况下 20 秒后强制收口（正常录音 15 秒自动结束）
+  holdFailsafeTimer = window.setTimeout(() => endHold(true), 20000)
 
-  // 录音前先确保拿到麦克风权限
-  const granted = await requestMicPermission()
+  // 语音模式进入时已经预热好麦克风，这里通常同步拿到流
+  const stream = await ensureMicStream()
+  isPreparing.value = false
 
-  // 授权期间就松手了：什么都不做，锁在 endHold 里已经解除
+  // 取流期间就松手了：什么都不做，锁在 endHold 里已经解除
   if (!holdActive) {
     removeHoldListeners()
     lockPageSelection(false)
     return
   }
 
-  // 没拿到权限：放弃本次录音。手指还按着 → 保持锁定，等松手时统一解锁
-  if (!granted) {
+  // 没拿到流（权限被拒 / 超时）：直接复位，避免卡住后续按下
+  if (!stream) {
     holdActive = false
-    return
-  }
-
-  try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-  } catch (error) {
-    console.error(error)
-    showToast('无法访问麦克风，请检查浏览器权限')
-    if (!holdActive) {
-      removeHoldListeners()
-      lockPageSelection(false)
-      return
-    }
-    holdActive = false
-    return
-  }
-
-  // 申请权限 / 取流期间已经松手 → 不启动录音
-  if (!holdActive) {
     removeHoldListeners()
-    releaseStream()
     lockPageSelection(false)
     return
   }
 
   recordedChunks = []
   pendingVoiceSend = false
-  mediaRecorder = new MediaRecorder(mediaStream)
+  mediaRecorder = new MediaRecorder(stream)
   mediaRecorder.ondataavailable = (event) => {
     if (event.data.size > 0) recordedChunks.push(event.data)
   }
@@ -1767,9 +1845,9 @@ async function startRecording(event: PointerEvent) {
 }
 
 // 按住过程中上滑超过阈值 → 松开后取消发送
-function onHoldMove(event: PointerEvent) {
+function onHoldMove(event: HoldEvent) {
   if (!isRecording.value) return
-  cancelRecord.value = holdStartY - event.clientY > CANCEL_SLIDE_PX
+  cancelRecord.value = holdStartY - holdEventClientY(event) > CANCEL_SLIDE_PX
 }
 
 function handlePointerEnd() {
@@ -1780,11 +1858,21 @@ function removeHoldListeners() {
   window.removeEventListener('pointermove', onHoldMove)
   window.removeEventListener('pointerup', handlePointerEnd)
   window.removeEventListener('pointercancel', handlePointerEnd)
+  window.removeEventListener('touchmove', onHoldMove)
+  window.removeEventListener('touchend', handlePointerEnd)
+  window.removeEventListener('touchcancel', handlePointerEnd)
+  window.removeEventListener('mousemove', onHoldMove)
+  window.removeEventListener('mouseup', handlePointerEnd)
+  if (holdFailsafeTimer !== null) {
+    clearTimeout(holdFailsafeTimer)
+    holdFailsafeTimer = null
+  }
 }
 
 // 松手 / 取消 / 超时统一收口
 function endHold(forceSend = false) {
   holdActive = false
+  isPreparing.value = false
   removeHoldListeners()
 
   if (!isRecording.value) {
@@ -1801,17 +1889,21 @@ function endHold(forceSend = false) {
 // 离开页面等场景：直接丢弃，不发送
 function abortRecording() {
   holdActive = false
+  isPreparing.value = false
   removeHoldListeners()
   cancelRecord.value = false
   if (isRecording.value) stopRecording(false)
   // 可能停在「申请权限 / 取流」窗口，兜底解锁
   lockPageSelection(false)
+  // 离开房间页面 / 切后台时释放预热流（关掉系统录音指示灯）
+  closeMicStream()
 }
 
 function stopRecording(send: boolean) {
   if (!isRecording.value) return
 
   isRecording.value = false
+  isPreparing.value = false
   lockPageSelection(false)
   pendingVoiceSend = send
   pendingVoiceDuration = Math.min((Date.now() - recordStartedAt) / 1000, VOICE_MAX_SECONDS)
@@ -1822,7 +1914,7 @@ function stopRecording(send: boolean) {
   }
 
   if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop()
-  else releaseStream()
+  else mediaRecorder = null
 }
 
 async function uploadRecording() {
@@ -1831,10 +1923,15 @@ async function uploadRecording() {
 
   recordedChunks = []
   mediaRecorder = null
-  releaseStream()
+  // 预热流不在这里释放：保持热态，下次按下仍是零延迟
 
   const blob = new Blob(chunks, { type: mime })
   if (!pendingVoiceSend || blob.size === 0) return
+  // 纯点击 / 误触：给一次明确提示，而不是「按了没反应」
+  if (pendingVoiceDuration < VOICE_MIN_SECONDS) {
+    showToast(`按住时间太短（不足 ${VOICE_MIN_SECONDS} 秒），已取消发送`)
+    return
+  }
 
   try {
     const dataUrl = await blobToDataUrl(blob)
@@ -1849,11 +1946,6 @@ async function uploadRecording() {
     console.error(error)
     showToast('语音发送失败')
   }
-}
-
-function releaseStream() {
-  mediaStream?.getTracks().forEach((track) => track.stop())
-  mediaStream = null
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -2088,10 +2180,13 @@ function activatePage() {
   pageActive = true
 
   document.addEventListener('visibilitychange', reportBackground)
+  document.addEventListener('visibilitychange', onMicVisibilityChange)
   window.addEventListener('focus', reportBackground)
   window.addEventListener('blur', reportBackground)
   // 页面滚动也会影响「聊天窗口是否完整可见」，用于未读判定
   window.addEventListener('scroll', onChatScroll, { passive: true })
+  // 回到房间页且处于语音模式时，重新预热麦克风
+  if (inputMode.value === 'voice') void ensureMicStream()
   connect()
   startOnlineHeartbeat()
 }
@@ -2104,6 +2199,7 @@ function deactivatePage() {
   stopItemTimer()
   stopOnlineHeartbeat()
   document.removeEventListener('visibilitychange', reportBackground)
+  document.removeEventListener('visibilitychange', onMicVisibilityChange)
   window.removeEventListener('focus', reportBackground)
   window.removeEventListener('blur', reportBackground)
   window.removeEventListener('scroll', onChatScroll)
@@ -3196,12 +3292,21 @@ onUnmounted(deactivatePage)
   font-weight: 700;
 }
 
+/* 按下瞬间（等麦克风流就绪）：立刻给出可见反馈 */
+.record-btn.preparing {
+  border-style: solid;
+  border-color: #ff9c6e;
+  color: #ff9c6e;
+}
+
 /* 按住说话时的浮层：提示上滑取消 / 已进入取消状态 */
 .record-hud {
   position: absolute;
   left: 50%;
   bottom: 46px;
   z-index: 6;
+  /* 绝不拦截指针：浮层所在区域绝不能挡住录音按钮 */
+  pointer-events: none;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
