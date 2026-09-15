@@ -77,7 +77,9 @@
 
           <span v-if="activeItem && !showItemPanel" class="item-tip">
             点击目标头像{{ activeItem === 'egg' ? '砸鸡蛋' : '献花' }}
-            <b class="item-count">×</b>{{ itemRemainSeconds }}
+            <template v-if="activeItemSentCount > 0">
+              <b class="item-count">×</b>{{ activeItemSentCount }}
+            </template>
           </span>
         </div>
 
@@ -1752,9 +1754,14 @@ const RING_LENGTH = 2 * Math.PI * 16   // 与模板里 r=16 对应
 
 const activeItem = ref<ItemType | ''>('')
 const itemProgress = ref(0)
-const itemRemainSeconds = ref(3)
+// 提示里的数字是「已发送数量」，与 3 秒使用窗口无关，可以一直累加
+const itemSentCounts = ref<Record<ItemType, number>>({ egg: 0, rose: 0 })
 // 道具悬浮窗是否展开（收起时按钮只显示道具图标）
 const showItemPanel = ref(false)
+
+const activeItemSentCount = computed(() =>
+  activeItem.value ? itemSentCounts.value[activeItem.value] : 0
+)
 
 // 收起状态显示道具图标；选中后变为鸡蛋 / 玫瑰花
 const itemTriggerIcon = computed(() => {
@@ -1792,7 +1799,6 @@ function selectItem(item: ItemType) {
 
   activeItem.value = item
   itemProgress.value = 0
-  itemRemainSeconds.value = 3
 
   if (itemTimer !== null) clearInterval(itemTimer)
 
@@ -1800,7 +1806,6 @@ function selectItem(item: ItemType) {
   itemTimer = window.setInterval(() => {
     const elapsed = Date.now() - startedAt
     itemProgress.value = Math.min(elapsed / ITEM_COOLDOWN_MS, 1)
-    itemRemainSeconds.value = Math.max(0, Math.ceil((ITEM_COOLDOWN_MS - elapsed) / 1000))
 
     if (elapsed >= ITEM_COOLDOWN_MS) {
       if (itemTimer !== null) clearInterval(itemTimer)
@@ -1828,6 +1833,9 @@ function useItemOn(targetUserId: number) {
   const item = activeItem.value
   send({ type: 'item', item, targetUserId })
 
+  // 已发送数量 +1（只统计次数，不受动画并行上限影响）
+  itemSentCounts.value[item] += 1
+
   // 使用后重新计时 3 秒，方便在窗口内连续使用
   selectItem(item)
 }
@@ -1841,10 +1849,18 @@ function avatarRectOf(userId: number): DOMRect | null {
   return avatar.getBoundingClientRect()
 }
 
+// 同时播放的道具动画 / 音效上限：超过就跳过这一条（数量显示照常累加），保证流畅
+const ITEM_EFFECT_LIMIT = 10
+let activeItemEffects = 0
+
 function playItemAnimation(event: ItemEvent) {
+  if (activeItemEffects >= ITEM_EFFECT_LIMIT) return
+
   const from = avatarRectOf(event.fromUserId)
   const to = avatarRectOf(event.toUserId)
   if (!from || !to) return
+
+  activeItemEffects++
 
   const size = Math.max(Math.min(from.width, 56), 26)
   const startX = from.left + from.width / 2
@@ -1883,6 +1899,10 @@ function playItemAnimation(event: ItemEvent) {
   animation.onfinish = () => {
     flying.remove()
     playItemImpact(event, endX, endY, size)
+    // 命中特效（900ms）结束后才释放一个并发额度
+    window.setTimeout(() => {
+      activeItemEffects = Math.max(0, activeItemEffects - 1)
+    }, 900)
   }
 }
 
