@@ -366,3 +366,14 @@ a:hover {
     transform: translate(-2px, 2px);
   }
 }
+
+/* ==========================================
+   录音（按住说话）期间：锁住整页文本选择与长按菜单，
+   避免上滑取消时触发手机系统的「选择 / 复制 / 保存图片」菜单
+   ========================================== */
+body.is-recording,
+body.is-recording * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+}

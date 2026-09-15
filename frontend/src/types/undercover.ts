@@ -64,6 +64,8 @@ export interface RoomGame {
   recommendations: MapRecommendation[]
   /** 卧底是否已选出（具体身份只下发给卧底本人） */
   undercoverPicked: boolean
+  /** 卧底是怎么选出来的：random = 随机、assigned = 房主指定 */
+  undercoverPickMode: '' | 'random' | 'assigned'
   /** 进入准备阶段后名单锁定 */
   rosterLocked: boolean
   /** 仅卧底本人为 true */
@@ -72,6 +74,13 @@ export interface RoomGame {
   readyCount: number
   /** 两支队伍总人数（包含离线成员） */
   teamTotal: number
+  /** 结算阶段的卧底投票：投票人 userId -> 目标 userId（0 = 弃权） */
+  undercoverVote: {
+    active: boolean
+    votes: Record<string, number>
+  }
+  /** 投票结束后公开的卧底（用于扫过动画与中屏公布） */
+  revealedUndercoverIds: number[]
 }
 
 export interface MapRecommendation {

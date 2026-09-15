@@ -139,6 +139,9 @@ export interface Room {
     mapVote: MapVote;
     mapRecommendations: Map<number, string>;   // userId -> 推荐的地图
     undercoverIds: number[];                    // 本局卧底（可能 1 个或多个）
+    undercoverPickMode: '' | 'random' | 'assigned';   // 卧底是怎么选出来的
+    undercoverVote: { active: boolean; votes: Record<number, number> };   // 结算阶段投票：投票人 -> 目标（0 = 弃权）
+    revealedUndercoverIds: number[];            // 公布结果后对所有人公开的卧底
     rosterLocked: boolean;                      // 进入准备阶段后锁定成员名单
 }
 
@@ -283,9 +286,16 @@ export function serializeRoom(room: Room) {
             })),
             // 只公开「卧底是否已选出」，具体身份在 broadcastRoom 里按人下发
             undercoverPicked: room.undercoverIds.length > 0,
+            undercoverPickMode: room.undercoverPickMode,
             rosterLocked: room.rosterLocked,
             readyCount,
-            teamTotal: teamMembers.length
+            teamTotal: teamMembers.length,
+            // 结算阶段的投票：票数与投给谁都公开（聊天栏也会提示），卧底身份仍只在下发时逐个注入
+            undercoverVote: {
+                active: room.undercoverVote.active,
+                votes: room.undercoverVote.votes
+            },
+            revealedUndercoverIds: room.revealedUndercoverIds
         }
     };
 }
@@ -352,6 +362,9 @@ export function createRoom(userId: number, battletag: string): Room {
         mapVote: { active: false, votes: {} },
         mapRecommendations: new Map(),
         undercoverIds: [],
+        undercoverPickMode: '',
+        undercoverVote: { active: false, votes: {} },
+        revealedUndercoverIds: [],
         rosterLocked: false
     };
 
@@ -374,12 +387,12 @@ function normalizeChannel(channel: unknown): ChatChannel {
     return CHAT_CHANNELS.includes(channel as ChatChannel) ? (channel as ChatChannel) : 'global';
 }
 
-function appendChat(room: Room, message: ChatMessage): void {
+function appendChat(room: Room, message: ChatMessage, broadcast = true): void {
     room.chat.push(message);
     if (room.chat.length > CHAT_HISTORY_LIMIT) {
         room.chat.splice(0, room.chat.length - CHAT_HISTORY_LIMIT);
     }
-    broadcastRoom(room);
+    if (broadcast) broadcastRoom(room);
 }
 
 // 玩家消息：battletag 用完整战网ID（含 #1234）
@@ -417,7 +430,7 @@ export function pushChatMessage(
 }
 
 // 系统消息：渲染为 [系统消息]：xxx（如「比赛开始」）
-export function pushSystemMessage(room: Room, text: unknown): ChatMessage | null {
+export function pushSystemMessage(room: Room, text: unknown, broadcast = true): ChatMessage | null {
     const content = normalizeChatText(text);
     if (!content) return null;
 
@@ -437,7 +450,7 @@ export function pushSystemMessage(room: Room, text: unknown): ChatMessage | null
         at: Date.now()
     };
 
-    appendChat(room, message);
+    appendChat(room, message, broadcast);
     return message;
 }
 
@@ -891,6 +904,17 @@ function nextGameState(state: GameState): GameState {
     return GAME_STATES[(index + 1) % GAME_STATES.length];
 }
 
+// 公布某支队伍名单（按席位顺序，包含离线成员），如「队伍1名单为：Node#51456、Wode#51456」
+function pushTeamRosterMessage(room: Room, seat: SeatType, label: string, broadcast = true): void {
+    const names = [...room.members.values()]
+        .filter((member) => member.seat === seat)
+        .sort((a, b) => a.seatIndex - b.seatIndex)
+        .map((member) => member.battletag)
+        .join('、');
+
+    pushSystemMessage(room, `${label}名单为：${names || '（暂无成员）'}`, broadcast);
+}
+
 export function handleGameAction(
     room: Room,
     userId: number,
@@ -939,6 +963,7 @@ export function handleGameAction(
             if (!picked.length) return { ok: false, message: '两支队伍都还没有成员' };
 
             room.undercoverIds = picked;
+            room.undercoverPickMode = 'random';
             pushSystemMessage(room, '卧底已选出');
             return { ok: true };
         }
@@ -953,6 +978,7 @@ export function handleGameAction(
 
             const firstPick = room.undercoverIds.length === 0;
             room.undercoverIds = [target.userId];
+            room.undercoverPickMode = 'assigned';
 
             if (firstPick) pushSystemMessage(room, '卧底已选出');
             return { ok: true };
@@ -975,7 +1001,82 @@ export function handleGameAction(
             if (room.gameState !== 'ready') return { ok: false, message: '当前不是准备阶段' };
 
             room.gameState = 'start';
-            pushSystemMessage(room, '比赛开始');
+            // 开始后清除准备标志
+            for (const item of room.members.values()) item.ready = false;
+            // 比赛开始 + 公布两队名单（一次广播下发，保持消息连续）
+            pushSystemMessage(room, '比赛开始', false);
+            pushTeamRosterMessage(room, 'team1', '队伍1', false);
+            pushTeamRosterMessage(room, 'team2', '队伍2', false);
+            broadcastRoom(room);
+            return { ok: true };
+        }
+
+        // 结算阶段投票：只能投本队成员，或弃权（targetUserId = 0）
+        case 'voteUndercover': {
+            if (room.gameState !== 'settle') return { ok: false, message: '当前不是结算阶段' };
+            if (!room.undercoverVote.active) return { ok: false, message: '投票已结束' };
+            if (member.seat !== 'team1' && member.seat !== 'team2') {
+                return { ok: false, message: '只有队伍成员可以投票' };
+            }
+            // 二次确认后即锁定：同一个人不能重复投票 / 改票
+            if (room.undercoverVote.votes[userId] !== undefined) {
+                return { ok: false, message: '你已投票，不可修改' };
+            }
+
+            const targetId = Number(payload.userId) || 0;
+            if (targetId !== 0) {
+                const target = room.members.get(targetId);
+                if (!target) return { ok: false, message: '该玩家不在房间' };
+                if (target.seat !== member.seat) return { ok: false, message: '只能给本队成员投票' };
+            }
+
+            room.undercoverVote.votes[userId] = targetId;
+
+            const selfName = nameWithoutIdNumber(member.battletag);
+            const text = targetId === 0
+                ? `${selfName} 弃权`
+                : `${selfName} 投给了 ${nameWithoutIdNumber(room.members.get(targetId)?.battletag ?? '')}`;
+
+            pushSystemMessage(room, text, false);
+            return { ok: true };
+        }
+
+        // 结束投票（房主）：结算最高票并公布卧底
+        case 'finishUndercoverVote': {
+            if (!isHost) return { ok: false, message: '只有房主可以结束投票' };
+            if (room.gameState !== 'settle') return { ok: false, message: '当前不是结算阶段' };
+            if (!room.undercoverVote.active) return { ok: false, message: '投票已结束' };
+
+            room.undercoverVote.active = false;
+
+            // 统计票数（弃权不计）
+            const tally = new Map<number, number>();
+            for (const targetId of Object.values(room.undercoverVote.votes)) {
+                if (!targetId) continue;
+                tally.set(targetId, (tally.get(targetId) ?? 0) + 1);
+            }
+
+            pushSystemMessage(room, '投票结束', false);
+
+            if (tally.size > 0) {
+                const max = Math.max(...tally.values());
+                const top = [...tally.entries()].filter(([, count]) => count === max).map(([id]) => id);
+                const picked = top[Math.floor(Math.random() * top.length)];
+                const pickedName = nameWithoutIdNumber(room.members.get(picked)?.battletag ?? '');
+                pushSystemMessage(room, `本次投票最高票：${pickedName}（${max} 票）`, false);
+            } else {
+                pushSystemMessage(room, '本次投票无人得票', false);
+            }
+
+            // 公布真正的卧底（供扫过动画与中屏展示）
+            room.revealedUndercoverIds = [...room.undercoverIds];
+            const names = room.undercoverIds
+                .map((id) => nameWithoutIdNumber(room.members.get(id)?.battletag ?? ''))
+                .filter(Boolean)
+                .join('、');
+            pushSystemMessage(room, `卧底是：${names || '（未指定）'}`, false);
+
+            broadcastRoom(room);
             return { ok: true };
         }
 
@@ -1028,6 +1129,13 @@ export function handleGameAction(
                 pushSystemMessage(room, '名单已经锁定，不可更换席位');
             }
 
+            // 进入结算阶段：开启卧底投票
+            if (room.gameState === 'settle') {
+                room.undercoverVote = { active: true, votes: {} };
+                room.revealedUndercoverIds = [];
+                pushSystemMessage(room, '开始投票卧底');
+            }
+
             if (room.gameState === 'map') {
                 // 回到选图阶段：重置本局数据
                 room.map = '';
@@ -1035,8 +1143,13 @@ export function handleGameAction(
                 room.mapVote = { active: false, votes: {} };
                 room.mapRecommendations.clear();
                 room.undercoverIds = [];
+                room.undercoverPickMode = '';
+                room.undercoverVote = { active: false, votes: {} };
+                room.revealedUndercoverIds = [];
                 room.rosterLocked = false;
                 for (const item of room.members.values()) item.ready = false;
+                // 新对局分割线
+                pushSystemMessage(room, '------------分割线----------', false);
             }
             return { ok: true };
         }

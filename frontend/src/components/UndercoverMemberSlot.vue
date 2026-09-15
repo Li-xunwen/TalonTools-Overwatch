@@ -1,6 +1,20 @@
 <template>
   <!-- 队伍席位与观战席共用的成员展示 -->
   <div class="member-slot" :class="{ empty: !member, mine, stacked }">
+    <!-- 结算投票：谁给这个成员投了票（小头像直接浮在卡片上方，无底框） -->
+    <div v-if="voters?.length" class="vote-badge">
+      <img
+        v-for="voter in visibleVoters"
+        :key="`voter-${voter.userId}`"
+        class="badge-avatar"
+        :src="voter.avatar"
+        :alt="voter.name"
+      >
+      <span v-if="voters.length > visibleVoters.length" class="badge-more">
+        +{{ voters.length - visibleVoters.length }}
+      </span>
+    </div>
+
     <!-- 空位：队伍栏显示椅子图标 + 「空位」；观战席只显示椅子图标 -->
     <template v-if="!member">
       <img v-if="stacked" class="member-avatar" :src="chairIcon" :alt="emptyLabel">
@@ -21,7 +35,6 @@
       <div class="member-meta">
         <span v-if="member.isOwner" class="member-tag">房主</span>
         <span v-if="hasMapRight" class="member-tag map-right-tag">选图</span>
-        <span v-else-if="mine" class="member-tag mine-tag">我</span>
         <span v-if="member.ready" class="member-tag ready-tag">准备</span>
         <span v-if="statusTag" class="member-status" :class="statusClass">{{ statusTag }}</span>
       </div>
@@ -39,8 +52,8 @@
         <div class="member-tags">
           <span v-if="member.isOwner" class="member-tag">房主</span>
           <span v-if="hasMapRight" class="member-tag map-right-tag">选图</span>
-          <span v-else-if="mine" class="member-tag mine-tag">我</span>
           <span v-if="member.ready" class="member-tag ready-tag">准备</span>
+          <span v-if="statusTag" class="member-status" :class="statusClass">{{ statusTag }}</span>
         </div>
       </div>
       <div class="member-name-row">
@@ -49,7 +62,6 @@
           class="member-name"
           :class="[nameClass, { compact: nameIsCompact }]"
         >{{ member.displayName }}</span>
-        <span v-if="statusTag" class="member-status" :class="statusClass">{{ statusTag }}</span>
       </div>
     </template>
   </div>
@@ -65,6 +77,8 @@ const props = withDefaults(
     mine?: boolean
     stacked?: boolean
     hasMapRight?: boolean
+    /** 结算阶段投给该成员的投票人（小头像列表，浮在卡片最上层） */
+    voters?: { userId: number; avatar: string; name: string }[]
     nameClass?: string
     emptyLabel?: string
     chairIcon?: string
@@ -73,6 +87,7 @@ const props = withDefaults(
     mine: false,
     stacked: false,
     hasMapRight: false,
+    voters: () => [],
     nameClass: '',
     emptyLabel: '空位',
     chairIcon: '/ico/椅子.svg'
@@ -96,6 +111,9 @@ const statusTag = computed(() => {
 })
 
 const statusClass = computed(() => (props.member?.connected ? 'background' : 'offline'))
+
+// 徽标最多展示 5 个小头像，多出的用 +N 表示
+const visibleVoters = computed(() => (props.voters ?? []).slice(0, 5))
 
 /* =========================
    「空位」文字：按可用宽度缩放，强制完整显示（不出现省略号）
@@ -178,6 +196,8 @@ function onAvatarError(e: Event) {
 .member-slot {
   display: flex;
   flex-direction: column;
+  /* 投票徽标以卡片为定位基准 */
+  position: relative;
   /* 内容不足一个席位高度时（空位）垂直居中 */
   justify-content: center;
   gap: 6px;
@@ -188,6 +208,8 @@ function onAvatarError(e: Event) {
 }
 
 .member-top {
+  /* 标签列改为绝对定位，标签数量变化不会撑高这一行 */
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -263,30 +285,35 @@ function onAvatarError(e: Event) {
   text-align: center;
 }
 
-/* 头像右侧的标签区：房主 / 我 / 选图，改为上下排列 */
+/* 头像右侧的标签区：房主 / 选图 / 准备 / 断线 / 后台，上下排列并浮在卡片上 */
 .member-tags {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: center;
   gap: 2px;
   min-width: 0;
-  overflow: hidden;
+  pointer-events: none;
 }
 
-.member-tag {
+/* 所有标签统一字号与内边距（「后台 / 断线」与「房主」字号一致） */
+.member-tag,
+.member-status {
   flex: 0 0 auto;
-  font-size: 0.7rem;
-  padding: 1px 6px;
+  font-size: 0.65rem;
+  line-height: 1.15;
+  padding: 1px 5px;
   border-radius: 20px;
-  color: white;
-  background: #2c3e66;
+  color: #fff;
   /* 标签文字强制同行，不换行 */
   white-space: nowrap;
 }
 
-.member-tag.mine-tag {
-  background: var(--accent);
+.member-tag {
+  background: #2c3e66;
 }
 
 /* 拥有选图权：绿色标签 */
@@ -300,6 +327,37 @@ function onAvatarError(e: Event) {
 .member-tag.ready-tag {
   background: rgba(46, 204, 113, 0.85);
   color: #06281a;
+}
+
+/* 结算投票徽标：无底框，直接浮在卡片上方（叠在卡片内） */
+.vote-badge {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 6;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.badge-avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  object-fit: cover;
+  /* 只靠投影与卡片区分，不加底框 */
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65));
+}
+
+.badge-more {
+  font-size: 9px;
+  line-height: 1;
+  color: #ff9f1c;
+  font-weight: 700;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65));
 }
 
 /* 昵称（战网ID 去 #数字）靠左 */
@@ -329,16 +387,6 @@ function onAvatarError(e: Event) {
 }
 
 /* 断线 / 后台状态标签 */
-.member-status {
-  flex: 0 0 auto;
-  padding: 0 5px;
-  border-radius: 8px;
-  font-size: 0.62rem;
-  line-height: 1.5;
-  color: #fff;
-  white-space: nowrap;
-}
-
 .member-status.offline {
   background: #ff4d4f;
 }

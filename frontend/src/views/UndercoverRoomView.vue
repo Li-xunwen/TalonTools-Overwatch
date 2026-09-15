@@ -40,7 +40,7 @@
               :member="slot"
               :mine="isMine(slot)"
               stacked
-              :has-map-right="!!game && game.mapOwnerUserId === slot?.userId"
+              :has-map-right="!!game && game.state === 'map' && game.mapOwnerUserId === slot?.userId"
               :name-class="idColorClass(slot?.seat)"
             />
           </div>
@@ -57,7 +57,9 @@
               <p v-if="game?.state === 'map' && iGotMapRight" class="map-right-hint">您获得选图权</p>
               <!-- 卧底身份：只展示给卧底本人；其他人只知道「卧底已选出」 -->
               <p v-if="game?.youAreUndercover" class="undercover-me">你为本局卧底</p>
-              <p v-else-if="game?.undercoverPicked" class="game-hint">卧底已选出</p>
+              <p v-else-if="game?.undercoverPicked" class="game-hint">
+                {{ game.undercoverPickMode === 'random' ? '已随机选择卧底' : '房主已指定卧底' }}
+              </p>
 
               <!-- 选图阶段 -->
               <template v-if="game?.state === 'map'">
@@ -104,7 +106,7 @@
                     <button
                       v-if="isOwner && game.map"
                       class="game-btn primary"
-                      @click="gameAction('next')"
+                      @click="advancePhase"
                     >下一步：{{ nextStateLabel }}</button>
 
                   </template>
@@ -162,13 +164,13 @@
                       :title="isSpectatorSeat ? '指定本局卧底' : '需要坐在观战席才能指定卧底'"
                       @click="panelMode = 'undercover'"
                     >指定卧底</button>
-                    <button class="game-btn primary" @click="gameAction('next')">
+                    <button class="game-btn primary" @click="advancePhase">
                       下一步：{{ nextStateLabel }}
                     </button>
                   </template>
                 </template>
 
-                <p v-else class="game-hint">等待房主选择卧底</p>
+                <p v-else class="game-hint">等待选择卧底</p>
               </template>
 
               <!-- 准备阶段：队伍成员「准备 / 取消准备」，房主「强制开始 / 比赛开始」 -->
@@ -192,6 +194,59 @@
                 <p class="game-hint">成员名单已锁定，不可更换席位</p>
               </template>
 
+              <!-- 结算阶段：投票卧底 -->
+              <template v-else-if="game?.state === 'settle'">
+                <template v-if="game.undercoverVote.active">
+                  <p class="game-chosen">开始投票卧底</p>
+                  <p class="game-hint">
+                    {{ mySeat === 'team1' || mySeat === 'team2' ? '只能投给本队成员，也可弃权' : '观战席不能投票' }}
+                  </p>
+
+                  <p v-if="myUndercoverVote !== null" class="game-hint">
+                    你已投票{{ myUndercoverVote === 0 ? '（弃权）' : '' }}，等待其他成员
+                  </p>
+
+                  <div v-if="mySeat === 'team1' || mySeat === 'team2'" class="vote-list">
+                    <button
+                      v-for="item in myTeamMembers"
+                      :key="`uv-${item.userId}`"
+                      class="vote-item"
+                      :class="{ chosen: myUndercoverVote === item.userId }"
+                      :disabled="myUndercoverVote !== null && myUndercoverVote !== item.userId"
+                      @click="voteUndercover(item.userId)"
+                    >
+                      <img class="member-mini-avatar" :src="item.avatar" :alt="item.displayName">
+                      <span class="member-mini-name">{{ item.displayName }}</span>
+                      <span class="vote-count">{{ undercoverVoteCount(item.userId) }} 票</span>
+                    </button>
+
+                    <button
+                      class="vote-item"
+                      :class="{ chosen: myUndercoverVote === 0 }"
+                      :disabled="myUndercoverVote !== null && myUndercoverVote !== 0"
+                      @click="voteUndercover(0)"
+                    >
+                      <span class="member-mini-name">弃权</span>
+                      <span class="vote-count">{{ abstainCount }} 票</span>
+                    </button>
+                  </div>
+
+                  <button v-if="isOwner" class="game-btn primary" @click="askFinishVote">
+                    结束投票({{ votedTotal }}/{{ game.teamTotal }})
+                  </button>
+                  <p v-else class="game-hint">等待房主结束投票</p>
+                </template>
+
+                <!-- 已公布结果：中屏展示卧底 -->
+                <template v-else>
+                  <p class="undercover-result">卧底是：{{ revealedUndercoverNames || '（未指定）' }}</p>
+                  <p class="game-hint">投票已结束</p>
+                  <button v-if="isOwner" class="game-btn primary" @click="advancePhase">
+                    下一步：{{ nextStateLabel }}
+                  </button>
+                </template>
+              </template>
+
               <!-- 其它阶段 -->
               <template v-else>
                 <p v-if="game?.map" class="game-chosen">地图：{{ game.map }}</p>
@@ -199,7 +254,7 @@
                 <button
                   v-if="isOwner"
                   class="game-btn primary"
-                  @click="gameAction('next')"
+                  @click="advancePhase"
                 >下一步：{{ nextStateLabel }}</button>
                 <p v-else class="game-hint">等待房主推进阶段</p>
               </template>
@@ -234,6 +289,8 @@
                   :key="`${team}-${index}`"
                   class="seat"
                   :data-user-id="slot?.userId"
+                  :data-team="team"
+                  :data-seat-index="index"
                   :class="{ empty: !slot, mine: isMine(slot) }"
                   @click="onSeatClick(team, index, slot, $event)"
                 >
@@ -241,7 +298,8 @@
                   <UndercoverMemberSlot
                     :member="slot"
                     :mine="isMine(slot)"
-                    :has-map-right="!!game && game.mapOwnerUserId === slot?.userId"
+                    :has-map-right="!!game && game.state === 'map' && game.mapOwnerUserId === slot?.userId"
+                    :voters="votersOf(slot?.userId)"
                     :name-class="idColorClass(slot?.seat)"
                   />
                 </div>
@@ -290,7 +348,12 @@
 
         <!-- 聊天栏：记录区最高 100px 可上下滚动，下方为输入框 + emoji + 发送 -->
         <section class="chat-area">
-          <div ref="chatLogRef" class="chat-log">
+          <!-- 未读消息球（系统消息不计入），点击回到底部 -->
+          <button v-if="unreadCount > 0" class="unread-ball" title="回到最新消息" @click="jumpToLatest">
+            {{ unreadCount > 99 ? '99+' : unreadCount }}
+          </button>
+
+          <div ref="chatLogRef" class="chat-log" @scroll="onChatScroll">
             <div v-if="!visibleChatMessages.length" class="chat-empty">暂无聊天消息</div>
             <div
               v-for="message in visibleChatMessages"
@@ -433,7 +496,18 @@
       </div>
     </div>
 
-    <!-- 选图组件：800 × 1200 -->
+    <!-- 二次确认弹窗（进入结算 / 结束投票） -->
+    <div v-if="confirmState" class="confirm-mask" @click="confirmState = null">
+      <div class="confirm-dialog" @click.stop>
+        <p class="confirm-text">{{ confirmState.message }}</p>
+        <div class="confirm-actions">
+          <button class="confirm-btn" @click="confirmState = null">取消</button>
+          <button class="confirm-btn primary" @click="runConfirm">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 选图组件：800 × 500 -->
     <UndercoverMapPicker
       v-if="showMapPicker"
       :selected="game?.map"
@@ -639,6 +713,8 @@ const nextStateLabel = computed(() => {
   const state = game.value?.state ?? 'map'
   // 选择卧底 → 准备阶段：这一步会锁定成员名单
   if (state === 'undercover') return '准备阶段（锁定成员名单）'
+  // 结算 → 新对局（回到选图）
+  if (state === 'settle') return '新对局'
 
   const index = GAME_STATE_ORDER.indexOf(state)
   return GAME_STATE_LABELS[GAME_STATE_ORDER[(index + 1) % GAME_STATE_ORDER.length]]
@@ -649,6 +725,149 @@ const isSpectatorSeat = computed(() => mySeat.value === 'spectator')
 
 // 房主手动指定的卧底（服务端不公开身份，这里只做本地高亮反馈）
 const manualUndercoverId = ref<number | null>(null)
+
+/* =========================
+   结算阶段：投票卧底
+========================= */
+// 只能投本队成员（不含自己），另有弃权
+const myTeamMembers = computed(() =>
+  (room.value?.members ?? []).filter(
+    (member) => member.seat === mySeat.value && member.userId !== myUserId.value
+  )
+)
+
+const myUndercoverVote = computed(() => {
+  const votes = game.value?.undercoverVote.votes ?? {}
+  const value = votes[String(myUserId.value)]
+  return typeof value === 'number' ? value : null
+})
+
+function undercoverVoteCount(targetUserId: number): number {
+  return Object.values(game.value?.undercoverVote.votes ?? {}).filter((id) => id === targetUserId).length
+}
+
+const abstainCount = computed(() => undercoverVoteCount(0))
+const votedTotal = computed(() => Object.keys(game.value?.undercoverVote.votes ?? {}).length)
+
+const revealedUndercoverNames = computed(() =>
+  (game.value?.revealedUndercoverIds ?? [])
+    .map((id) => room.value?.members.find((member) => member.userId === id)?.displayName ?? '')
+    .filter(Boolean)
+    .join('、')
+)
+
+// 投票需要二次确认，确认后即锁定（不可修改），此时才会发出投票并生成系统消息
+// 谁给这个成员投了票（用于卡片上浮的小头像徽标）
+function votersOf(userId?: number) {
+  if (!userId || !game.value) return []
+
+  return Object.entries(game.value.undercoverVote.votes)
+    .filter(([, target]) => target === userId)
+    .map(([voterId]) => room.value?.members.find((member) => member.userId === Number(voterId)))
+    .filter((member): member is NonNullable<typeof member> => !!member)
+    .map((member) => ({ userId: member.userId, avatar: member.avatar, name: member.displayName }))
+}
+
+function voteUndercover(targetUserId: number) {
+  if (myUndercoverVote.value !== null) {
+    showToast('你已投票，不可修改')
+    return
+  }
+
+  const label = targetUserId === 0
+    ? '弃权'
+    : room.value?.members.find((member) => member.userId === targetUserId)?.displayName ?? '该成员'
+
+  askConfirm(
+    `确定投票给「${label}」吗？投票后不可修改。`,
+    () => gameAction('voteUndercover', { userId: targetUserId })
+  )
+}
+
+// 结束投票需要二次确认
+function askFinishVote() {
+  askConfirm('确定结束投票并公布卧底吗？', () => gameAction('finishUndercoverVote'))
+}
+
+/* ---------- 二次确认弹窗 ---------- */
+const confirmState = ref<{ message: string; action: () => void } | null>(null)
+
+function askConfirm(message: string, action: () => void) {
+  confirmState.value = { message, action }
+}
+
+function runConfirm() {
+  const action = confirmState.value?.action
+  confirmState.value = null
+  action?.()
+}
+
+// 推进阶段：进入结算阶段前需要二次确认
+function advancePhase() {
+  // 还没选择卧底分配方式就推进 → 二次确认是否强制下一步
+  if (game.value?.state === 'undercover' && !game.value.undercoverPicked) {
+    askConfirm('尚未选择卧底分配方式，确定强制进入下一步吗？', () => gameAction('next'))
+    return
+  }
+
+  if (game.value?.state === 'start') {
+    askConfirm('确定进入结算阶段并开始投票卧底吗？', () => gameAction('next'))
+    return
+  }
+
+  if (game.value?.state === 'settle') {
+    askConfirm('确定开始新对局吗？（将回到选图阶段）', () => gameAction('next'))
+    return
+  }
+
+  gameAction('next')
+}
+
+/* ---------- 公布结果：两个红框在双方队伍头像中上下扫过，最后停在卧底头像上 ---------- */
+function seatElement(team: 'team1' | 'team2', index: number): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-team="${team}"][data-seat-index="${index}"]`)
+}
+
+async function playUndercoverReveal() {
+  const undercovers = game.value?.revealedUndercoverIds ?? []
+  if (!undercovers.length) return
+
+  const toggleScan = (index: number, on: boolean) => {
+    for (const team of ['team1', 'team2'] as const) {
+      seatElement(team, index)?.classList.toggle('reveal-scan', on)
+    }
+  }
+
+  // 上下扫两轮（0→5→0→5）
+  const sweep = [0, 1, 2, 3, 4, 5, 4, 3, 2, 1, 0, 1, 2, 3, 4, 5]
+  for (const index of sweep) {
+    toggleScan(index, true)
+    await new Promise((resolve) => setTimeout(resolve, 70))
+    toggleScan(index, false)
+  }
+
+  // 停在卧底头像上
+  for (const team of ['team1', 'team2'] as const) {
+    const target = (room.value?.members ?? []).find(
+      (member) => member.seat === team && undercovers.includes(member.userId)
+    )
+    if (!target) continue
+    seatElement(team, target.seatIndex)?.classList.add('reveal-hit')
+  }
+}
+
+// 公布结果时播放扫过动画；新一局开始时清掉红框
+watch(
+  () => game.value?.revealedUndercoverIds.length ?? 0,
+  (length, previous) => {
+    if (length > 0 && !previous) void playUndercoverReveal()
+    if (length === 0 && previous) {
+      document.querySelectorAll('.reveal-scan, .reveal-hit').forEach((el) => {
+        el.classList.remove('reveal-scan', 'reveal-hit')
+      })
+    }
+  }
+)
 
 // 准备阶段：自己是否已准备、是否全员准备
 const myReady = computed(() => {
@@ -870,6 +1089,8 @@ const EMOJIS = [
 const chatDraft = ref('')
 const showEmojiPanel = ref(false)
 const chatLogRef = ref<HTMLElement | null>(null)
+// 未读消息球计数（系统消息不计入）
+const unreadCount = ref(0)
 
 // 输入模式：⌨️ 文字 / 🎙️ 语音
 type InputMode = 'text' | 'voice'
@@ -961,6 +1182,8 @@ const chatChannelLabel = computed(() => {
 })
 
 function cycleChatChannel() {
+  unreadCount.value = 0
+
   // 私密频道不在循环列表里，点一下回到全局
   if (chatChannel.value === 'private') {
     chatChannel.value = 'global'
@@ -1004,6 +1227,39 @@ function scrollChatToBottom() {
     const el = chatLogRef.value
     if (el) el.scrollTop = el.scrollHeight
   })
+}
+
+/* ---------- 未读消息球（系统消息不计入） ---------- */
+// 聊天窗口是否完整可见（页面滚动到看不全时也算「没读完」）
+function isChatFullyVisible(): boolean {
+  const el = document.querySelector<HTMLElement>('.chat-area')
+  if (!el) return false
+
+  const rect = el.getBoundingClientRect()
+  return (
+    rect.top >= 0 &&
+    rect.bottom <= window.innerHeight &&
+    rect.left >= 0 &&
+    rect.right <= window.innerWidth
+  )
+}
+
+// 已读完 = 内部滚到底部 且 聊天窗口完整可见
+function isChatRead(): boolean {
+  return isChatAtBottom() && isChatFullyVisible()
+}
+
+// 点击消息球：清空未读并回到底部
+function jumpToLatest() {
+  unreadCount.value = 0
+  // 若聊天窗口不在可视区域，先把它滚进视野
+  document.querySelector<HTMLElement>('.chat-area')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  scrollChatToBottom()
+}
+
+// 聊天内部滚动 / 页面滚动后，若已读完则清空未读
+function onChatScroll() {
+  if (isChatRead()) unreadCount.value = 0
 }
 
 function sendChat() {
@@ -1050,6 +1306,7 @@ function scrollToChatInput() {
 function startPrivateMessage(member: SeatMember | null) {
   if (!member) return
 
+  unreadCount.value = 0
   privateTarget.value = member
   chatChannel.value = 'private'
   scrollToChatInput()
@@ -1391,6 +1648,11 @@ const cancelRecord = ref(false)
 let holdActive = false
 let holdStartY = 0
 
+// 按住说话期间锁住整页的文本选择与长按菜单（手机上滑取消时容易触发系统「复制/选择」）
+function lockPageSelection(on: boolean) {
+  document.body.classList.toggle('is-recording', on)
+}
+
 async function startRecording(event: PointerEvent) {
   if (isRecording.value || holdActive) return
 
@@ -1432,6 +1694,7 @@ async function startRecording(event: PointerEvent) {
   mediaRecorder.start()
 
   isRecording.value = true
+  lockPageSelection(true)
   recordStartedAt = Date.now()
   recordingSeconds.value = 0
 
@@ -1488,6 +1751,7 @@ function stopRecording(send: boolean) {
   if (!isRecording.value) return
 
   isRecording.value = false
+  lockPageSelection(false)
   pendingVoiceSend = send
   pendingVoiceDuration = Math.min((Date.now() - recordStartedAt) / 1000, VOICE_MAX_SECONDS)
 
@@ -1601,8 +1865,20 @@ async function playVoice(message: ChatMessage) {
 // 有新消息时自动滚到底部（用户正在翻看历史则不打断）；他人发来的语音自动播放
 watch(
   () => visibleChatMessages.value.length,
-  () => {
-    if (isChatAtBottom()) scrollChatToBottom()
+  (length, previous = 0) => {
+    const added = length - previous
+    // 已读完 = 内部在底部 且 聊天窗口完整可见
+    const read = isChatRead()
+
+    if (read) {
+      scrollChatToBottom()
+    } else if (added > 0) {
+      // 不在底部时累计未读，系统消息不计入
+      unreadCount.value += visibleChatMessages.value
+        .slice(previous)
+        .filter((message) => !message.system)
+        .length
+    }
 
     const latest = visibleChatMessages.value[visibleChatMessages.value.length - 1]
     if (!latest || latest.system) return
@@ -1753,6 +2029,8 @@ function activatePage() {
   document.addEventListener('visibilitychange', reportBackground)
   window.addEventListener('focus', reportBackground)
   window.addEventListener('blur', reportBackground)
+  // 页面滚动也会影响「聊天窗口是否完整可见」，用于未读判定
+  window.addEventListener('scroll', onChatScroll, { passive: true })
   connect()
   startOnlineHeartbeat()
 }
@@ -1767,6 +2045,7 @@ function deactivatePage() {
   document.removeEventListener('visibilitychange', reportBackground)
   window.removeEventListener('focus', reportBackground)
   window.removeEventListener('blur', reportBackground)
+  window.removeEventListener('scroll', onChatScroll)
   closeSocket()
 }
 
@@ -2060,6 +2339,147 @@ onUnmounted(deactivatePage)
 .game-btn.is-disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* 「卧底是：xxx」中屏公布 */
+.undercover-result {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 77, 79, 0.16);
+  color: #ff4d4f;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+  word-break: break-all;
+}
+
+/* 结算阶段投票列表：每个选项下方显示票数 */
+.vote-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.vote-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+  transition: 0.15s ease;
+}
+
+.vote-item:hover {
+  background: #2c3e66;
+  color: #fff;
+}
+
+.vote-item.chosen {
+  box-shadow: inset 0 0 0 2px #ff4d4f;
+}
+
+.vote-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.vote-count {
+  flex: 0 0 auto;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(255, 159, 28, 0.2);
+  color: #ff9f1c;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+/* 二次确认弹窗 */
+.confirm-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 3400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.confirm-dialog {
+  width: min(300px, 86vw);
+  padding: 20px 18px 16px;
+  border-radius: 18px;
+  background: var(--bg-primary);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35), inset 0 0 0 1px var(--glass-border);
+}
+
+.confirm-text {
+  margin: 0 0 16px;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-primary);
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.confirm-btn {
+  flex: 1;
+  padding: 9px 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: 0.15s ease;
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+}
+
+.confirm-btn.primary {
+  background: #2c3e66;
+  color: #fff;
+  font-weight: 700;
+}
+
+.confirm-btn:hover {
+  filter: brightness(1.1);
+}
+
+/* 公布结果：红框扫过 / 停在卧底头像上 */
+.seat.reveal-scan {
+  box-shadow: 0 0 0 3px #ff4d4f;
+}
+
+.seat.reveal-hit {
+  box-shadow: 0 0 0 3px #ff4d4f, 0 0 22px rgba(255, 77, 79, 0.75);
+  animation: reveal-hit-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes reveal-hit-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px #ff4d4f, 0 0 12px rgba(255, 77, 79, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 4px #ff4d4f, 0 0 26px rgba(255, 77, 79, 0.9);
+  }
 }
 
 /* 选图卡片最下方：其他人对本人的选图推荐 */
@@ -2494,11 +2914,40 @@ onUnmounted(deactivatePage)
 }
 
 .chat-area {
+  position: relative;
   margin-top: 16px;
   background: var(--section-bg);
   border-radius: var(--glass-radius);
   padding: 10px 12px;
   box-shadow: inset 0 0 0 1px var(--glass-border);
+}
+
+/* 未读消息球：聊天栏右上角 */
+.unread-ball {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 5;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 999px;
+  background: #ff4d4f;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: inherit;
+  line-height: 22px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  transition: 0.15s ease;
+}
+
+.unread-ball:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
 }
 
 /* 聊天记录：固定 380px 高度，超出可上下滚动 */
