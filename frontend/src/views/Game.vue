@@ -29,7 +29,11 @@
           <!-- 服务器状态展示 -->
           <div class="server-status" v-if="serverStatus">
             <div class="status-header">
-              <span class="status-dot" :class="serverStatus.online !== undefined ? (serverStatus.online ? 'online' : 'offline') : 'unknown'"></span>
+              <!-- 状态点看「接口是否查成功」而不是在线人数：服务器在线但没人玩时 online=0，不能因此显示离线 -->
+              <span
+                class="status-dot"
+                :class="serverStatus.error ? 'offline' : (serverStatus.motd !== undefined ? 'online' : 'unknown')"
+              ></span>
               <span class="status-label">服务器状态</span>
               <span class="status-refresh" @click="fetchServerStatus">🔄</span>
             </div>
