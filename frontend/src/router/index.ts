@@ -51,6 +51,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/admin/hadoop',
+    name: 'HadoopPanel',
+    component: () => import('../views/HadoopPanelView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/PrivacyPolicy',
     name: 'PrivacyPolicy',
     component: () => import('../views/PrivacyPolicy.vue'),

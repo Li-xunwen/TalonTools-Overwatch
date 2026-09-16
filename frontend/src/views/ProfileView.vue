@@ -270,6 +270,10 @@
     <div v-if="!loading && isAdmin" class="admin-log-btn" @click="goToEventLog">
       📈
     </div>
+    <!-- 黑爪会议室数据面板（Hadoop） -->
+    <div v-if="!loading && isAdmin" class="admin-hadoop-btn" @click="goToHadoopPanel">
+      🐘
+    </div>
     <!-- 遮罩 -->
     <div v-if="showHeroPicker || showRankPicker" class="picker-mask" @click="closeAllPicker"></div>
     <BottomNav />
@@ -335,6 +339,9 @@ const router = useRouter();
 const isAdmin = computed(() => profile.value.role === 'ADMIN' || profile.value.role === 'MODERATOR');
 function goToEventLog() {
   router.push('/admin/events');
+}
+function goToHadoopPanel() {
+  router.push('/admin/hadoop');
 }
 /* =========================
    用户资料
@@ -1459,6 +1466,31 @@ onMounted(() => {
   transition: 0.2s;
 }
 .admin-log-btn:hover {
+  transform: scale(1.05);
+  opacity: 0.9;
+}
+
+/* 黑爪会议室数据面板入口（叠在日志按钮上方） */
+.admin-hadoop-btn {
+  position: fixed;
+  bottom: 138px;
+  left: 20px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  transition: 0.2s;
+}
+
+.admin-hadoop-btn:hover {
   transform: scale(1.05);
   opacity: 0.9;
 }

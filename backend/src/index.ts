@@ -17,8 +17,10 @@ import adminRouter from './routes/admin';
 import bindPhone from './routes/bindPhone';
 import minecraftRouter from './routes/minecraft';
 import undercoverRouter from './routes/undercover';
+import hadoopPanelRouter from './routes/hadoopPanel';
 import pagesRouter from './routes/pages';
 import filesRouter from './routes/files';
+import { apiLog } from './middleware/apiLog';
 import { initUndercoverWs } from './ws/undercoverWs';
 
 dotenv.config();
@@ -52,6 +54,9 @@ app.set('trust proxy', true);
 app.use('/api/users', filesRouter);
 
 app.use(express.json());
+
+// 黑爪会议室日志：记录业务接口访问（供 Hadoop 面板统计接口使用率 / 常用用户）
+app.use(apiLog);
 
 app.use('/users', express.static(path.join(__dirname, '../public/users')));
 
@@ -116,6 +121,7 @@ app.use('/api/user', rankRouter);
 app.use('/api/user', heroesRouter);
 app.use('/api/v2', dashenProfileRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/hadoop', hadoopPanelRouter);
 
 // 用 http server 同时承载 Express 与「谁是守望先锋卧底」的 WebSocket 会话
 const server = http.createServer(app);
