@@ -12,6 +12,7 @@
 import { Router, Response } from 'express';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import fs from 'fs';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { pool } from '../utils/db';
 import {
@@ -306,6 +307,39 @@ function getSshConfig(): SshConfig | null {
     };
 }
 
+/**
+ * SSH 私钥可用性预检：把「路径写错 / 文件不存在 / 权限不对」提前翻译成中文提示，
+ * 而不是让 ssh 抛一堆 "Identity file not accessible" 再给个 Permission denied。
+ * 常见场景：Windows 开发机复制过来的 `.env`（C:\Users\...) 直接用在 Linux 服务器上。
+ */
+function checkSshKey(ssh: SshConfig): { ok: true } | { ok: false; error: string; hint: string } {
+    // 只有在非 Windows 主机上才把 `C:\...` 视为路径写错（开发机就是 Windows，那种写法是对的）
+    if (process.platform !== 'win32' && /^[A-Za-z]:\\/.test(ssh.key)) {
+        return {
+            ok: false,
+            error: `SSH 私钥路径是 Windows 格式：${ssh.key}`,
+            hint: '当前后端运行在 Linux 上，请把 .env 的 HADOOP_SSH_KEY 改成该服务器上的私钥绝对路径（例如 /root/.ssh/talontools_hadoop）'
+        };
+    }
+    if (!fs.existsSync(ssh.key)) {
+        return {
+            ok: false,
+            error: `SSH 私钥不存在：${ssh.key}`,
+            hint: '确认私钥文件名与路径（ls -l ~/.ssh/），或在 .env 里把 HADOOP_SSH_KEY 指向正确位置后重启后端'
+        };
+    }
+    try {
+        fs.accessSync(ssh.key, fs.constants.R_OK);
+    } catch {
+        return {
+            ok: false,
+            error: `SSH 私钥不可读：${ssh.key}`,
+            hint: '检查文件属主与权限（建议 chown 给运行后端的用户 + chmod 600）'
+        };
+    }
+    return { ok: true };
+}
+
 /** 在集群侧执行一条远程命令（需要已配置 SSH 免密） */
 async function sshExec(remoteCommand: string): Promise<{ stdout: string; stderr: string }> {
     const ssh = getSshConfig();
@@ -342,17 +376,45 @@ function parseJobResult(combined: string) {
 ========================= */
 
 const WORDCLOUD_MAPPER = `#!/usr/bin/env python3
-# 黑爪会议室词云 mapper：只统计日志里的评论/评价正文，中文切二字词，英文切单词
+# 黑爪会议室词云 mapper（与后端 talonRoomLog.tokenizeWeighted 同一套规则）
+#   1) 短句整体作为一个条目（权重 3）：重复的整句能直接变成高频词
+#   2) 中文按 2 字词切分；单个字也收录
+#   3) 英文按单词切分
 import sys, json, re
 
 STOP = set("""的 了 是 我 你 他 她 它 们 在 有 和 就 不 也 都 而 及 与 着 或 一个 这个 那个 我们 你们 他们 自己 啊 吧 呢 吗 哦 哈 嗯 这 那 上 下 很 还 会 要 给 很 the and for you are but not with this that have from was were his her has had they them its our your can will would there here what when who how why all any""".split())
 LATIN = re.compile(r"[a-z][a-z0-9_'-]+")
-CJK = re.compile(r"[\\u4e00-\\u9fa5]{2,}")
+CJK_SEG = re.compile(r"[\\u4e00-\\u9fa5]+")
+CJK_CHAR = re.compile(r"[\\u4e00-\\u9fa5]")
+
+PHRASE_WEIGHT = 3
+PHRASE_MAX_CJK = 12
+PHRASE_MAX_CHARS = 24
+PHRASE_MAX_WORDS = 4
 
 
-def emit(word):
+def emit(word, weight=1):
     if word and word not in STOP:
-        print("%s\\t1" % word)
+        print("%s\\t%d" % (word, weight))
+
+
+def normalize(text):
+    t = text.strip().lower()
+    t = re.sub(r"[^\\w\\u4e00-\\u9fa5]+", " ", t)
+    t = re.sub(r"\\s+", " ", t).strip()
+    if CJK_CHAR.search(t):
+        t = t.replace(" ", "")
+    return t
+
+
+def is_short_phrase(phrase):
+    if not phrase:
+        return False
+    cjk = len(CJK_CHAR.findall(phrase))
+    words = [w for w in phrase.split(" ") if w]
+    if cjk > 0:
+        return cjk <= PHRASE_MAX_CJK and len(phrase) <= PHRASE_MAX_CHARS
+    return 1 < len(words) <= PHRASE_MAX_WORDS
 
 
 for line in sys.stdin:
@@ -365,11 +427,24 @@ for line in sys.stdin:
         continue
     if record.get("kind") != "comment":
         continue
-    text = (record.get("text") or "").lower()
+    raw = record.get("text") or ""
+    text = raw.lower()
+
+    # 1) 短句整体作为一个条目
+    phrase = normalize(raw)
+    if len(phrase) >= 2 and is_short_phrase(phrase) and not phrase.isdigit():
+        emit(phrase, PHRASE_WEIGHT)
+
+    # 2) 英文单词
     for m in LATIN.finditer(text):
         emit(m.group(0))
-    for m in CJK.finditer(text):
+
+    # 3) 中文：2 字词；单字句收单字
+    for m in CJK_SEG.finditer(text):
         seg = m.group(0)
+        if len(seg) == 1:
+            emit(seg)
+            continue
         for i in range(len(seg) - 1):
             emit(seg[i:i + 2])
 `;
@@ -424,6 +499,12 @@ router.post('/jobs/wordcloud', async (req: AuthRequest, res: Response) => {
             error: '未配置 SSH 提交方式',
             hint: '在 backend/.env 里补 HADOOP_SSH_* 后重启后端'
         });
+        return;
+    }
+
+    const keyCheck = checkSshKey(ssh);
+    if (!keyCheck.ok) {
+        res.status(400).json({ error: keyCheck.error, hint: keyCheck.hint });
         return;
     }
 

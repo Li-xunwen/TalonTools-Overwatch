@@ -321,27 +321,82 @@ const STOP_WORDS = new Set([
     '啊', '吧', '呢', '吗', '哦', '哈', '嗯', '这', '那', '上', '下', '很', '还', '会', '要'
 ]);
 
-/** 中英混合分词：拉丁词按非字母切分，连续中文切成 2 字词（近似 bigram） */
-export function tokenize(text: string): string[] {
-    const tokens: string[] = [];
-    const lower = text.toLowerCase();
+// 短句阈值：超过这个长度就不再把整句当成词云条目（避免整段长文占据词云）
+const PHRASE_MAX_CJK = 12;
+const PHRASE_MAX_CHARS = 24;
+const PHRASE_MAX_WORDS = 4;
+/** 整句权重：重复的整句要比它的碎片更显眼 */
+export const PHRASE_WEIGHT = 3;
 
-    // 拉丁词
-    for (const match of lower.matchAll(/[a-z][a-z0-9_'-]{1,}/g)) {
-        const word = match[0];
-        if (!STOP_WORDS.has(word)) tokens.push(word);
+function countCjk(text: string): number {
+    return (text.match(/[\u4e00-\u9fa5]/g) ?? []).length;
+}
+
+/**
+ * 归一化文本：去掉标点与多余空白，中文句去掉词间空格，
+ * 让「黑爪第一」「黑爪，第一！」这类同义写法归到同一个整句上。
+ */
+export function normalizePhrase(text: string): string {
+    let t = text.trim().toLowerCase();
+    t = t.replace(/[^\w\u4e00-\u9fa5]+/g, ' ');
+    t = t.replace(/\s+/g, ' ').trim();
+    if (/[\u4e00-\u9fa5]/.test(t)) t = t.replace(/ /g, '');
+    return t;
+}
+
+/** 是否算「短句」：中文 ≤12 字、整体 ≤24 字符、英文 ≤4 个词 */
+export function isShortPhrase(phrase: string): boolean {
+    if (!phrase) return false;
+    const cjk = countCjk(phrase);
+    const words = phrase.split(' ').filter(Boolean);
+    return (cjk > 0 && cjk <= PHRASE_MAX_CJK && phrase.length <= PHRASE_MAX_CHARS) ||
+        (cjk === 0 && words.length > 1 && words.length <= PHRASE_MAX_WORDS);
+}
+
+export interface WeightedToken {
+    word: string;
+    weight: number;
+}
+
+/**
+ * 中英混合分词（与 Hadoop 词云作业的 mapper 保持同一套规则）：
+ *  1. 整句：短句整体作为一个条目，权重 3 —— 这样「天赋怪」「A神回归」这种短句能自成词云条目，
+ *     同一句被多人重复时直接累加成一个高频词；
+ *  2. 中文：连续中文串切 2 字词（bigram）；只有 1 个字的短句按整字收录；
+ *  3. 英文：按单词切分。
+ */
+export function tokenizeWeighted(text: string): WeightedToken[] {
+    const tokens: WeightedToken[] = [];
+    const lower = text.toLowerCase();
+    const phrase = normalizePhrase(text);
+
+    if (phrase.length >= 2 && isShortPhrase(phrase) && !/^\d+$/.test(phrase)) {
+        tokens.push({ word: phrase, weight: PHRASE_WEIGHT });
     }
 
-    // 中文：先取连续中文串，再切成相邻 2 字组合
-    for (const match of text.matchAll(/[\u4e00-\u9fa5]{2,}/g)) {
+    for (const match of lower.matchAll(/[a-z][a-z0-9_'-]{1,}/g)) {
+        const word = match[0];
+        if (!STOP_WORDS.has(word)) tokens.push({ word, weight: 1 });
+    }
+
+    for (const match of text.matchAll(/[\u4e00-\u9fa5]+/g)) {
         const seg = match[0];
+        if (seg.length === 1) {
+            if (!STOP_WORDS.has(seg)) tokens.push({ word: seg, weight: 1 });
+            continue;
+        }
         for (let i = 0; i + 2 <= seg.length; i++) {
             const gram = seg.slice(i, i + 2);
-            if (!STOP_WORDS.has(gram)) tokens.push(gram);
+            if (!STOP_WORDS.has(gram)) tokens.push({ word: gram, weight: 1 });
         }
     }
 
     return tokens;
+}
+
+/** 兼容旧调用：只要词序列（保留权重顺序） */
+export function tokenize(text: string): string[] {
+    return tokenizeWeighted(text).map((token) => token.word);
 }
 
 /** 解析 NDJSON 文本为记录数组（坏行忽略） */
@@ -443,8 +498,8 @@ export function analyticsOf(records: TalonLogRecord[], topN = 20): TalonAnalytic
             }
         } else if (record.kind === 'comment') {
             userItem.commentCount += 1;
-            for (const token of tokenize(record.text ?? '')) {
-                wordMap.set(token, (wordMap.get(token) ?? 0) + 1);
+            for (const token of tokenizeWeighted(record.text ?? '')) {
+                wordMap.set(token.word, (wordMap.get(token.word) ?? 0) + token.weight);
             }
         } else if (record.kind === 'like') {
             const target = record.toUser || '未知用户';

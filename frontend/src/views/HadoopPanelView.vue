@@ -144,16 +144,19 @@
           <p class="card-sub">
             语料：评论 + 用户评价｜来源：{{ wordCloudSource }}（中文按二字词切分，英文按单词）
           </p>
-          <div v-if="wordCloud.length" class="word-cloud">
+          <div v-if="wordCloud.length" ref="cloudRef" class="word-cloud" :style="{ height: `${CLOUD_HEIGHT}px` }">
             <span
-              v-for="(item, index) in wordCloud"
+              v-for="item in placedWords"
               :key="item.word"
               class="cloud-word"
-              :style="cloudStyle(item, index)"
+              :style="{ left: `${item.x}px`, top: `${item.y}px`, fontSize: `${item.size}px`, color: item.color }"
               :title="`${item.word}：${item.count} 次`"
             >{{ item.word }}</span>
           </div>
           <p v-else class="empty-tip">暂无可用于词云的文本（需要评论数据）</p>
+          <p v-if="wordCloud.length && wordCloud.length > placedWords.length" class="empty-tip">
+            共 {{ wordCloud.length }} 个词，聚拢排列放下 {{ placedWords.length }} 个（其余省略，缩放窗口会重新排列）
+          </p>
         </section>
 
         <!-- 事件分布 + 活跃时段 -->
@@ -282,7 +285,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import Toast from '@/components/Toast.vue'
@@ -432,17 +435,98 @@ function trendHeight(count: number): number {
   return Math.round((count / max) * 100)
 }
 
-function cloudStyle(item: WordCloudItem, index: number): Record<string, string> {
-  const max = Math.max(...wordCloud.value.map((w) => w.count), 1)
-  const ratio = item.count / max
-  const size = 12 + ratio * 22
-  const palette = ['#7ec8ff', '#7ee0b8', '#ffd479', '#ff9fb2', '#c8a6ff', '#8fe3ff']
-  return {
-    fontSize: `${size.toFixed(1)}px`,
-    color: palette[index % palette.length],
-    fontWeight: ratio > 0.6 ? '700' : '500',
-    opacity: `${(0.55 + ratio * 0.45).toFixed(2)}`
+/* =========================
+   词云：聚拢排列（中心向外螺旋 + 矩形碰撞检测）
+   —— 不再按行平铺，词越大越靠近中心，整体呈团状
+========================= */
+
+interface PlacedWord {
+  word: string
+  count: number
+  size: number
+  x: number
+  y: number
+  w: number
+  h: number
+  color: string
+}
+
+const CLOUD_HEIGHT = 320
+const CLOUD_PALETTE = ['#7ec8ff', '#7ee0b8', '#ffd479', '#ff9fb2', '#c8a6ff', '#8fe3ff']
+
+const cloudRef = ref<HTMLElement | null>(null)
+const placedWords = ref<PlacedWord[]>([])
+let measureCanvas: CanvasRenderingContext2D | null | undefined
+let cloudObserver: ResizeObserver | null = null
+
+function measureContext(): CanvasRenderingContext2D | null {
+  if (measureCanvas === undefined) {
+    measureCanvas = document.createElement('canvas').getContext('2d')
   }
+  return measureCanvas
+}
+
+/** 计算每个词的落点：从中心开始螺旋外扩，找到第一个不与已放置词重叠的位置 */
+function layoutWordCloud() {
+  const box = cloudRef.value
+  const words = wordCloud.value
+  if (!box || !words.length) {
+    placedWords.value = []
+    return
+  }
+
+  const width = box.clientWidth || 360
+  const height = CLOUD_HEIGHT
+  const ctx = measureContext()
+  const family = getComputedStyle(box).fontFamily || 'sans-serif'
+
+  const counts = words.map((item) => item.count)
+  const max = Math.max(...counts, 1)
+  const min = Math.min(...counts)
+  const cx = width / 2
+  const cy = height / 2
+
+  const placed: PlacedWord[] = []
+
+  for (let index = 0; index < Math.min(words.length, 80); index++) {
+    const item = words[index]
+    const ratio = max === min ? 1 : (item.count - min) / (max - min)
+    // 高频词更大，但差距收敛，避免少数词压满整个画布
+    const size = 12 + Math.pow(ratio, 0.75) * 22
+    const color = CLOUD_PALETTE[index % CLOUD_PALETTE.length]
+
+    let w: number
+    let h: number
+    if (ctx) {
+      ctx.font = `700 ${size}px ${family}`
+      w = ctx.measureText(item.word).width
+    } else {
+      w = item.word.length * size * 0.62
+    }
+    h = size * 1.1
+    w = Math.ceil(w) + 6
+    h = Math.ceil(h) + 4
+
+    let placedOk = false
+    for (let step = 0; step < 5000 && !placedOk; step++) {
+      const angle = step * 0.28
+      const radius = 3.1 * Math.sqrt(step)
+      // 纵向压缩成椭圆，更像一团而不是一个圆环
+      const x = cx + radius * Math.cos(angle) - w / 2
+      const y = cy + radius * Math.sin(angle) * 0.58 - h / 2
+
+      if (x < 0 || y < 0 || x + w > width || y + h > height) continue
+      const overlap = placed.some(
+        (p) => !(x + w <= p.x || p.x + p.w <= x || y + h <= p.y || p.y + p.h <= y)
+      )
+      if (overlap) continue
+
+      placed.push({ word: item.word, count: item.count, size, x, y, w, h, color })
+      placedOk = true
+    }
+  }
+
+  placedWords.value = placed
 }
 
 async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -565,8 +649,25 @@ function goBack() {
   router.push('/profile')
 }
 
+// 词云数据变化或容器尺寸变化时重排
+watch(wordCloud, () => {
+  void nextTick(layoutWordCloud)
+})
+
 onMounted(async () => {
   await Promise.all([loadStatus(), loadAnalytics(), loadApps(), loadMrResult()])
+  await nextTick()
+  layoutWordCloud()
+
+  if (cloudRef.value && typeof ResizeObserver !== 'undefined') {
+    cloudObserver = new ResizeObserver(() => layoutWordCloud())
+    cloudObserver.observe(cloudRef.value)
+  }
+})
+
+onUnmounted(() => {
+  cloudObserver?.disconnect()
+  cloudObserver = null
 })
 </script>
 
@@ -1074,22 +1175,27 @@ onMounted(async () => {
 
 /* 词云 */
 .word-cloud {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  min-height: 120px;
-  padding: 6px 2px;
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 50%, rgba(126, 200, 255, 0.07), transparent 68%);
 }
 
 .cloud-word {
+  position: absolute;
+  white-space: nowrap;
+  font-weight: 700;
   line-height: 1.2;
   cursor: default;
-  transition: 0.15s ease;
+  opacity: 0.92;
+  transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
 }
 
 .cloud-word:hover {
+  transform: scale(1.14);
   filter: brightness(1.25);
+  opacity: 1;
 }
 
 /* 活跃时段 */
