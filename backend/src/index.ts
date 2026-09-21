@@ -19,6 +19,11 @@ import minecraftRouter from './routes/minecraft';
 import undercoverRouter from './routes/undercover';
 import pagesRouter from './routes/pages';
 import filesRouter from './routes/files';
+import {
+    physicalPathOf,
+    resolveFileForLegacyUrl,
+    startFileLibraryTasks
+} from './services/fileLibrary';
 import { initUndercoverWs } from './ws/undercoverWs';
 
 dotenv.config();
@@ -54,6 +59,30 @@ app.use('/api/users', filesRouter);
 app.use(express.json());
 
 app.use('/users', express.static(path.join(__dirname, '../public/users')));
+// 文章里的文件链接走 /resource/users/...（开发环境由 vite 代理重写，
+// 这里也直接挂一份，保证后端单独访问 / 未经 nginx 重写时同样可用）
+app.use('/resource/users', express.static(path.join(__dirname, '../public/users')));
+
+// 文件库旧链接兼容：文件已按 md5 重命名后，历史文章里的
+// /users/{userId}/{旧文件名} 仍然能用（按显示名 / 历史名回查数据库）
+const legacyFileHandler = async (req: Request, res: Response) => {
+    try {
+        const userId = Number(req.params.userId);
+        const name = String(req.params.name);
+        if (!Number.isInteger(userId) || !name) return res.status(404).end();
+
+        const resolved = await resolveFileForLegacyUrl(userId, name);
+        if (!resolved) return res.status(404).end();
+
+        res.sendFile(physicalPathOf(userId, resolved.storage));
+    } catch (error) {
+        console.error('[文件库] 旧链接回退失败:', error);
+        res.status(500).end();
+    }
+};
+
+app.get('/users/:userId/:name', legacyFileHandler);
+app.get('/resource/users/:userId/:name', legacyFileHandler);
 
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', message: 'Your TypeScript server is running!' });
@@ -120,6 +149,9 @@ app.use('/api/admin', adminRouter);
 // 用 http server 同时承载 Express 与「谁是守望先锋卧底」的 WebSocket 会话
 const server = http.createServer(app);
 initUndercoverWs(server);
+
+// 文件库后台任务：恢复「解析中」队列 + 定时清理中断的上传
+startFileLibraryTasks();
 
 server.listen(port, () => {
     console.log('🚀 Server is running at http://localhost:' + port);

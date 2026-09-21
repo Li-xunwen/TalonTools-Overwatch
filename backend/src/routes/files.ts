@@ -1,155 +1,367 @@
-import express, { Router, Request, Response } from 'express';
+import crypto from 'crypto';
+import express, { Router, Response } from 'express';
+import multer from 'multer';
+import path from 'path';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { userEventLogger } from '../utils/db';
-import fs from 'fs';
-import path from 'path';
-import multer from 'multer';
+import {
+    PENDING_DIR,
+    UPLOAD_CHUNK_SIZE,
+    UserFileRow,
+    allocateDefaultName,
+    cancelUploadSession,
+    completeUploadSession,
+    createParsingFile,
+    createUploadSession,
+    deleteUserFile,
+    enqueueFileHash,
+    fileTypeOf,
+    getUploadSession,
+    listReceivedChunks,
+    listUserFiles,
+    normalizeExt,
+    renameUserFile,
+    saveChunk
+} from '../services/fileLibrary';
 
 const router = Router();
-const USERS_DIR = path.join(__dirname, '../../public/users');
 
-const storage = multer.diskStorage({
-  destination: (req: any, _file, cb) => {
-    const userId = req.user?.userId || '_';
-    const userDir = path.join(USERS_DIR, String(userId));
-    if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
-    cb(null, userDir);
-  },
-  filename: (_req, file, cb) => {
-    cb(null, file.originalname);
-  },
-});
-const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } });
+// 文件库条目的对外结构（url 指向 md5 命名的物理文件；解析中还没有物理文件）
+function serializeFile(userId: number, row: UserFileRow) {
+    return {
+        id: row.id,
+        name: row.name,
+        size: row.size,
+        type: fileTypeOf(row.ext),
+        ext: row.ext,
+        mime: row.mime,
+        md5: row.md5,
+        status: row.status,
+        url:
+            row.status === 'ready' && row.storage
+                ? `/resource/users/${userId}/${encodeURIComponent(row.storage)}`
+                : '',
+        mtime: row.createdAt
+    };
+}
+
+/* =========================
+   列表
+========================= */
 
 router.get('/files', authenticateToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const userDir = path.join(USERS_DIR, String(userId));
-    if (!fs.existsSync(userDir)) return res.json({ files: [] });
-
-    const items = fs.readdirSync(userDir, { withFileTypes: true });
-    const files = items.filter(i => i.isFile()).map(item => {
-      const fullPath = path.join(userDir, item.name);
-      const stat = fs.statSync(fullPath);
-      const ext = path.extname(item.name).toLowerCase();
-      let type: 'image' | 'video' | 'other' = 'other';
-      if (['.jpg','.jpeg','.png','.gif','.webp','.svg','.bmp'].includes(ext)) type = 'image';
-      else if (['.mp4','.webm','.ogv','.mov','.avi','.mkv'].includes(ext)) type = 'video';
-      return { name: item.name, size: stat.size, type, ext, url: '/resource/users/' + userId + '/' + encodeURIComponent(item.name), mtime: stat.mtimeMs };
-    }).sort((a, b) => b.mtime - a.mtime);
-
-    res.json({ files });
-  } catch (error) {
-    res.status(500).json({ error: 'server error' });
-  }
+    try {
+        const userId = req.user!.userId;
+        const files = await listUserFiles(userId);
+        res.json({ files: files.map((row) => serializeFile(userId, row)) });
+    } catch (error) {
+        console.error('[文件库] 读取列表失败:', error);
+        res.status(500).json({ error: 'server error' });
+    }
 });
 
-router.post('/files/upload', authenticateToken, (req: AuthRequest, res: Response) => {
-  upload.array('file', 9)(req, res, (err) => {
-    if (err) return res.status(400).json({ error: 'upload failed: ' + err.message });
-    if (!req.files || (req.files as Express.Multer.File[]).length === 0) return res.status(400).json({ error: 'no file' });
+/* =========================
+   分片上传（断点续传）
+========================= */
 
-    const files = (req.files as Express.Multer.File[]).map(f => {
-      const ext = path.extname(f.originalname).toLowerCase();
-      let type: 'image' | 'video' | 'other' = 'other';
-      if (['.jpg','.jpeg','.png','.gif','.webp','.svg','.bmp'].includes(ext)) type = 'image';
-      else if (['.mp4','.webm','.ogv','.mov','.avi','.mkv'].includes(ext)) type = 'video';
-      return { name: f.originalname, size: f.size, type, ext, url: '/resource/users/' + req.user!.userId + '/' + encodeURIComponent(f.originalname) };
-    });
+// 创建（或复用）上传会话，返回已收到的分片，前端只补缺失的
+router.post(
+    '/files/upload/init',
+    express.json(),
+    authenticateToken,
+    async (req: AuthRequest, res: Response) => {
+        try {
+            const userId = req.user!.userId;
+            const body = req.body as {
+                name?: string;
+                size?: number;
+                ext?: string;
+                mime?: string;
+                totalChunks?: number;
+                chunkSize?: number;
+                resumeUploadId?: string;
+            };
 
-    // 操作日志：上传文件
-    userEventLogger.logEvent({
-      userId: req.user!.userId,
-      eventType: 'file_upload',
-      eventData: { fileCount: files.length, names: files.map(f => f.name) },
-      ipAddress: req.ip,
-    });
+            const size = Math.max(0, Number(body.size) || 0);
+            // 优先用前端传来的扩展名；没有就按原始文件名推导
+            const ext = body.ext
+                ? normalizeExt(String(body.ext))
+                : normalizeExt(String(body.name ?? ''));
+            const mime = String(body.mime ?? '');
+            const chunkSize =
+                Number(body.chunkSize) > 0 ? Math.floor(Number(body.chunkSize)) : UPLOAD_CHUNK_SIZE;
+            const totalChunks = Math.max(1, Math.ceil(size / chunkSize));
 
-    res.json({ files, count: files.length });
-  });
+            // 断点续传：前端带着上次的 uploadId 回来时，直接返回已有分片
+            if (body.resumeUploadId) {
+                const existing = await getUploadSession(userId, String(body.resumeUploadId));
+                if (existing) {
+                    return res.json({
+                        uploadId: existing.id,
+                        name: existing.name,
+                        ext: existing.ext,
+                        chunkSize: existing.chunkSize,
+                        totalChunks: existing.totalChunks,
+                        received: listReceivedChunks(existing.id),
+                        resumed: true
+                    });
+                }
+            }
+
+            const name = String(body.name ?? '').trim() || (await allocateDefaultName(userId, ext));
+            const session = await createUploadSession({
+                userId,
+                name,
+                ext,
+                mime,
+                size,
+                totalChunks,
+                chunkSize
+            });
+
+            res.json({
+                uploadId: session.id,
+                name: session.name,
+                ext: session.ext,
+                chunkSize: session.chunkSize,
+                totalChunks: session.totalChunks,
+                received: [],
+                resumed: false
+            });
+        } catch (error) {
+            console.error('[文件库] 创建上传会话失败:', error);
+            res.status(500).json({ error: 'server error' });
+        }
+    }
+);
+
+// 上传单个分片：4MB 级，放内存再落盘
+const chunkUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 32 * 1024 * 1024 }
 });
 
-router.delete('/files/:filename', authenticateToken, (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const filename = String(req.params.filename);
-    if (filename.includes('..') || filename.includes('/') || filename.includes('\\'))
-      return res.status(400).json({ error: 'invalid filename' });
+router.post(
+    '/files/upload/chunk',
+    chunkUpload.single('chunk'),
+    authenticateToken,
+    async (req: AuthRequest, res: Response) => {
+        try {
+            const userId = req.user!.userId;
+            const uploadId = String(req.body?.uploadId ?? '');
+            const index = Number(req.body?.index);
+            const file = req.file;
 
-    const filePath = path.join(USERS_DIR, String(userId), filename);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'not found' });
-    fs.unlinkSync(filePath);
+            if (!uploadId || !Number.isInteger(index) || index < 0) {
+                return res.status(400).json({ error: '参数无效' });
+            }
+            if (!file || !file.buffer?.length) {
+                return res.status(400).json({ error: '分片为空' });
+            }
 
-    // 操作日志：删除文件
-    userEventLogger.logEvent({
-      userId: req.user!.userId,
-      eventType: 'file_delete',
-      eventData: { filename },
-      ipAddress: req.ip,
-    });
+            const session = await getUploadSession(userId, uploadId);
+            if (!session) return res.status(404).json({ error: '上传会话不存在或已过期' });
+            if (index >= session.totalChunks) return res.status(400).json({ error: '分片超出范围' });
 
-    res.json({ message: 'deleted' });
-  } catch (error) {
-    res.status(500).json({ error: 'server error' });
-  }
+            saveChunk(uploadId, index, file.buffer);
+            res.json({ ok: true, index, received: listReceivedChunks(uploadId).length });
+        } catch (error) {
+            console.error('[文件库] 上传分片失败:', error);
+            res.status(500).json({ error: 'server error' });
+        }
+    }
+);
+
+// 查询会话状态（断点续传时用）
+router.get(
+    '/files/upload/:uploadId',
+    authenticateToken,
+    async (req: AuthRequest, res: Response) => {
+        try {
+            const userId = req.user!.userId;
+            const session = await getUploadSession(userId, String(req.params.uploadId));
+            if (!session) return res.status(404).json({ error: '上传会话不存在或已过期' });
+
+            res.json({
+                uploadId: session.id,
+                name: session.name,
+                ext: session.ext,
+                chunkSize: session.chunkSize,
+                totalChunks: session.totalChunks,
+                received: listReceivedChunks(session.id)
+            });
+        } catch (error) {
+            console.error('[文件库] 查询上传会话失败:', error);
+            res.status(500).json({ error: 'server error' });
+        }
+    }
+);
+
+// 合并分片 → 落库（解析中）→ 后台算 md5
+router.post(
+    '/files/upload/complete',
+    express.json(),
+    authenticateToken,
+    async (req: AuthRequest, res: Response) => {
+        try {
+            const userId = req.user!.userId;
+            const uploadId = String((req.body as { uploadId?: string })?.uploadId ?? '');
+            if (!uploadId) return res.status(400).json({ error: '缺少 uploadId' });
+
+            const result = await completeUploadSession(userId, uploadId);
+            if (!result.ok || !result.file) {
+                return res.status(400).json({ error: result.message ?? '上传失败', missing: result.missing });
+            }
+
+            userEventLogger.logEvent({
+                userId,
+                eventType: 'file_upload',
+                eventData: { name: result.file.name, size: result.file.size, ext: result.file.ext },
+                ipAddress: req.ip
+            });
+
+            res.json({ file: serializeFile(userId, result.file) });
+        } catch (error) {
+            console.error('[文件库] 完成上传失败:', error);
+            res.status(500).json({ error: 'server error' });
+        }
+    }
+);
+
+// 取消上传：删分片与会话
+router.delete(
+    '/files/upload/:uploadId',
+    authenticateToken,
+    async (req: AuthRequest, res: Response) => {
+        try {
+            await cancelUploadSession(req.user!.userId, String(req.params.uploadId));
+            res.json({ ok: true });
+        } catch (error) {
+            console.error('[文件库] 取消上传失败:', error);
+            res.status(500).json({ error: 'server error' });
+        }
+    }
+);
+
+/* =========================
+   一次性上传（脚本 / 旧调用）：直接落到 _pending/staging 后走同一套解析流程
+========================= */
+
+const stagingUpload = multer({
+    storage: multer.diskStorage({
+        destination: (_req, _file, cb) => {
+            const dir = path.join(PENDING_DIR, 'staging');
+            cb(null, dir);
+        },
+        filename: (_req, _file, cb) => cb(null, `${crypto.randomUUID()}.part`)
+    }),
+    limits: { fileSize: 500 * 1024 * 1024 }
 });
 
-// 重命名文件（需显式解析 JSON body，因为 filesRouter 挂载在 app.use(express.json()) 之前）
-router.patch('/files/:filename/rename', express.json(), authenticateToken, (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const oldName = String(req.params.filename);
-    const { newName } = req.body as { newName?: string };
+router.post(
+    '/files/upload',
+    stagingUpload.array('file', 9),
+    authenticateToken,
+    async (req: AuthRequest, res: Response) => {
+        try {
+            const userId = req.user!.userId;
+            const incoming = (req.files as Express.Multer.File[]) ?? [];
+            if (incoming.length === 0) return res.status(400).json({ error: 'no file' });
 
-    // 参数校验
-    if (!newName || !newName.trim()) {
-      return res.status(400).json({ error: '新文件名不能为空' });
+            const created: UserFileRow[] = [];
+            for (const file of incoming) {
+                const ext = normalizeExt(file.originalname);
+                const name = await allocateDefaultName(userId, ext);
+                const row = await createParsingFile({
+                    userId,
+                    name,
+                    ext,
+                    mime: file.mimetype ?? '',
+                    size: file.size,
+                    stagingPath: file.path
+                });
+                enqueueFileHash(row.id);
+                created.push(row);
+            }
+
+            userEventLogger.logEvent({
+                userId,
+                eventType: 'file_upload',
+                eventData: { fileCount: created.length, names: created.map((row) => row.name) },
+                ipAddress: req.ip
+            });
+
+            res.json({
+                files: created.map((row) => serializeFile(userId, row)),
+                count: created.length
+            });
+        } catch (error) {
+            console.error('[文件库] 一次性上传失败:', error);
+            res.status(500).json({ error: 'server error' });
+        }
     }
-    if (oldName.includes('..') || oldName.includes('/') || oldName.includes('\\') ||
-        newName.includes('..') || newName.includes('/') || newName.includes('\\')) {
-      return res.status(400).json({ error: '无效的文件名' });
+);
+
+/* =========================
+   重命名 / 删除（改数据库，不动物理文件）
+========================= */
+
+router.patch(
+    '/files/:name/rename',
+    express.json(),
+    authenticateToken,
+    async (req: AuthRequest, res: Response) => {
+        try {
+            const userId = req.user!.userId;
+            const oldName = String(req.params.name);
+            const { newName } = (req.body ?? {}) as { newName?: string };
+
+            const trimmed = String(newName ?? '').trim();
+            if (!trimmed) return res.status(400).json({ error: '新文件名不能为空' });
+            if (trimmed.length > 120) return res.status(400).json({ error: '文件名过长' });
+
+            const result = await renameUserFile(userId, oldName, trimmed);
+            if (!result.ok || !result.file) {
+                return res
+                    .status(result.message === '新文件名已存在' ? 409 : 404)
+                    .json({ error: result.message ?? '重命名失败' });
+            }
+
+            userEventLogger.logEvent({
+                userId,
+                eventType: 'file_rename',
+                eventData: { oldName, newName: trimmed },
+                ipAddress: req.ip
+            });
+
+            res.json(serializeFile(userId, result.file));
+        } catch (error) {
+            console.error('[文件库] 重命名失败:', error);
+            res.status(500).json({ error: 'server error' });
+        }
     }
+);
 
-    const userDir = path.join(USERS_DIR, String(userId));
-    const oldPath = path.join(userDir, oldName);
-    const newPath = path.join(userDir, newName.trim());
+router.delete('/files/:name', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user!.userId;
+        const name = String(req.params.name);
 
-    // 检查旧文件是否存在
-    if (!fs.existsSync(oldPath)) {
-      return res.status(404).json({ error: '原文件不存在' });
+        const result = await deleteUserFile(userId, name);
+        if (!result.ok) return res.status(404).json({ error: result.message ?? 'not found' });
+
+        userEventLogger.logEvent({
+            userId,
+            eventType: 'file_delete',
+            eventData: { filename: name },
+            ipAddress: req.ip
+        });
+
+        res.json({ message: 'deleted' });
+    } catch (error) {
+        console.error('[文件库] 删除失败:', error);
+        res.status(500).json({ error: 'server error' });
     }
-    // 检查新文件名是否已存在
-    if (fs.existsSync(newPath)) {
-      return res.status(409).json({ error: '新文件名已存在' });
-    }
-
-    // 执行重命名
-    fs.renameSync(oldPath, newPath);
-
-    const stat = fs.statSync(newPath);
-    const ext = path.extname(newName).toLowerCase();
-    let type: 'image' | 'video' | 'other' = 'other';
-    if (['.jpg','.jpeg','.png','.gif','.webp','.svg','.bmp'].includes(ext)) type = 'image';
-    else if (['.mp4','.webm','.ogv','.mov','.avi','.mkv'].includes(ext)) type = 'video';
-
-    // 操作日志：重命名文件
-    userEventLogger.logEvent({
-      userId: req.user!.userId,
-      eventType: 'file_rename',
-      eventData: { oldName, newName: newName.trim() },
-      ipAddress: req.ip,
-    });
-
-    res.json({
-      name: newName.trim(),
-      size: stat.size,
-      type,
-      ext,
-      url: '/resource/users/' + userId + '/' + encodeURIComponent(newName.trim()),
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'server error' });
-  }
 });
 
 export default router;

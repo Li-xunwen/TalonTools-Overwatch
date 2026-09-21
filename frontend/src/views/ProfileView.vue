@@ -188,7 +188,7 @@
     </div>
 
     <!-- 文件库弹窗 -->
-    <FileLibrary v-if="showFileLibrary" @close="showFileLibrary = false" />
+    <FileLibrary v-if="showFileLibrary" mode="download" @close="showFileLibrary = false" />
 
     <!-- Hero Picker -->
     <div v-if="showHeroPicker" class="hero-picker">

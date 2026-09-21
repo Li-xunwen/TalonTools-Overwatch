@@ -12,7 +12,11 @@
           </template>
           <!-- 单选模式 -->
           <template v-else>
-            <button class="fl-btn fl-btn-insert" @click="insertSelected" :disabled="!selectedFile">使用</button>
+            <button
+              class="fl-btn fl-btn-insert"
+              @click="runSingleAction"
+              :disabled="!selectedFile"
+            >{{ singleActionLabel }}</button>
           </template>
           <label class="fl-upload-btn">
             上传
@@ -60,14 +64,18 @@
               'multi-sel': multiSelectedKeys.has(f.name)
             }]"
             @click="multiSelect ? toggleMultiSelect(f) : selectFile(f)"
-            @dblclick="multiSelect ? null : insertFile(f)"
+            @dblclick="multiSelect ? null : runFileAction(f)"
           >
             <!-- 多选编号角标 -->
             <div v-if="multiSelect && multiSelectedKeys.has(f.name)" class="fl-order-badge">
               {{ multiSelectedOrder.get(f.name) }}
             </div>
             <div v-if="f.type === 'image'" class="fl-thumb">
-              <img :src="f.url" :alt="f.name" loading="lazy" />
+              <img v-if="f.status !== 'parsing'" :src="f.url" :alt="f.name" loading="lazy" />
+              <div v-else class="fl-parsing"><span class="fl-spinner"></span>解析中</div>
+            </div>
+            <div v-else-if="f.status === 'parsing'" class="fl-thumb fl-parsing-thumb">
+              <div class="fl-parsing"><span class="fl-spinner"></span>解析中</div>
             </div>
             <div v-else-if="f.type === 'video'" class="fl-thumb fl-video-thumb">
               <video :src="f.url" preload="metadata" muted></video>
@@ -85,9 +93,18 @@
               <template v-else>
                 <div class="fl-name-row">
                   <span class="fl-name" :title="fixEncoding(f.name)">{{ fixEncoding(f.name) }}</span>
-                  <button class="fl-rename-btn" @click.stop="startRename(f)" title="重命名">✏️</button>
+                  <button
+                    v-if="f.status !== 'parsing'"
+                    class="fl-rename-btn"
+                    @click.stop="startRename(f)"
+                    title="重命名"
+                  >✏️</button>
                 </div>
-                <span class="fl-meta">{{ f.ext.toUpperCase() }} {{ formatSize(f.size) }}</span>
+                <span class="fl-meta">
+                  <template v-if="f.status === 'parsing'">解析中…</template>
+                  <template v-else-if="f.status === 'failed'">解析失败</template>
+                  <template v-else>{{ f.ext.replace('.', '').toUpperCase() }} {{ formatSize(f.size) }}</template>
+                </span>
               </template>
             </div>
           </div>
@@ -99,12 +116,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { computed, ref, reactive, onMounted, onUnmounted } from 'vue';
 
 interface FileItem {
-  name: string; size: number; type: string;
-  ext: string; url: string;
+  id: number;
+  name: string;
+  size: number;
+  type: string;
+  ext: string;
+  mime?: string;
+  md5?: string;
+  status?: 'parsing' | 'ready' | 'failed';
+  url: string;
+  mtime?: number;
 }
+
+// 分片上传记录：同一个文件（名 + 大小 + 修改时间）断线重传时复用 uploadId
+interface UploadRecord {
+  uploadId: string;
+  size: number;
+  ext: string;
+  mime: string;
+  at: number;
+}
+
+const UPLOAD_RECORDS_KEY = 'fileLibraryUploads';
+const UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024;
 
 interface UploadProgressState {
   visible: boolean;
@@ -116,9 +153,12 @@ interface UploadProgressState {
 const props = withDefaults(defineProps<{
   multiSelect?: boolean;
   maxSelect?: number;
+  /** select = 「使用」（插入文章/图集等）；download = 「下载」（个人页文件库） */
+  mode?: 'select' | 'download';
 }>(), {
   multiSelect: false,
   maxSelect: 9,
+  mode: 'select',
 });
 
 const emit = defineEmits(['close', 'select']);
@@ -174,21 +214,71 @@ onMounted(async () => {
   try {
     const res = await api('/api/users/files');
     if (res.ok) files.value = (await res.json()).files || [];
+    // 之前有文件还在「解析中」（刷新页面时）→ 继续轮询
+    if (files.value.some((f) => f.status === 'parsing')) startParsingPoll();
   } catch {}
   loading.value = false;
 });
 
+onUnmounted(stopParsingPoll);
+
+function isParsing(f: FileItem): boolean {
+  return f.status === 'parsing';
+}
+
 function selectFile(f: FileItem) {
+  if (isParsing(f)) {
+    alert('文件正在解析中，请稍候');
+    return;
+  }
   selectedFile.value = selectedFile.value === f.name ? '' : f.name;
 }
 
 function insertFile(f: FileItem) {
+  if (isParsing(f)) {
+    alert('文件正在解析中，请稍候');
+    return;
+  }
   emit('select', f);
 }
 
-function insertSelected() {
-  const f = files.value.find(item => item.name === selectedFile.value);
-  if (f) insertFile(f);
+const singleActionLabel = computed(() => (props.mode === 'download' ? '下载' : '使用'));
+
+// 下载时补上扩展名：显示名可能是「图片1」这种没有后缀的默认名
+function downloadNameOf(f: FileItem): string {
+  const ext = String(f.ext ?? '').toLowerCase();
+  if (!ext) return f.name;
+  return f.name.toLowerCase().endsWith(ext) ? f.name : `${f.name}${ext}`;
+}
+
+function downloadFile(f: FileItem) {
+  if (isParsing(f)) {
+    alert('文件正在解析中，请稍候');
+    return;
+  }
+  if (!f.url) {
+    alert('文件暂不可下载');
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.href = f.url;
+  link.download = downloadNameOf(f);
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+// 单选模式下按钮 / 双击的行为：下载模式下载，否则交给父组件插入
+function runFileAction(f: FileItem) {
+  if (props.mode === 'download') downloadFile(f);
+  else insertFile(f);
+}
+
+function runSingleAction() {
+  const f = files.value.find((item) => item.name === selectedFile.value);
+  if (f) runFileAction(f);
 }
 
 // ===== 多选 =====
@@ -223,6 +313,7 @@ function removeFromMultiSelect(name: string) {
 }
 
 function toggleMultiSelect(f: FileItem) {
+  if (isParsing(f)) return;
   if (f.type !== 'image') {
     alert('图集仅支持图片文件');
     return;
@@ -281,7 +372,7 @@ function onGridPointerMove(e: PointerEvent) {
   if (swipeDirection !== 'horizontal') return;
 
   const file = getFileFromPoint(e.clientX, e.clientY);
-  if (file && file.name !== lastHoveredKey && file.type === 'image') {
+  if (file && file.name !== lastHoveredKey && file.type === 'image' && !isParsing(file)) {
     toggleMultiSelect(file);
     lastHoveredKey = file.name;
   }
@@ -295,6 +386,7 @@ function onGridPointerUp() {
 
 // ===== 重命名 =====
 function startRename(f: FileItem) {
+  if (isParsing(f)) return;
   renamingFile.value = f.name;
   renameValue.value = fixEncoding(f.name);
 }
@@ -326,6 +418,62 @@ function cancelRename() {
 }
 
 // ===== 上传（带进度） =====
+function readUploadRecords(): Record<string, UploadRecord> {
+  try {
+    return JSON.parse(localStorage.getItem(UPLOAD_RECORDS_KEY) || '{}') as Record<string, UploadRecord>;
+  } catch {
+    return {};
+  }
+}
+
+function writeUploadRecords(records: Record<string, UploadRecord>) {
+  try {
+    localStorage.setItem(UPLOAD_RECORDS_KEY, JSON.stringify(records));
+  } catch {
+    /* 忽略写入失败（隐私模式等） */
+  }
+}
+
+// 断点续传的匹配键：同一个文件（名 + 大小 + 修改时间）视为同一次上传
+function uploadKeyOf(file: File): string {
+  return `${file.name}::${file.size}::${file.lastModified}`;
+}
+
+function extOf(name: string): string {
+  const index = name.lastIndexOf('.');
+  return index > 0 ? name.slice(index).toLowerCase() : '';
+}
+
+async function reloadFiles() {
+  const res = await api('/api/users/files');
+  if (res.ok) files.value = (await res.json()).files || [];
+}
+
+// 有文件在「解析中」时轮询刷新，直到全部解析完成
+let parsingTimer: number | null = null;
+
+function stopParsingPoll() {
+  if (parsingTimer !== null) {
+    clearInterval(parsingTimer);
+    parsingTimer = null;
+  }
+}
+
+function startParsingPoll() {
+  if (parsingTimer !== null) return;
+  parsingTimer = window.setInterval(async () => {
+    if (!files.value.some((f) => f.status === 'parsing')) {
+      stopParsingPoll();
+      return;
+    }
+    try {
+      await reloadFiles();
+    } catch {
+      /* 忽略单次失败 */
+    }
+  }, 1500);
+}
+
 async function onUpload(e: Event) {
   const input = e.target as HTMLInputElement;
   if (!input.files || !input.files.length) return;
@@ -340,11 +488,8 @@ async function onUpload(e: Event) {
 
   for (let i = 0; i < total; i++) {
     const file = fileList[i];
-    const fd = new FormData();
-    fd.append('file', file);
-
     try {
-      await uploadSingleFile(fd, i, total);
+      await uploadOneFile(file);
       uploadProgress.completed++;
     } catch (err: any) {
       console.error('上传失败:', file.name, err);
@@ -353,21 +498,35 @@ async function onUpload(e: Event) {
   }
 
   try {
-    const res = await api('/api/users/files');
-    if (res.ok) files.value = (await res.json()).files || [];
+    await reloadFiles();
   } catch {}
 
   setTimeout(() => {
     uploadProgress.visible = false;
     uploadProgress.currentPercent = 0;
   }, 1000);
+
+  startParsingPoll();
+  // input 需要清空，否则同一个文件再选一次不会触发 change
+  input.value = '';
 }
 
-function uploadSingleFile(fd: FormData, _index: number, _total: number): Promise<void> {
+// 单个分片：用 XHR 拿上传进度
+function uploadChunk(
+  uploadId: string,
+  index: number,
+  blob: Blob,
+  onProgress: (percent: number) => void
+): Promise<void> {
   return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append('uploadId', uploadId);
+    fd.append('index', String(index));
+    fd.append('chunk', blob, `chunk-${index}`);
+
     const token = localStorage.getItem('authToken');
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/users/files/upload');
+    xhr.open('POST', '/api/users/files/upload/chunk');
 
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -375,7 +534,7 @@ function uploadSingleFile(fd: FormData, _index: number, _total: number): Promise
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
-        uploadProgress.currentPercent = Math.round((event.loaded / event.total) * 100);
+        onProgress(Math.round((event.loaded / event.total) * 100));
       }
     };
 
@@ -395,6 +554,65 @@ function uploadSingleFile(fd: FormData, _index: number, _total: number): Promise
     xhr.onerror = () => reject(new Error('网络错误'));
     xhr.send(fd);
   });
+}
+
+// 分片上传 + 断点续传 + 完成后进入「解析中」
+async function uploadOneFile(file: File) {
+  const records = readUploadRecords();
+  const key = uploadKeyOf(file);
+  const previous = records[key];
+  const ext = extOf(file.name);
+
+  const initRes = await api('/api/users/files/upload/init', {
+    method: 'POST',
+    body: JSON.stringify({
+      size: file.size,
+      ext,
+      mime: file.type,
+      chunkSize: UPLOAD_CHUNK_SIZE,
+      resumeUploadId: previous?.uploadId
+    })
+  });
+  if (!initRes.ok) throw new Error('初始化上传失败');
+
+  const session = await initRes.json();
+  const chunkSize: number = session.chunkSize || UPLOAD_CHUNK_SIZE;
+  const totalChunks: number = session.totalChunks || 1;
+  const received: number[] = session.received || [];
+
+  // 记下 uploadId：中途断线/关页面后，重传同一个文件可以接着传
+  records[key] = { uploadId: session.uploadId, size: file.size, ext, mime: file.type, at: Date.now() };
+  writeUploadRecords(records);
+
+  for (let index = 0; index < totalChunks; index++) {
+    if (received.includes(index)) {
+      uploadProgress.currentPercent = Math.round(((index + 1) / totalChunks) * 100);
+      continue;
+    }
+
+    const blob = file.slice(index * chunkSize, Math.min((index + 1) * chunkSize, file.size));
+    await uploadChunk(session.uploadId, index, blob, (percent) => {
+      uploadProgress.currentPercent = Math.round(((index + percent / 100) / totalChunks) * 100);
+    });
+  }
+
+  const completeRes = await api('/api/users/files/upload/complete', {
+    method: 'POST',
+    body: JSON.stringify({ uploadId: session.uploadId })
+  });
+  if (!completeRes.ok) {
+    const body = await completeRes.json().catch(() => ({}));
+    throw new Error(body.error || '完成上传失败');
+  }
+
+  delete records[key];
+  writeUploadRecords(records);
+
+  // 立刻把「解析中」的卡片插到最前面，后台算完 md5 再刷新
+  const created = (await completeRes.json()).file as FileItem | undefined;
+  if (created) {
+    files.value = [created, ...files.value.filter((item) => item.id !== created.id)];
+  }
 }
 
 // ===== 删除 =====
@@ -556,6 +774,21 @@ function formatSize(bytes: number): string {
   background: var(--input-border, #e0e0e0); position: relative;
 }
 .fl-thumb img, .fl-thumb video { width: 100%; height: 100%; object-fit: cover; }
+
+/* 解析中（正在计算 md5）：转圈 + 文案，占位与图片缩略图同尺寸 */
+.fl-parsing {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; width: 100%; height: 100%;
+  font-size: 11px; color: var(--text-primary, #333); opacity: .75;
+}
+.fl-spinner {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid rgba(128, 128, 128, .35);
+  border-top-color: var(--button-bg, #4a90e2);
+  animation: fl-spin .8s linear infinite;
+}
+@keyframes fl-spin { to { transform: rotate(360deg); } }
+.fl-parsing-thumb { background: var(--bg-secondary, #f0f0f0); }
 .fl-other-icon { background: var(--input-border, #eee); }
 .fl-icon-text { font-size: 24px; opacity: 0.5; }
 .fl-info { margin-top: 3px; }
