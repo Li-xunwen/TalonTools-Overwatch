@@ -301,6 +301,16 @@ export function serializeRoom(room: Room) {
                   return acc;
               }, {})
             : {},
+        // 公布答案后才下发「每个玩家的解算」（谁选了什么、对不对）
+        results: revealAnswer
+            ? Object.entries(quiz.answers).map(([id, answer]) => ({
+                  userId: Number(id),
+                  option: answer.option,
+                  correct: answer.correct
+              }))
+            : [],
+        // 该题作答时长（秒），前端展示与倒计时都用它
+        answerSeconds: quizQuestion ? quizQuestion.answerSeconds : 10,
         scores: quiz.scores,
         readyUserIds: quiz.readyUserIds,
         readyCount: quiz.readyUserIds.length,
@@ -619,10 +629,15 @@ export function joinRoom(room: Room, userId: number, battletag: string): RoomMem
 
     if (room.members.size >= roomMaxPlayers(room)) return null;
 
-    // 观战席 → 队伍1 → 队伍2，都满了说明房间已满
+    // 刷题战：房主进房即入队伍席（监督台在队伍里）；其它情况按 观战席 → 队伍1 → 队伍2
     let seat: SeatType | null = null;
     let seatIndex = -1;
-    for (const candidate of ['spectator', 'team1', 'team2'] as SeatType[]) {
+    const seatPriority: SeatType[] =
+        room.mode === 'quiz' && userId === room.ownerUserId
+            ? ['team1', 'team2', 'spectator']
+            : ['spectator', 'team1', 'team2'];
+
+    for (const candidate of seatPriority) {
         const index = firstFreeSeatIndex(room, candidate);
         if (index >= 0) {
             seat = candidate;
@@ -1505,6 +1520,9 @@ function destroyRoom(room: Room, message: string): void {
 export const QUIZ_QUESTION_COUNT = 10;
 export const QUIZ_QUESTION_MS = 10 * 1000;
 export const QUIZ_VOTE_MS = 30 * 1000;
+// 本轮题量范围（房主可设置，默认 10）
+export const QUIZ_MIN_QUESTIONS = 1;
+export const QUIZ_MAX_QUESTIONS = 30;
 
 export interface QuizOption {
     key: string;
@@ -1527,13 +1545,19 @@ export interface QuizQuestionSnapshot {
     resources: QuizResources;
     tags: string[];
     difficulty: number;
+    answerSeconds: number;   // 该题作答时长（秒），缺省 10
 }
 
 export type QuizPhase = 'config' | 'ready' | 'question' | 'vote' | 'finished';
 
 export interface RoomQuizState {
     phase: QuizPhase;
-    config: { tags: string[]; minDifficulty: number; maxDifficulty: number };
+    config: {
+        tags: string[];
+        minDifficulty: number;
+        maxDifficulty: number;
+        questionCount: number;   // 本轮题量，默认 10
+    };
     questions: QuizQuestionSnapshot[];
     index: number;
     questionEndsAt: number;   // 当前题目截止时间（毫秒时间戳）
@@ -1548,7 +1572,7 @@ export interface RoomQuizState {
 function emptyQuizState(): RoomQuizState {
     return {
         phase: 'config',
-        config: { tags: [], minDifficulty: 0, maxDifficulty: 255 },
+        config: { tags: [], minDifficulty: 0, maxDifficulty: 255, questionCount: QUIZ_QUESTION_COUNT },
         questions: [],
         index: 0,
         questionEndsAt: 0,
@@ -1581,7 +1605,7 @@ function clampByte(value: unknown, fallback: number): number {
 export function configureQuiz(
     room: Room,
     userId: number,
-    payload: { tags?: unknown; minDifficulty?: unknown; maxDifficulty?: unknown }
+    payload: { tags?: unknown; minDifficulty?: unknown; maxDifficulty?: unknown; questionCount?: unknown }
 ): { ok: boolean; message?: string } {
     if (room.mode !== 'quiz') return { ok: false, message: '当前房间不是刷题战' };
     if (room.ownerUserId !== userId) return { ok: false, message: '只有房主可以设置题目范围' };
@@ -1597,7 +1621,12 @@ export function configureQuiz(
     let maxDifficulty = clampByte(payload.maxDifficulty, 255);
     if (minDifficulty > maxDifficulty) [minDifficulty, maxDifficulty] = [maxDifficulty, minDifficulty];
 
-    room.quiz.config = { tags, minDifficulty, maxDifficulty };
+    const askedCount = Math.round(Number(payload.questionCount));
+    const questionCount = Number.isFinite(askedCount) && askedCount > 0
+        ? Math.max(QUIZ_MIN_QUESTIONS, Math.min(QUIZ_MAX_QUESTIONS, askedCount))
+        : room.quiz.config.questionCount || QUIZ_QUESTION_COUNT;
+
+    room.quiz.config = { tags, minDifficulty, maxDifficulty, questionCount };
     room.quiz.phase = 'config';
     return { ok: true };
 }
@@ -1639,6 +1668,10 @@ async function drawQuizQuestions(room: Room): Promise<QuizQuestionSnapshot[]> {
     const params: any[] = [];
 
     const { tags, minDifficulty, maxDifficulty } = room.quiz.config;
+    const questionCount = Math.max(
+        QUIZ_MIN_QUESTIONS,
+        Math.min(QUIZ_MAX_QUESTIONS, room.quiz.config.questionCount || QUIZ_QUESTION_COUNT)
+    );
     if (tags.length) {
         // 任一标签命中即可（JSON 数组包含）
         where.push(`(${tags.map(() => 'JSON_CONTAINS(tags, JSON_QUOTE(?))').join(' OR ')})`);
@@ -1649,11 +1682,11 @@ async function drawQuizQuestions(room: Room): Promise<QuizQuestionSnapshot[]> {
 
     try {
         const [rows] = await pool.query<any[]>(
-            `SELECT id, title, subtitle, options, answer, explanation, resources, tags, difficulty
+            `SELECT id, title, subtitle, options, answer, explanation, resources, tags, difficulty, answer_seconds
                FROM quiz_questions
               WHERE ${where.join(' AND ')}
               ORDER BY RAND()
-              LIMIT ${QUIZ_QUESTION_COUNT}`,
+              LIMIT ${questionCount}`,
             params
         );
 
@@ -1666,12 +1699,27 @@ async function drawQuizQuestions(room: Room): Promise<QuizQuestionSnapshot[]> {
             explanation: String(row.explanation ?? ''),
             resources: parseQuizJson<QuizResources>(row.resources, { images: [], videos: [], audios: [] }),
             tags: parseQuizJson<string[]>(row.tags, []),
-            difficulty: Number(row.difficulty ?? 0)
+            difficulty: Number(row.difficulty ?? 0),
+            // 没有该字段（历史数据）或非法值时按 10s
+            answerSeconds: normalizeAnswerSeconds(row.answer_seconds)
         }));
     } catch (error) {
         console.error('[刷题战] 抽题失败:', error);
         return [];
     }
+}
+
+// 答题时长：默认 10s，允许 5~60s
+function normalizeAnswerSeconds(value: unknown): number {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) return QUIZ_QUESTION_MS / 1000;
+    return Math.max(5, Math.min(60, Math.round(num)));
+}
+
+// 当前题目的作答时长（毫秒）
+function currentQuestionMs(room: Room): number {
+    const question = room.quiz.questions[room.quiz.index];
+    return normalizeAnswerSeconds(question?.answerSeconds) * 1000;
 }
 
 // 开始游戏（房主）：抽题 → 进入第一题
@@ -1690,7 +1738,7 @@ export async function startQuiz(room: Room, userId: number): Promise<{ ok: boole
     room.quiz.readyUserIds = [];
     room.quiz.startedAt = Date.now();
     room.quiz.phase = 'question';
-    room.quiz.questionEndsAt = Date.now() + QUIZ_QUESTION_MS;
+    room.quiz.questionEndsAt = Date.now() + currentQuestionMs(room);
     room.quiz.voteEndsAt = 0;
     room.rosterLocked = true;
 
@@ -1705,7 +1753,10 @@ export function answerQuiz(
 ): { ok: boolean; message?: string } {
     if (room.mode !== 'quiz') return { ok: false, message: '当前房间不是刷题战' };
     if (room.quiz.phase !== 'question') return { ok: false, message: '当前不在作答阶段' };
-    if (!room.members.has(userId)) return { ok: false, message: '你不在房间里' };
+    const member = room.members.get(userId);
+    if (!member) return { ok: false, message: '你不在房间里' };
+    // 观众席只看结算，不参与作答
+    if (member.seat === 'spectator') return { ok: false, message: '观众席不参与作答，只能查看结算' };
 
     const question = room.quiz.questions[room.quiz.index];
     if (!question) return { ok: false, message: '题目不存在' };
@@ -1730,7 +1781,10 @@ export function answerQuiz(
 export function voteNextQuiz(room: Room, userId: number): { ok: boolean; message?: string } {
     if (room.mode !== 'quiz') return { ok: false, message: '当前房间不是刷题战' };
     if (room.quiz.phase !== 'vote') return { ok: false, message: '当前不在投票阶段' };
-    if (!room.members.has(userId)) return { ok: false, message: '你不在房间里' };
+    const voter = room.members.get(userId);
+    if (!voter) return { ok: false, message: '你不在房间里' };
+    // 观众席不参与投票
+    if (voter.seat === 'spectator') return { ok: false, message: '观众席不参与投票' };
 
     room.quiz.votes[userId] = 'next';
 
@@ -1757,7 +1811,7 @@ export function advanceQuizQuestion(room: Room, now = Date.now()): void {
     }
 
     room.quiz.phase = 'question';
-    room.quiz.questionEndsAt = now + QUIZ_QUESTION_MS;
+    room.quiz.questionEndsAt = now + currentQuestionMs(room);
 }
 
 // 倒计时推进：作答 10s 结束 → 投票 30s；投票超时 → 下一题

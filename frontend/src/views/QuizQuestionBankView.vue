@@ -56,8 +56,11 @@
             <span v-if="item.subtitle" class="qb-item-sub">{{ item.subtitle }}</span>
             <span class="qb-item-meta">
               难度 {{ toDisplayDifficulty(item.difficulty) }}/10 · 正确率 {{ (item.accuracy * 100).toFixed(1) }}% ·
-              争议 {{ item.disputeCount }} · v{{ item.version }}
+              争议 {{ item.disputeCount }} · {{ item.answerSeconds || 10 }}s · v{{ item.version }}
               <template v-if="item.status === 'draft'"> · 草稿</template>
+            </span>
+            <span class="qb-item-editor">
+              最后修改：{{ item.updatedByName || '未知' }} · {{ formatTime(item.updatedAt) }}
             </span>
             <span v-if="item.tags.length" class="qb-item-tags">
               <span v-for="tag in item.tags" :key="tag" class="qb-mini-tag">{{ tag }}</span>
@@ -221,6 +224,18 @@
             <input v-model.number="form.difficulty" class="qb-range" type="range" min="0" max="10" step="1">
           </label>
 
+          <label class="qb-field">
+            <span class="qb-label">答题时长（秒，5~60，默认 10）</span>
+            <input
+              v-model.number="form.answerSeconds"
+              class="qb-input small"
+              type="number"
+              min="5"
+              max="60"
+              step="1"
+            >
+          </label>
+
           <label class="qb-field row">
             <span class="qb-label">状态</span>
             <select v-model="form.status" class="qb-input small">
@@ -346,12 +361,14 @@ interface QuizQuestion {
   resources: QuizResources
   tags: string[]
   difficulty: number
+  answerSeconds: number
   disputeCount: number
   answerCount: number
   correctCount: number
   accuracy: number
   status: 'published' | 'draft'
   version: number
+  updatedByName?: string
   updatedAt: number
 }
 
@@ -433,6 +450,8 @@ function emptyForm() {
     tags: [] as string[],
     // 难度在界面上统一按 0~10 显示与修改，提交时再换算成 0~255
     difficulty: 5,
+    // 该题答题时长（秒），默认 10
+    answerSeconds: 10,
     status: 'published' as 'published' | 'draft'
   }
 }
@@ -596,6 +615,8 @@ function fillForm(question: QuizQuestion) {
   }
   form.tags = [...question.tags]
   form.difficulty = toDisplayDifficulty(question.difficulty)
+  // 没有该字段（历史数据）时按 10s
+  form.answerSeconds = question.answerSeconds && question.answerSeconds > 0 ? question.answerSeconds : 10
   form.status = question.status
 }
 
@@ -753,6 +774,7 @@ async function submitQuestion() {
       resources: form.resources,
       tags: form.tags,
       difficulty: toRawDifficulty(form.difficulty),
+      answerSeconds: Math.max(5, Math.min(60, Number(form.answerSeconds) || 10)),
       status: form.status
     }
 
@@ -772,6 +794,8 @@ async function submitQuestion() {
     }
 
     await Promise.all([loadQuestions(), loadTags(), loadRevisions()])
+    // 提交成功后自动关闭弹窗
+    closeEditor()
   } catch (error: any) {
     console.error(error)
     showToast(error?.message ?? '提交失败')
@@ -1054,6 +1078,11 @@ async function resetDispute() {
   opacity: 0.72;
 }
 
+.qb-item-editor {
+  font-size: 0.72rem;
+  opacity: 0.62;
+}
+
 .qb-item-tags {
   display: flex;
   flex-wrap: wrap;
@@ -1095,7 +1124,9 @@ async function resetDispute() {
 
 .qb-editor-dialog {
   width: min(820px, 94vw);
-  max-height: 88vh;
+  /* 弹窗上下各留 30px 空隙 */
+  margin: 30px 0;
+  max-height: calc(100vh - 60px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;

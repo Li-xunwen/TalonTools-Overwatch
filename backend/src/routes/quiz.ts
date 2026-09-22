@@ -23,6 +23,10 @@ const MAX_TITLE = 255;
 const MAX_OPTIONS = 8;
 const MAX_TAGS = 12;
 const MAX_RESOURCE = 20;
+// 答题时长：默认 10s，允许 5~60s
+const DEFAULT_ANSWER_SECONDS = 10;
+const MIN_ANSWER_SECONDS = 5;
+const MAX_ANSWER_SECONDS = 60;
 
 function parseJsonColumn<T>(value: unknown, fallback: T): T {
     if (value === null || value === undefined) return fallback;
@@ -73,6 +77,12 @@ function clampDifficulty(value: unknown): number {
     return Math.max(0, Math.min(255, Math.round(num)));
 }
 
+function normalizeAnswerSeconds(value: unknown): number {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) return DEFAULT_ANSWER_SECONDS;
+    return Math.max(MIN_ANSWER_SECONDS, Math.min(MAX_ANSWER_SECONDS, Math.round(num)));
+}
+
 interface QuestionPayload {
     title: string;
     subtitle: string;
@@ -82,6 +92,7 @@ interface QuestionPayload {
     resources: QuizResources;
     tags: string[];
     difficulty: number;
+    answerSeconds: number;
     status: 'published' | 'draft';
 }
 
@@ -108,6 +119,7 @@ function normalizePayload(body: any): { ok: boolean; message?: string; data?: Qu
             resources: normalizeResources(body?.resources),
             tags: asStringArray(body?.tags, MAX_TAGS),
             difficulty: clampDifficulty(body?.difficulty),
+            answerSeconds: normalizeAnswerSeconds(body?.answerSeconds),
             status: body?.status === 'draft' ? 'draft' : 'published'
         }
     };
@@ -124,6 +136,8 @@ function mapQuestion(row: any) {
         resources: parseJsonColumn<QuizResources>(row.resources, { images: [], videos: [], audios: [] }),
         tags: parseJsonColumn<string[]>(row.tags, []),
         difficulty: Number(row.difficulty ?? 0),
+        // 没有该字段（历史数据 / 未迁移）时按 10s
+        answerSeconds: normalizeAnswerSeconds(row.answer_seconds),
         disputeCount: Number(row.dispute_count ?? 0),
         answerCount: Number(row.answer_count ?? 0),
         correctCount: Number(row.correct_count ?? 0),
@@ -132,6 +146,7 @@ function mapQuestion(row: any) {
         version: Number(row.version ?? 1),
         createdBy: row.created_by === null ? null : Number(row.created_by),
         updatedBy: row.updated_by === null ? null : Number(row.updated_by),
+        updatedByName: row.updated_by_battletag ? displayNameOf(String(row.updated_by_battletag)) : '',
         createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
         updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now()
     };
@@ -169,13 +184,20 @@ function buildSummary(previous: any | null, next: QuestionPayload): string {
     if (JSON.stringify(before.resources) !== JSON.stringify(next.resources)) changes.push('资源');
     if (JSON.stringify(before.tags) !== JSON.stringify(next.tags)) changes.push('标签');
     if (before.difficulty !== next.difficulty) changes.push('难度');
+    if (before.answerSeconds !== next.answerSeconds) changes.push('答题时长');
     if (before.status !== next.status) changes.push('状态');
 
     return changes.length ? `修改：${changes.join('、')}` : '提交（内容无变化）';
 }
 
 async function loadQuestion(id: number) {
-    const [rows] = await pool.query<any[]>(`SELECT * FROM quiz_questions WHERE id = ? LIMIT 1`, [id]);
+    const [rows] = await pool.query<any[]>(
+        `SELECT q.*, u.battletag AS updated_by_battletag
+           FROM quiz_questions q
+           LEFT JOIN users u ON u.id = q.updated_by
+          WHERE q.id = ? LIMIT 1`,
+        [id]
+    );
     return rows.length ? rows[0] : null;
 }
 
@@ -215,28 +237,33 @@ router.get('/questions', authenticateToken, async (req: AuthRequest, res: Respon
         const maxDifficulty = Number(req.query.maxDifficulty);
         const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 300);
 
-        const where: string[] = [`status = 'published'`];
+        const where: string[] = [`q.status = 'published'`];
         const params: any[] = [];
 
         if (keyword) {
-            where.push('(title LIKE ? OR subtitle LIKE ?)');
+            where.push('(q.title LIKE ? OR q.subtitle LIKE ?)');
             params.push(`%${keyword}%`, `%${keyword}%`);
         }
         if (tag) {
-            where.push('JSON_CONTAINS(tags, JSON_QUOTE(?))');
+            where.push('JSON_CONTAINS(q.tags, JSON_QUOTE(?))');
             params.push(tag);
         }
         if (Number.isFinite(minDifficulty)) {
-            where.push('difficulty >= ?');
+            where.push('q.difficulty >= ?');
             params.push(Math.max(0, Math.min(255, Math.round(minDifficulty))));
         }
         if (Number.isFinite(maxDifficulty)) {
-            where.push('difficulty <= ?');
+            where.push('q.difficulty <= ?');
             params.push(Math.max(0, Math.min(255, Math.round(maxDifficulty))));
         }
 
         const [rows] = await pool.query<any[]>(
-            `SELECT * FROM quiz_questions WHERE ${where.join(' AND ')} ORDER BY updated_at DESC LIMIT ${limit}`,
+            `SELECT q.*, u.battletag AS updated_by_battletag
+               FROM quiz_questions q
+               LEFT JOIN users u ON u.id = q.updated_by
+              WHERE ${where.join(' AND ')}
+              ORDER BY q.updated_at DESC
+              LIMIT ${limit}`,
             params
         );
 
@@ -315,8 +342,8 @@ router.post('/questions', express.json(), authenticateToken, async (req: AuthReq
 
         const [result] = await pool.query<any>(
             `INSERT INTO quiz_questions
-               (title, subtitle, options, answer, explanation, resources, tags, difficulty, status, version, created_by, updated_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+               (title, subtitle, options, answer, explanation, resources, tags, difficulty, answer_seconds, status, version, created_by, updated_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
             [
                 data.title,
                 data.subtitle,
@@ -326,6 +353,7 @@ router.post('/questions', express.json(), authenticateToken, async (req: AuthReq
                 JSON.stringify(data.resources),
                 JSON.stringify(data.tags),
                 data.difficulty,
+                data.answerSeconds,
                 data.status,
                 userId,
                 userId
@@ -386,7 +414,7 @@ router.put('/questions/:id', express.json(), authenticateToken, async (req: Auth
         await pool.query(
             `UPDATE quiz_questions
                 SET title = ?, subtitle = ?, options = ?, answer = ?, explanation = ?, resources = ?,
-                    tags = ?, difficulty = ?, status = ?, version = ?, updated_by = ?
+                    tags = ?, difficulty = ?, answer_seconds = ?, status = ?, version = ?, updated_by = ?
               WHERE id = ?`,
             [
                 data.title,
@@ -397,6 +425,7 @@ router.put('/questions/:id', express.json(), authenticateToken, async (req: Auth
                 JSON.stringify(data.resources),
                 JSON.stringify(data.tags),
                 data.difficulty,
+                data.answerSeconds,
                 data.status,
                 version,
                 userId,

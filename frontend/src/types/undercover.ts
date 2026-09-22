@@ -137,7 +137,13 @@ export interface QuizQuestionSnapshot {
 
 export interface RoomQuizState {
   phase: QuizPhase
-  config: { tags: string[]; minDifficulty: number; maxDifficulty: number }
+  config: {
+    tags: string[]
+    minDifficulty: number
+    maxDifficulty: number
+    /** 本轮题量（房主可设置，默认 10） */
+    questionCount?: number
+  }
   index: number
   total: number
   questionEndsAt: number
@@ -151,6 +157,10 @@ export interface RoomQuizState {
   memberCount?: number
   /** 公布答案后：选项 key → 选了它的 userId 列表 */
   optionChoices?: Record<string, number[]>
+  /** 公布答案后：每个玩家的解算（选了什么、对不对） */
+  results?: { userId: number; option: string; correct: boolean }[]
+  /** 当前题目的作答时长（秒），缺省 10 */
+  answerSeconds?: number
   scores: Record<string, number>
   question: QuizQuestionSnapshot | null
 }

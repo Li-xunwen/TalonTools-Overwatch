@@ -149,6 +149,19 @@
                       </div>
                     </div>
 
+                    <div class="stage-block">
+                      <span class="stage-label">本轮题量（{{ QUIZ_MIN_QUESTIONS }}~{{ QUIZ_MAX_QUESTIONS }}，默认 {{ QUIZ_QUESTION_TOTAL }}）</span>
+                      <input
+                        v-model.number="quizConfig.questionCount"
+                        class="qb-input small"
+                        type="number"
+                        :min="QUIZ_MIN_QUESTIONS"
+                        :max="QUIZ_MAX_QUESTIONS"
+                        step="1"
+                        @change="submitQuizConfig"
+                      >
+                    </div>
+
                     <div class="stage-actions">
                       <button class="stage-btn" @click="submitQuizConfig">保存范围</button>
                       <button class="stage-btn primary" @click="prepareQuiz">进入准备阶段</button>
@@ -166,7 +179,11 @@
                     <template v-else>全部标签</template>
                     ｜难度 {{ quizConfig.minDifficulty }} ~ {{ quizConfig.maxDifficulty }} / 10
                   </p>
-                  <p class="stage-hint">共 {{ QUIZ_QUESTION_TOTAL }} 道题，每题 {{ QUIZ_QUESTION_SECONDS }} 秒作答，之后 {{ QUIZ_VOTE_SECONDS }} 秒投票进入下一题</p>
+                  <p class="stage-hint">
+                    共 {{ quizConfig.questionCount }} 道题，每题按题目设定的答题时长（默认 {{ QUIZ_QUESTION_SECONDS }}s），
+                    之后 {{ QUIZ_VOTE_SECONDS }} 秒投票进入下一题
+                  </p>
+                  <p class="stage-hint">房主进房即入队伍席参与对局；观众席不参与作答与投票，但能看到每题结算</p>
                   <div class="stage-actions">
                     <button
                       v-if="!isOwner && !iAmSpectator"
@@ -253,7 +270,7 @@
                               quizQuestion.answer !== option.key &&
                               quizVotersOf(option.key).length > 0
                           }"
-                          :disabled="quizPhase !== 'question'"
+                          :disabled="quizPhase !== 'question' || iAmSpectator"
                           @click="answerQuizQuestion(option.key)"
                         >
                           <span class="option-key">{{ option.key }}</span>
@@ -264,7 +281,8 @@
                   </div>
 
                   <p v-if="quizPhase === 'question'" class="question-result">
-                    <template v-if="myQuizAnswer">已选择 {{ myQuizAnswer }}（倒计时结束前可改选），等待本题结束…</template>
+                    <template v-if="iAmSpectator">观众席不参与作答，本题结束后可查看结算</template>
+                    <template v-else-if="myQuizAnswer">已选择 {{ myQuizAnswer }}（倒计时结束前可改选），等待本题结束…</template>
                     <template v-else>点击选项作答（{{ stageRemainSeconds }}s）</template>
                     ｜已作答 {{ quizAnsweredUserIds.length }}/{{ quizOnlineCount }} 人
                   </p>
@@ -288,7 +306,11 @@
                       </div>
                     </div>
                     <div class="stage-actions">
+                      <template v-if="iAmSpectator">
+                        <span class="stage-hint">观众席不参与投票，倒计时结束后自动进入下一题</span>
+                      </template>
                       <button
+                        v-else
                         class="stage-btn primary"
                         :disabled="quizVotedUserIds.includes(myUserId ?? -1)"
                         @click="voteNextQuestion"
@@ -306,12 +328,26 @@
                 <!-- 结算 -->
                 <section v-else-if="quizPhase === 'finished'" class="quiz-stage">
                   <h3 class="stage-title">本局结束（{{ quizTotal }} 道题）</h3>
-                  <ol class="stage-scores">
-                    <li v-for="row in quizScoreRows" :key="row.userId">
-                      <span class="stage-score-name">{{ row.displayName }}</span>
-                      <span class="stage-score-value">{{ row.score }} 题</span>
-                    </li>
-                  </ol>
+
+                  <!-- 各玩家解算：按答对题数排名，昵称用队伍颜色 -->
+                  <div class="stage-result-list">
+                    <div
+                      v-for="row in quizScoreRows"
+                      :key="row.userId"
+                      class="score-row"
+                    >
+                      <span class="score-rank" :class="{ top: row.rank <= 3 }">{{ row.rank }}</span>
+                      <img class="score-avatar" :src="row.avatar" :alt="row.displayName">
+                      <span class="score-name" :class="row.colorClass" :title="row.displayName">
+                        {{ row.displayName }}
+                      </span>
+                      <span class="score-detail">
+                        {{ row.score }} / {{ quizTotal }} 题
+                        <span class="score-accuracy">正确率 {{ row.accuracyText }}</span>
+                      </span>
+                    </div>
+                  </div>
+
                   <div class="stage-actions">
                     <button v-if="isOwner" class="stage-btn primary" @click="resetQuizGame">再来一局</button>
                     <p v-else class="stage-hint">等待房主开下一局…</p>
@@ -557,9 +593,10 @@
           <button class="exit-item plain" @click="pickingTransferTarget = false">返回</button>
         </template>
       </div>
-    </div>
-  </div>
-</template>
+                      </div>
+                    </div>
+
+                  </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onActivated, onDeactivated, onUnmounted, nextTick } from 'vue'
@@ -867,9 +904,17 @@ function idColorClass(seat: string | null | undefined): string {
 const QUIZ_QUESTION_TOTAL = 10
 const QUIZ_QUESTION_SECONDS = 10
 const QUIZ_VOTE_SECONDS = 30
+// 本轮题量范围（房主可设置）
+const QUIZ_MIN_QUESTIONS = 1
+const QUIZ_MAX_QUESTIONS = 30
 
 const quizTagOptions = ref<{ name: string; count: number }[]>([])
-const quizConfig = reactive({ tags: [] as string[], minDifficulty: 0, maxDifficulty: 255 })
+const quizConfig = reactive({
+  tags: [] as string[],
+  minDifficulty: 0,
+  maxDifficulty: 255,
+  questionCount: QUIZ_QUESTION_TOTAL
+})
 // 每秒刷新一次倒计时展示
 const nowTick = ref(Date.now())
 let quizTickTimer: number | null = null
@@ -962,16 +1007,31 @@ function quizVotersOf(optionKey: string) {
     .filter((member): member is NonNullable<typeof member> => !!member)
 }
 
-// 结算排名
+// 结算排名：所有队伍席玩家（观众席不参与，不列入），按答对题数排名
 const quizScoreRows = computed(() => {
   const scores = quiz.value?.scores ?? {}
-  return Object.entries(scores)
-    .map(([userId, score]) => ({
-      userId: Number(userId),
-      displayName: room.value?.members.find((member) => member.userId === Number(userId))?.displayName ?? `#${userId}`,
-      score: Number(score)
+  const total = quizTotal.value || 0
+
+  return (room.value?.members ?? [])
+    .filter((member) => member.seat !== 'spectator')
+    .map((member) => {
+      const score = Number(scores[String(member.userId)] ?? 0)
+      return {
+        userId: member.userId,
+        displayName: member.displayName,
+        avatar: member.avatar,
+        // 与聊天/席位一致的队伍配色（友方蓝 / 敌方红 / 观战席白）
+        colorClass: idColorClass(member.seat),
+        score,
+        accuracy: total > 0 ? score / total : 0
+      }
+    })
+    .sort((a, b) => b.score - a.score || a.displayName.localeCompare(b.displayName))
+    .map((row, index) => ({
+      ...row,
+      rank: index + 1,
+      accuracyText: `${(row.accuracy * 100).toFixed(0)}%`
     }))
-    .sort((a, b) => b.score - a.score)
 })
 
 // 房主改动范围时同步本地表单
@@ -983,6 +1043,7 @@ watch(
     // 服务端存的是 0~255，界面上换算成 0~10
     quizConfig.minDifficulty = toDisplayDifficulty(config.minDifficulty)
     quizConfig.maxDifficulty = toDisplayDifficulty(config.maxDifficulty)
+    quizConfig.questionCount = config.questionCount || QUIZ_QUESTION_TOTAL
   },
   { immediate: true }
 )
@@ -1012,7 +1073,11 @@ function submitQuizConfig() {
     tags: quizConfig.tags,
     // 0~10 → 0~255
     minDifficulty: toRawDifficulty(quizConfig.minDifficulty),
-    maxDifficulty: toRawDifficulty(quizConfig.maxDifficulty)
+    maxDifficulty: toRawDifficulty(quizConfig.maxDifficulty),
+    questionCount: Math.max(
+      QUIZ_MIN_QUESTIONS,
+      Math.min(QUIZ_MAX_QUESTIONS, Number(quizConfig.questionCount) || QUIZ_QUESTION_TOTAL)
+    )
   })
 }
 
@@ -4270,6 +4335,64 @@ onUnmounted(deactivatePage)
   line-height: 1.9;
 }
 
+.stage-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-row {
+  display: grid;
+  grid-template-columns: 30px 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+
+.score-rank {
+  text-align: center;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.score-rank.top {
+  color: #f5a623;
+  opacity: 1;
+}
+
+.score-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-primary);
+}
+
+.score-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.score-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.9;
+}
+
+.score-accuracy {
+  opacity: 0.7;
+  font-size: 0.76rem;
+}
+
 .stage-score-name {
   margin-right: 8px;
 }
@@ -4320,6 +4443,12 @@ onUnmounted(deactivatePage)
   border-radius: 10px;
   object-fit: contain;
   cursor: zoom-in;
+}
+
+.stage-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .quiz-question {

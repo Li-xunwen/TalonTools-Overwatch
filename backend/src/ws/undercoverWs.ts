@@ -311,7 +311,8 @@ export function initUndercoverWs(server: HttpServer): void {
                         result = configureQuiz(room, ctx.userId, {
                             tags: msg.tags,
                             minDifficulty: msg.minDifficulty,
-                            maxDifficulty: msg.maxDifficulty
+                            maxDifficulty: msg.maxDifficulty,
+                            questionCount: msg.questionCount
                         });
                     } else if (action === 'prepare') {
                         result = prepareQuiz(room, ctx.userId);
