@@ -102,6 +102,9 @@ export interface RoomState {
   id: number
   roomNo: string
   name: string
+  /** 玩法：卧底 / 刷题战（旧房间可能没有该字段） */
+  mode?: 'undercover' | 'quiz'
+  teamSize?: number
   ownerUserId: number
   ownerBattletag: string
   ownerDisplayName: string
@@ -113,4 +116,41 @@ export interface RoomState {
   members: SeatMember[]
   chat: ChatMessage[]
   game: RoomGame
+  /** 刷题战流程状态（仅刷题战房间下发） */
+  quiz?: RoomQuizState
+}
+
+export type QuizPhase = 'config' | 'ready' | 'question' | 'vote' | 'finished'
+
+export interface QuizQuestionSnapshot {
+  id: number
+  title: string
+  subtitle: string
+  options: { key: string; text: string }[]
+  resources: { images: string[]; videos: string[]; audios: string[] }
+  tags: string[]
+  difficulty: number
+  /** 仅投票 / 结算阶段下发 */
+  answer: string
+  explanation: string
+}
+
+export interface RoomQuizState {
+  phase: QuizPhase
+  config: { tags: string[]; minDifficulty: number; maxDifficulty: number }
+  index: number
+  total: number
+  questionEndsAt: number
+  voteEndsAt: number
+  startedAt: number
+  answeredUserIds: number[]
+  votedUserIds: number[]
+  /** 准备阶段点了「准备」的成员（房主不计入） */
+  readyUserIds?: number[]
+  readyCount?: number
+  memberCount?: number
+  /** 公布答案后：选项 key → 选了它的 userId 列表 */
+  optionChoices?: Record<string, number[]>
+  scores: Record<string, number>
+  question: QuizQuestionSnapshot | null
 }

@@ -16,6 +16,16 @@
           <span class="undercover-enter">点击进入</span>
         </div>
 
+        <!-- 守望先锋刷题战入口 -->
+        <div class="quiz-entry" @click="goQuizBattle">
+          <div class="undercover-icon">📝</div>
+          <h2 class="section-title">守望先锋刷题战</h2>
+          <p class="undercover-desc">
+            3v3 组队抢答，比拼守望知识与反应速度，进房间开一局
+          </p>
+          <span class="undercover-enter">点击进入</span>
+        </div>
+
         <div class="section-divider"></div>
 
         <h2 class="section-title">⛏️ 我的世界 (Minecraft) 安装</h2>
@@ -82,6 +92,11 @@ function goUndercover() {
   router.push('/Undercover')
 }
 
+// 跳转到「守望先锋刷题战」页
+function goQuizBattle() {
+  router.push('/QuizBattle')
+}
+
 const serverStatus = ref<any>(null)
 let refreshTimer: number | null = null
 
@@ -119,19 +134,22 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 }
 
 /* ========== 谁是守望先锋卧底入口 ========== */
-.undercover-entry {
+.undercover-entry,
+.quiz-entry {
   cursor: pointer;
   border-radius: 24px;
   padding: 24px 16px;
   transition: 0.2s ease;
 }
 
-.undercover-entry:hover {
+.undercover-entry:hover,
+.quiz-entry:hover {
   transform: translateY(-3px);
   background: var(--section-bg);
 }
 
-.undercover-entry:active {
+.undercover-entry:active,
+.quiz-entry:active {
   transform: translateY(-1px);
 }
 

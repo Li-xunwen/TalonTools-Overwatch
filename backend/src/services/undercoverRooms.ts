@@ -5,14 +5,23 @@ import { pool } from '../utils/db';
    常量配置
 ========================= */
 
-// 每队席位数量（左队 6 / 右队 6）
+// 每队席位数量（左队 6 / 右队 6，卧底模式）
 export const TEAM_SIZE = 6;
+
+// 刷题战模式：每队 3 人
+export const QUIZ_TEAM_SIZE = 3;
 
 // 观战席固定位置数量（1 × 5）
 export const SPECTATOR_MIN_SIZE = 5;
 
+// 刷题战模式：观战席 2 人
+export const QUIZ_SPECTATOR_SIZE = 2;
+
 // 房间人数上限（12 个队伍席位 + 5 个观战席 = 17）
 export const ROOM_MAX_PLAYERS = TEAM_SIZE * 2 + SPECTATOR_MIN_SIZE;
+
+// 房间玩法：卧底（默认）/ 刷题战
+export type RoomMode = 'undercover' | 'quiz';
 
 // 房间无用户后 1 分钟销毁
 const ROOM_EMPTY_DESTROY_MS = 60 * 1000;
@@ -124,6 +133,9 @@ export interface Room {
     id: number;
     roomNo: string;
     name: string;
+    mode: RoomMode;                 // 玩法：卧底 / 刷题战
+    teamSize: number;               // 每队席位数量（卧底 6、刷题战 3）
+    spectatorSize: number;          // 观战席数量（卧底 5、刷题战 2）
     ownerUserId: number;
     team1Name: string;
     team2Name: string;
@@ -144,6 +156,7 @@ export interface Room {
     revealedUndercoverIds: number[];            // 公布结果后对所有人公开的卧底
     rosterLocked: boolean;                      // 进入准备阶段后锁定成员名单
     swapRequests: Map<number, SeatSwapRequest>; // 待处理的位置交换申请（key = 被申请人）
+    quiz: RoomQuizState;                        // 刷题战流程状态（卧底房间不使用）
 }
 
 // 位置交换申请（申请人 → 被申请人，同意后互换席位）
@@ -191,6 +204,11 @@ function isTeamSeat(seat: SeatType): boolean {
     return seat === 'team1' || seat === 'team2';
 }
 
+// 房间人数上限：两支队伍 + 观战席
+function roomMaxPlayers(room: Room): number {
+    return room.teamSize * 2 + room.spectatorSize;
+}
+
 function seatTaken(room: Room, seat: SeatType, seatIndex: number, exceptUserId?: number): boolean {
     for (const member of room.members.values()) {
         if (member.userId === exceptUserId) continue;
@@ -213,9 +231,9 @@ function roomPlayerCount(room: Room): number {
     return count;
 }
 
-// 找第一个空席位：队伍席 0~5、观战席 0~4（位置固定，满员返回 -1）
+// 找第一个空席位：队伍席 0~teamSize-1、观战席 0~4（位置固定，满员返回 -1）
 function firstFreeSeatIndex(room: Room, seat: SeatType): number {
-    const limit = isTeamSeat(seat) ? TEAM_SIZE : SPECTATOR_MIN_SIZE;
+    const limit = isTeamSeat(seat) ? room.teamSize : room.spectatorSize;
     for (let i = 0; i < limit; i++) {
         if (!seatTaken(room, seat, i)) return i;
     }
@@ -254,6 +272,56 @@ function serializeMember(member: RoomMember) {
 export function serializeRoom(room: Room) {
     const mapOwner = room.members.get(room.mapOwnerUserId);
 
+    // 刷题战状态：作答阶段不下发正确答案，投票/结算阶段才公布
+    const quiz = room.quiz;
+    const quizQuestion = quiz.questions[quiz.index] ?? null;
+    const revealAnswer = quiz.phase === 'vote' || quiz.phase === 'finished';
+    const quizState = {
+        phase: quiz.phase,
+        config: quiz.config,
+        index: quiz.index,
+        total: quiz.questions.length,
+        questionEndsAt: quiz.questionEndsAt,
+        voteEndsAt: quiz.voteEndsAt,
+        startedAt: quiz.startedAt,
+        answeredUserIds: Object.keys(quiz.answers).map((id) => Number(id)),
+        votedUserIds: Object.keys(quiz.votes).map((id) => Number(id)),
+        // 只有公布答案后才下发谁答对了
+        correctUserIds: revealAnswer
+            ? Object.entries(quiz.answers)
+                  .filter(([, answer]) => answer.correct)
+                  .map(([id]) => Number(id))
+            : [],
+        // 公布答案后才下发「每个选项都有谁选」——用于在选项上方浮现小头像
+        optionChoices: revealAnswer
+            ? Object.entries(quiz.answers).reduce<Record<string, number[]>>((acc, [id, answer]) => {
+                  const key = answer.option;
+                  if (!acc[key]) acc[key] = [];
+                  acc[key].push(Number(id));
+                  return acc;
+              }, {})
+            : {},
+        scores: quiz.scores,
+        readyUserIds: quiz.readyUserIds,
+        readyCount: quiz.readyUserIds.length,
+        // 观战席不需要准备，准备名单只统计队伍里的玩家
+        memberCount: [...room.members.values()].filter((member) => member.seat !== 'spectator').length,
+        question: quizQuestion
+            ? {
+                  id: quizQuestion.id,
+                  title: quizQuestion.title,
+                  subtitle: quizQuestion.subtitle,
+                  options: quizQuestion.options,
+                  resources: quizQuestion.resources,
+                  tags: quizQuestion.tags,
+                  difficulty: quizQuestion.difficulty,
+                  // 结束后才公开答案与解析
+                  answer: revealAnswer ? quizQuestion.answer : '',
+                  explanation: revealAnswer ? quizQuestion.explanation : ''
+              }
+            : null
+    };
+
     // 队伍总人数 / 已准备人数（都只统计两支队伍的成员，包含离线成员）
     const teamMembers = [...room.members.values()].filter(
         (member) => member.seat === 'team1' || member.seat === 'team2'
@@ -264,14 +332,16 @@ export function serializeRoom(room: Room) {
         id: room.id,
         roomNo: room.roomNo,
         name: room.name,
+        mode: room.mode,
+        teamSize: room.teamSize,
         ownerUserId: room.ownerUserId,
         ownerBattletag: room.members.get(room.ownerUserId)?.battletag ?? '',
         ownerDisplayName: nameWithoutIdNumber(room.members.get(room.ownerUserId)?.battletag ?? ''),
         playerCount: roomPlayerCount(room),
-        maxPlayers: ROOM_MAX_PLAYERS,
-        team1: { name: room.team1Name, slots: seatSlots(room, 'team1', TEAM_SIZE) },
-        team2: { name: room.team2Name, slots: seatSlots(room, 'team2', TEAM_SIZE) },
-        spectators: seatSlots(room, 'spectator', SPECTATOR_MIN_SIZE),
+        maxPlayers: roomMaxPlayers(room),
+        team1: { name: room.team1Name, slots: seatSlots(room, 'team1', room.teamSize) },
+        team2: { name: room.team2Name, slots: seatSlots(room, 'team2', room.teamSize) },
+        spectators: seatSlots(room, 'spectator', room.spectatorSize),
         members: [...room.members.values()].map(serializeMember),
         chat: room.chat,
         game: {
@@ -300,7 +370,8 @@ export function serializeRoom(room: Room) {
                 votes: room.undercoverVote.votes
             },
             revealedUndercoverIds: room.revealedUndercoverIds
-        }
+        },
+        quiz: quizState
     };
 }
 
@@ -310,10 +381,12 @@ export function serializeRoomSummary(room: Room) {
         id: room.id,
         roomNo: room.roomNo,
         name: room.name,
+        mode: room.mode,
+        teamSize: room.teamSize,
         ownerUserId: room.ownerUserId,
         ownerBattletag: room.members.get(room.ownerUserId)?.battletag ?? '',
         playerCount: roomPlayerCount(room),
-        maxPlayers: ROOM_MAX_PLAYERS,
+        maxPlayers: roomMaxPlayers(room),
         status: 'WAITING',
         createdAt: room.createdAt
     };
@@ -327,17 +400,20 @@ export function getRoomByNo(roomNo: string): Room | undefined {
     return rooms.get(roomNo);
 }
 
-export function listRoomSummaries() {
+export function listRoomSummaries(mode?: RoomMode) {
     return [...rooms.values()]
+        .filter((room) => !mode || room.mode === mode)
         .sort((a, b) => b.createdAt - a.createdAt)
         .map(serializeRoomSummary);
 }
 
 // 用户作为房主所属的房间（用于「已是房主时再次创建则跳回原房间」）
 // 房主离开后只要房间还没销毁（无人满 1 分钟才销毁），房间归属不变，因此这里不要求本人当前在房内
-export function findOwnedRoom(userId: number): Room | undefined {
+export function findOwnedRoom(userId: number, mode?: RoomMode): Room | undefined {
     for (const room of rooms.values()) {
-        if (room.ownerUserId === userId) return room;
+        if (room.ownerUserId !== userId) continue;
+        if (mode && room.mode !== mode) continue;
+        return room;
     }
     return undefined;
 }
@@ -346,11 +422,16 @@ export function findOwnedRoom(userId: number): Room | undefined {
    房间创建 / 加入 / 离开
 ========================= */
 
-export function createRoom(userId: number, battletag: string): Room {
+export function createRoom(userId: number, battletag: string, mode: RoomMode = 'undercover'): Room {
+    const teamSize = mode === 'quiz' ? QUIZ_TEAM_SIZE : TEAM_SIZE;
+    const spectatorSize = mode === 'quiz' ? QUIZ_SPECTATOR_SIZE : SPECTATOR_MIN_SIZE;
     const room: Room = {
         id: roomSeq++,
         roomNo: generateRoomNo(),
-        name: `${nameWithoutIdNumber(battletag)} 的房间`,
+        name: `${nameWithoutIdNumber(battletag)} 的${mode === 'quiz' ? '刷题战' : ''}房间`,
+        mode,
+        teamSize,
+        spectatorSize,
         ownerUserId: userId,
         team1Name: '队伍1',
         team2Name: '队伍2',
@@ -370,7 +451,8 @@ export function createRoom(userId: number, battletag: string): Room {
         undercoverVote: { active: false, votes: {} },
         revealedUndercoverIds: [],
         rosterLocked: false,
-        swapRequests: new Map()
+        swapRequests: new Map(),
+        quiz: emptyQuizState()
     };
 
     rooms.set(room.roomNo, room);
@@ -535,7 +617,7 @@ export function joinRoom(room: Room, userId: number, battletag: string): RoomMem
         return existing;
     }
 
-    if (room.members.size >= ROOM_MAX_PLAYERS) return null;
+    if (room.members.size >= roomMaxPlayers(room)) return null;
 
     // 观战席 → 队伍1 → 队伍2，都满了说明房间已满
     let seat: SeatType | null = null;
@@ -682,10 +764,10 @@ export function moveMemberSeat(
     if (!Number.isInteger(seatIndex) || seatIndex < 0) {
         return { ok: false, message: '席位编号无效' };
     }
-    if (isTeamSeat(seat) && seatIndex >= TEAM_SIZE) {
+    if (isTeamSeat(seat) && seatIndex >= room.teamSize) {
         return { ok: false, message: '该队伍席位不存在' };
     }
-    if (seat === 'spectator' && seatIndex >= SPECTATOR_MIN_SIZE) {
+    if (seat === 'spectator' && seatIndex >= room.spectatorSize) {
         return { ok: false, message: '该观战席不存在' };
     }
     if (member.seat === seat && member.seatIndex === seatIndex) {
@@ -837,10 +919,10 @@ export function hostDragToSeat(
     if (!Number.isInteger(targetSeatIndex) || targetSeatIndex < 0) {
         return { ok: false, message: '席位编号无效' };
     }
-    if (isTeamSeat(targetSeat) && targetSeatIndex >= TEAM_SIZE) {
+    if (isTeamSeat(targetSeat) && targetSeatIndex >= room.teamSize) {
         return { ok: false, message: '该队伍席位不存在' };
     }
-    if (targetSeat === 'spectator' && targetSeatIndex >= SPECTATOR_MIN_SIZE) {
+    if (targetSeat === 'spectator' && targetSeatIndex >= room.spectatorSize) {
         return { ok: false, message: '该观战席不存在' };
     }
 
@@ -916,7 +998,7 @@ export async function forceAddMemberByTag(
         return { ok: true, battletag: target.battletag };
     }
 
-    if (room.members.size >= ROOM_MAX_PLAYERS) return { ok: false, message: '房间人数已满' };
+    if (room.members.size >= roomMaxPlayers(room)) return { ok: false, message: '房间人数已满' };
 
     const member: RoomMember = {
         userId: target.id,
@@ -1378,6 +1460,11 @@ export function broadcastRoom(room: Room): void {
             room: {
                 ...state,
                 chat: state.chat.filter((message) => canSeeMessage(message, userId)),
+                quiz: {
+                    ...state.quiz,
+                    // 每个人单独知道自己选了哪一项
+                    yourAnswer: room.quiz.answers[userId]?.option ?? ''
+                },
                 game: {
                     ...state.game,
                     // 仅向卧底本人展示身份
@@ -1411,10 +1498,293 @@ function destroyRoom(room: Room, message: string): void {
 }
 
 /* =========================
+   刷题战：题目抽取与游戏流程
+   配置 → 准备 → 每题 10s 作答 → 30s 投票进入下一题 → 结算
+========================= */
+
+export const QUIZ_QUESTION_COUNT = 10;
+export const QUIZ_QUESTION_MS = 10 * 1000;
+export const QUIZ_VOTE_MS = 30 * 1000;
+
+export interface QuizOption {
+    key: string;
+    text: string;
+}
+
+export interface QuizResources {
+    images: string[];
+    videos: string[];
+    audios: string[];
+}
+
+export interface QuizQuestionSnapshot {
+    id: number;
+    title: string;
+    subtitle: string;
+    options: QuizOption[];
+    answer: string;
+    explanation: string;
+    resources: QuizResources;
+    tags: string[];
+    difficulty: number;
+}
+
+export type QuizPhase = 'config' | 'ready' | 'question' | 'vote' | 'finished';
+
+export interface RoomQuizState {
+    phase: QuizPhase;
+    config: { tags: string[]; minDifficulty: number; maxDifficulty: number };
+    questions: QuizQuestionSnapshot[];
+    index: number;
+    questionEndsAt: number;   // 当前题目截止时间（毫秒时间戳）
+    voteEndsAt: number;       // 当前投票截止时间
+    votes: Record<number, 'next'>;                                  // 投票进入下一题的人
+    answers: Record<number, { option: string; correct: boolean }>;  // 本题作答
+    scores: Record<number, number>;                                 // 累计答对数
+    readyUserIds: number[];                                         // 准备阶段点了「准备」的人
+    startedAt: number;
+}
+
+function emptyQuizState(): RoomQuizState {
+    return {
+        phase: 'config',
+        config: { tags: [], minDifficulty: 0, maxDifficulty: 255 },
+        questions: [],
+        index: 0,
+        questionEndsAt: 0,
+        voteEndsAt: 0,
+        votes: {},
+        answers: {},
+        scores: {},
+        readyUserIds: [],
+        startedAt: 0
+    };
+}
+
+function parseQuizJson<T>(value: unknown, fallback: T): T {
+    if (value === null || value === undefined) return fallback;
+    if (typeof value === 'object') return value as T;
+    try {
+        return JSON.parse(String(value)) as T;
+    } catch {
+        return fallback;
+    }
+}
+
+function clampByte(value: unknown, fallback: number): number {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.max(0, Math.min(255, Math.round(num)));
+}
+
+// 房主设置题目范围（标签 / 难度区间）
+export function configureQuiz(
+    room: Room,
+    userId: number,
+    payload: { tags?: unknown; minDifficulty?: unknown; maxDifficulty?: unknown }
+): { ok: boolean; message?: string } {
+    if (room.mode !== 'quiz') return { ok: false, message: '当前房间不是刷题战' };
+    if (room.ownerUserId !== userId) return { ok: false, message: '只有房主可以设置题目范围' };
+    if (room.quiz.phase === 'question' || room.quiz.phase === 'vote') {
+        return { ok: false, message: '游戏进行中不能修改题目范围' };
+    }
+
+    const tags = Array.isArray(payload.tags)
+        ? payload.tags.map((tag) => String(tag ?? '').trim()).filter(Boolean).slice(0, 12)
+        : [];
+
+    let minDifficulty = clampByte(payload.minDifficulty, 0);
+    let maxDifficulty = clampByte(payload.maxDifficulty, 255);
+    if (minDifficulty > maxDifficulty) [minDifficulty, maxDifficulty] = [maxDifficulty, minDifficulty];
+
+    room.quiz.config = { tags, minDifficulty, maxDifficulty };
+    room.quiz.phase = 'config';
+    return { ok: true };
+}
+
+// 进入准备阶段（房主）
+export function prepareQuiz(room: Room, userId: number): { ok: boolean; message?: string } {
+    if (room.mode !== 'quiz') return { ok: false, message: '当前房间不是刷题战' };
+    if (room.ownerUserId !== userId) return { ok: false, message: '只有房主可以开始准备' };
+    if (room.quiz.phase === 'question' || room.quiz.phase === 'vote') {
+        return { ok: false, message: '游戏进行中' };
+    }
+
+    room.quiz.phase = 'ready';
+    room.quiz.readyUserIds = [];
+    return { ok: true };
+}
+
+// 准备阶段：成员点「准备 / 取消准备」
+export function setQuizReady(
+    room: Room,
+    userId: number,
+    ready: boolean
+): { ok: boolean; message?: string } {
+    if (room.mode !== 'quiz') return { ok: false, message: '当前房间不是刷题战' };
+    if (room.quiz.phase !== 'ready') return { ok: false, message: '当前不在准备阶段' };
+    if (!room.members.has(userId)) return { ok: false, message: '你不在房间里' };
+
+    const readySet = new Set(room.quiz.readyUserIds);
+    if (ready) readySet.add(userId);
+    else readySet.delete(userId);
+    room.quiz.readyUserIds = [...readySet];
+
+    return { ok: true };
+}
+
+// 抽题：按标签与难度区间随机取 10 道（题目不足时有多少抽多少）
+async function drawQuizQuestions(room: Room): Promise<QuizQuestionSnapshot[]> {
+    const where: string[] = [`status = 'published'`];
+    const params: any[] = [];
+
+    const { tags, minDifficulty, maxDifficulty } = room.quiz.config;
+    if (tags.length) {
+        // 任一标签命中即可（JSON 数组包含）
+        where.push(`(${tags.map(() => 'JSON_CONTAINS(tags, JSON_QUOTE(?))').join(' OR ')})`);
+        params.push(...tags);
+    }
+    where.push('difficulty >= ?', 'difficulty <= ?');
+    params.push(minDifficulty, maxDifficulty);
+
+    try {
+        const [rows] = await pool.query<any[]>(
+            `SELECT id, title, subtitle, options, answer, explanation, resources, tags, difficulty
+               FROM quiz_questions
+              WHERE ${where.join(' AND ')}
+              ORDER BY RAND()
+              LIMIT ${QUIZ_QUESTION_COUNT}`,
+            params
+        );
+
+        return rows.map((row) => ({
+            id: Number(row.id),
+            title: String(row.title ?? ''),
+            subtitle: String(row.subtitle ?? ''),
+            options: parseQuizJson<QuizOption[]>(row.options, []),
+            answer: String(row.answer ?? ''),
+            explanation: String(row.explanation ?? ''),
+            resources: parseQuizJson<QuizResources>(row.resources, { images: [], videos: [], audios: [] }),
+            tags: parseQuizJson<string[]>(row.tags, []),
+            difficulty: Number(row.difficulty ?? 0)
+        }));
+    } catch (error) {
+        console.error('[刷题战] 抽题失败:', error);
+        return [];
+    }
+}
+
+// 开始游戏（房主）：抽题 → 进入第一题
+export async function startQuiz(room: Room, userId: number): Promise<{ ok: boolean; message?: string }> {
+    if (room.mode !== 'quiz') return { ok: false, message: '当前房间不是刷题战' };
+    if (room.ownerUserId !== userId) return { ok: false, message: '只有房主可以开始游戏' };
+
+    const questions = await drawQuizQuestions(room);
+    if (questions.length === 0) return { ok: false, message: '没有符合条件的题目，请放宽范围或先往题库加题' };
+
+    room.quiz.questions = questions;
+    room.quiz.index = 0;
+    room.quiz.answers = {};
+    room.quiz.votes = {};
+    room.quiz.scores = {};
+    room.quiz.readyUserIds = [];
+    room.quiz.startedAt = Date.now();
+    room.quiz.phase = 'question';
+    room.quiz.questionEndsAt = Date.now() + QUIZ_QUESTION_MS;
+    room.quiz.voteEndsAt = 0;
+    room.rosterLocked = true;
+
+    return { ok: true };
+}
+
+// 作答（每题每人一次）
+export function answerQuiz(
+    room: Room,
+    userId: number,
+    option: string
+): { ok: boolean; message?: string } {
+    if (room.mode !== 'quiz') return { ok: false, message: '当前房间不是刷题战' };
+    if (room.quiz.phase !== 'question') return { ok: false, message: '当前不在作答阶段' };
+    if (!room.members.has(userId)) return { ok: false, message: '你不在房间里' };
+
+    const question = room.quiz.questions[room.quiz.index];
+    if (!question) return { ok: false, message: '题目不存在' };
+
+    const key = String(option ?? '').trim().toUpperCase();
+    if (!question.options.some((item) => item.key === key)) return { ok: false, message: '选项无效' };
+
+    // 倒计时结束前允许改选：先撤销上一次的计分，再按新选项计分
+    const previous = room.quiz.answers[userId];
+    if (previous?.correct) {
+        room.quiz.scores[userId] = Math.max(0, (room.quiz.scores[userId] ?? 0) - 1);
+    }
+
+    const correct = key === question.answer;
+    room.quiz.answers[userId] = { option: key, correct };
+    if (correct) room.quiz.scores[userId] = (room.quiz.scores[userId] ?? 0) + 1;
+
+    return { ok: true };
+}
+
+// 投票进入下一题
+export function voteNextQuiz(room: Room, userId: number): { ok: boolean; message?: string } {
+    if (room.mode !== 'quiz') return { ok: false, message: '当前房间不是刷题战' };
+    if (room.quiz.phase !== 'vote') return { ok: false, message: '当前不在投票阶段' };
+    if (!room.members.has(userId)) return { ok: false, message: '你不在房间里' };
+
+    room.quiz.votes[userId] = 'next';
+
+    // 在线成员过半同意 → 立即进入下一题
+    const online = [...room.members.values()].filter((member) => member.connected);
+    const voted = Object.keys(room.quiz.votes).length;
+    if (online.length > 0 && voted * 2 >= online.length) advanceQuizQuestion(room);
+
+    return { ok: true };
+}
+
+// 进入下一题（或结算）
+export function advanceQuizQuestion(room: Room, now = Date.now()): void {
+    room.quiz.index += 1;
+    room.quiz.answers = {};
+    room.quiz.votes = {};
+    room.quiz.voteEndsAt = 0;
+
+    if (room.quiz.index >= room.quiz.questions.length) {
+        room.quiz.phase = 'finished';
+        room.quiz.questionEndsAt = 0;
+        room.rosterLocked = false;
+        return;
+    }
+
+    room.quiz.phase = 'question';
+    room.quiz.questionEndsAt = now + QUIZ_QUESTION_MS;
+}
+
+// 倒计时推进：作答 10s 结束 → 投票 30s；投票超时 → 下一题
+export function processQuizTimers(room: Room, now: number): boolean {
+    if (room.mode !== 'quiz') return false;
+    const quiz = room.quiz;
+
+    if (quiz.phase === 'question' && quiz.questionEndsAt && now >= quiz.questionEndsAt) {
+        quiz.phase = 'vote';
+        quiz.voteEndsAt = now + QUIZ_VOTE_MS;
+        return true;
+    }
+
+    if (quiz.phase === 'vote' && quiz.voteEndsAt && now >= quiz.voteEndsAt) {
+        advanceQuizQuestion(room, now);
+        return true;
+    }
+
+    return false;
+}
+
+/* =========================
    定时巡检：空房销毁 + 房主后台超时移交
 ========================= */
 
 let ticker: NodeJS.Timeout | null = null;
+let quizTicker: NodeJS.Timeout | null = null;
 let tickRunning = false;
 
 function startTicker(): void {
@@ -1422,6 +1792,16 @@ function startTicker(): void {
     ticker = setInterval(() => {
         void tick();
     }, TICK_MS);
+
+    // 刷题战倒计时需要秒级精度：每秒推进一步（10s 作答 / 30s 投票）
+    if (!quizTicker) {
+        quizTicker = setInterval(() => {
+            const now = Date.now();
+            for (const room of rooms.values()) {
+                if (processQuizTimers(room, now)) broadcastRoom(room);
+            }
+        }, 1000);
+    }
 }
 
 async function tick(): Promise<void> {

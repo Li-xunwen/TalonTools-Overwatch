@@ -27,6 +27,24 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/QuizBattle',
+    name: 'QuizBattle',
+    component: () => import('../views/QuizBattleView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/QuizBattle/room/:roomNo',
+    name: 'QuizBattleRoom',
+    component: () => import('../views/QuizBattleRoomView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/QuizBattle/questions',
+    name: 'QuizBattleQuestions',
+    component: () => import('../views/QuizQuestionBankView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/main',
     name: 'Main',
     component: () => import('../views/MainView.vue'),

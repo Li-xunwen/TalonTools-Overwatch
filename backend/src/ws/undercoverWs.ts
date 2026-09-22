@@ -4,8 +4,10 @@ import jwt from 'jsonwebtoken';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
     attachSocket,
+    answerQuiz,
     broadcastRoom,
     broadcastEvent,
+    configureQuiz,
     detachSocket,
     dissolveRoom,
     exitRoom,
@@ -18,6 +20,7 @@ import {
     moveMemberSeat,
     moveOtherMemberSeat,
     nameWithoutIdNumber,
+    prepareQuiz,
     pushChatMessage,
     pushSystemMessage,
     pushVoiceMessage,
@@ -25,7 +28,10 @@ import {
     requestSeatSwap,
     respondSeatSwap,
     sendTo,
+    setQuizReady,
+    startQuiz,
     setMemberBackground,
+    voteNextQuiz,
     transferOwnerTo,
     useItem
 } from '../services/undercoverRooms';
@@ -279,6 +285,46 @@ export function initUndercoverWs(server: HttpServer): void {
 
                 case 'game': {
                     const result = handleGameAction(room, ctx.userId, String(msg.action ?? ''), msg);
+                    if (!result.ok) sendTo(ws, { type: 'error', message: result.message ?? '操作失败' });
+                    else broadcastRoom(room);
+                    break;
+                }
+
+                case 'quiz': {
+                    const action = String(msg.action ?? '');
+
+                    if (action === 'start') {
+                        void startQuiz(room, ctx.userId)
+                            .then((result) => {
+                                if (!result.ok) {
+                                    sendTo(ws, { type: 'error', message: result.message ?? '开始失败' });
+                                    return;
+                                }
+                                broadcastRoom(room);
+                            })
+                            .catch((error) => console.error('[刷题战] 开始游戏失败:', error));
+                        break;
+                    }
+
+                    let result: { ok: boolean; message?: string };
+                    if (action === 'config') {
+                        result = configureQuiz(room, ctx.userId, {
+                            tags: msg.tags,
+                            minDifficulty: msg.minDifficulty,
+                            maxDifficulty: msg.maxDifficulty
+                        });
+                    } else if (action === 'prepare') {
+                        result = prepareQuiz(room, ctx.userId);
+                    } else if (action === 'ready') {
+                        result = setQuizReady(room, ctx.userId, msg.value !== false);
+                    } else if (action === 'answer') {
+                        result = answerQuiz(room, ctx.userId, String(msg.option ?? ''));
+                    } else if (action === 'vote') {
+                        result = voteNextQuiz(room, ctx.userId);
+                    } else {
+                        result = { ok: false, message: '未知的刷题战操作' };
+                    }
+
                     if (!result.ok) sendTo(ws, { type: 'error', message: result.message ?? '操作失败' });
                     else broadcastRoom(room);
                     break;

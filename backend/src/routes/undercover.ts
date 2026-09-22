@@ -101,9 +101,10 @@ router.post('/leave', authenticateToken, (req: AuthRequest, res: Response) => {
    房间相关接口
 ========================= */
 
-// GET /api/undercover/rooms —— 房间列表
+// 房间列表：?mode=quiz 只看刷题战房间，缺省 = 卧底房间
 router.get('/rooms', authenticateToken, (req: AuthRequest, res: Response) => {
-    res.json({ rooms: listRoomSummaries() });
+    const mode = String(req.query.mode ?? '') === 'quiz' ? 'quiz' : 'undercover';
+    res.json({ rooms: listRoomSummaries(mode), mode });
 });
 
 // GET /api/undercover/rooms/:roomNo —— 单个房间详情（进入房间前校验）
@@ -118,13 +119,14 @@ router.get('/rooms/:roomNo', authenticateToken, (req: AuthRequest, res: Response
 // 若自己已经是某个房间的房主，则直接返回该房间并标记 existed，由前端跳转过去
 router.post('/rooms', authenticateToken, (req: AuthRequest, res: Response) => {
     const { userId, battletag } = req.user!;
+    const mode = String((req.body as { mode?: string })?.mode ?? '') === 'quiz' ? 'quiz' : 'undercover';
 
-    const ownedRoom = findOwnedRoom(userId);
+    const ownedRoom = findOwnedRoom(userId, mode);
     if (ownedRoom) {
         return res.json({ room: serializeRoom(ownedRoom), existed: true });
     }
 
-    const room = createRoom(userId, battletag);
+    const room = createRoom(userId, battletag, mode);
     res.status(201).json({ room: serializeRoom(room), existed: false });
 });
 

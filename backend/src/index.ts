@@ -19,6 +19,7 @@ import minecraftRouter from './routes/minecraft';
 import undercoverRouter from './routes/undercover';
 import pagesRouter from './routes/pages';
 import filesRouter from './routes/files';
+import quizRouter from './routes/quiz';
 import {
     physicalPathOf,
     resolveFileForLegacyUrl,
@@ -145,6 +146,7 @@ app.use('/api/user', rankRouter);
 app.use('/api/user', heroesRouter);
 app.use('/api/v2', dashenProfileRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/quiz', quizRouter);
 
 // 用 http server 同时承载 Express 与「谁是守望先锋卧底」的 WebSocket 会话
 const server = http.createServer(app);

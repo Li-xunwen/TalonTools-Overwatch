@@ -28,6 +28,12 @@ export type EventType =
   // comment operations
   | 'comment_create'
   | 'comment_delete'
+  // quiz question bank
+  | 'quiz_question_create'
+  | 'quiz_question_update'
+  | 'quiz_question_dispute'
+  | 'quiz_question_dispute_reset'
+  | 'quiz_question_answer'
 ;
 
 export interface EventLogOptions {
