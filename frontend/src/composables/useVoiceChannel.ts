@@ -52,12 +52,30 @@ function createVoiceChannel() {
   const audioContext = shallowRef<AudioContext | null>(null)
   const remoteNodes = new Map<string, { el: HTMLAudioElement; gain: GainNode | null; wired: boolean }>()
 
-  // 本地门限：Analyser 取样 + 起音/释音迟滞
-  const localAnalyser = shallowRef<AnalyserNode | null>(null)
+  /**
+   * 本地采集链路：麦 → Web Audio（分析 + 门限增益）→ 合成输出轨 → 发布给 LiveKit。
+   *
+   * 为什么不直接 mute LiveKit 的本地音轨来做门限：
+   * livekit-client 的 `LocalAudioTrack.mute()` 会 `stop()` / 禁用底层 MediaStreamTrack，
+   * 而门限恰恰要靠读这条音轨的音量来决定何时恢复——一旦静音就再也测不到声音，
+   * 麦克风永远不会解开（表现：**没有声音 + 音量环恒为 0**）。改在增益节点上门限后，
+   * 采集轨始终存活、音量环正常，静音期靠 Opus 的 DTX 不发包。
+   */
+  interface MicGraph {
+    stream: MediaStream
+    source: MediaStreamAudioSourceNode
+    analyser: AnalyserNode
+    gate: GainNode
+    dest: MediaStreamAudioDestinationNode
+    track: MediaStreamTrack
+  }
+
+  const micGraph = shallowRef<MicGraph | null>(null)
+  let publishedTrack: MediaStreamTrack | null = null
   let localTimer: number | null = null
   let silenceSince = 0
   let voiceSince = 0
-  let gatedMuted = false
+  let gateOpen = false
 
   const currentThreshold = computed(() =>
     micChannel.value === 'blue' ? micThresholdBlue.value : micThresholdPublic.value
@@ -143,34 +161,73 @@ function createVoiceChannel() {
       window.clearInterval(localTimer)
       localTimer = null
     }
-    localAnalyser.value = null
     localLevel.value = 0
-    gatedMuted = false
+    voiceSince = 0
+    silenceSince = 0
   }
 
-  function startLocalMeter() {
+  /** 释放麦克风采集链路（闭麦 / 离开房间时调用，关掉系统录音指示灯） */
+  function releaseMicGraph() {
     stopLocalMeter()
-    const r = room.value
-    const pub = r?.localParticipant.getTrackPublication(Track.Source.Microphone)
-    const mediaTrack = pub?.track?.mediaStreamTrack
-    if (!mediaTrack) return
+    const graph = micGraph.value
+    if (!graph) return
+    try {
+      graph.source.disconnect()
+      graph.analyser.disconnect()
+      graph.gate.disconnect()
+    } catch { /* 忽略 */ }
+    graph.stream.getTracks().forEach((track) => track.stop())
+    micGraph.value = null
+    gateOpen = false
+  }
+
+  async function ensureMicGraph(): Promise<MicGraph | null> {
+    if (micGraph.value) return micGraph.value
     const ctx = ensureAudioContext()
-    if (!ctx) return
-    const source = ctx.createMediaStreamSource(new MediaStream([mediaTrack]))
+    if (!ctx) return null
+
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
+    } catch (error) {
+      console.warn('[语音] 无法获取麦克风：', error)
+      throw new Error('无法获取麦克风，请检查浏览器权限与系统麦克风设置')
+    }
+
+    const source = ctx.createMediaStreamSource(stream)
     const analyser = ctx.createAnalyser()
     analyser.fftSize = 1024
-    source.connect(analyser)
-    localAnalyser.value = analyser
+    const gate = ctx.createGain()
+    gate.gain.value = 0 // 先关闸，等门限判断
+    const dest = ctx.createMediaStreamDestination()
+    source.connect(analyser) // 分析原始音量（不受门限影响）
+    source.connect(gate)
+    gate.connect(dest)
 
-    const buffer = new Uint8Array(analyser.fftSize)
+    const graph: MicGraph = { stream, source, analyser, gate, dest, track: dest.stream.getAudioTracks()[0] }
+    micGraph.value = graph
+    // AudioContext 处于 suspended 时整条链路都是静音，进房间后的第一次点击必须把它唤醒
+    if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined)
+    return graph
+  }
+
+  /** 门限主循环：读数 → 起音 150ms 开闸 / 释音 300ms 关闸 */
+  function startLocalMeter(graph: MicGraph) {
+    stopLocalMeter()
+    const ctx = ensureAudioContext()
+    if (!ctx) return
+    const buffer = new Uint8Array(graph.analyser.fftSize)
     const now = () => performance.now()
     voiceSince = 0
-    silenceSince = now()
+    silenceSince = 0
+    gateOpen = false
+    graph.gate.gain.setValueAtTime(0, ctx.currentTime)
 
     localTimer = window.setInterval(() => {
-      const node = localAnalyser.value
-      const track = room.value?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track
-      if (!node || !track) return
+      const node = micGraph.value?.analyser
+      if (!node) return
       node.getByteTimeDomainData(buffer)
       let sum = 0
       for (let i = 0; i < buffer.length; i += 1) {
@@ -185,18 +242,16 @@ function createVoiceChannel() {
       if (rms >= threshold) {
         voiceSince = voiceSince || t
         silenceSince = 0
-        // 起音迟滞 150ms：避免刚开口的前几个字被切掉
-        if (t - voiceSince >= 150 && gatedMuted) {
-          gatedMuted = false
-          track.unmute().catch(() => undefined)
+        if (!gateOpen && t - voiceSince >= 150) {
+          gateOpen = true
+          graph.gate.gain.setTargetAtTime(1, ctx.currentTime, 0.01)
         }
       } else {
         voiceSince = 0
         silenceSince = silenceSince || t
-        // 释音迟滞 300ms：避免句尾被切
-        if (t - silenceSince >= 300 && !gatedMuted) {
-          gatedMuted = true
-          track.mute().catch(() => undefined)
+        if (gateOpen && t - silenceSince >= 300) {
+          gateOpen = false
+          graph.gate.gain.setTargetAtTime(0, ctx.currentTime, 0.01)
         }
       }
     }, 60)
@@ -204,33 +259,35 @@ function createVoiceChannel() {
 
   /* ---------- 发布 ---------- */
 
-  async function unpublishMic() {
-    const r = room.value
-    if (!r) return
+  async function unpublishMic(keepCapture = true) {
     stopLocalMeter()
-    await r.localParticipant.setMicrophoneEnabled(false).catch(() => undefined)
+    const r = room.value
+    if (r && publishedTrack) {
+      await r.localParticipant.unpublishTrack(publishedTrack, false).catch(() => undefined)
+    }
+    publishedTrack = null
+    if (!keepCapture) releaseMicGraph()
   }
 
   async function publishMic(channel: VoiceMicChannel) {
     const r = room.value
-    if (!r || channel === 'muted') {
-      await unpublishMic()
+    if (!r) return
+    if (channel === 'muted') {
+      await unpublishMic(false)
       return
     }
-    stopLocalMeter()
-    // 切换频道 = 换音轨名，LiveKit 不支持改名，因此先取消发布再重新发布
-    await unpublishMic()
-    await r.localParticipant.setMicrophoneEnabled(
-      true,
-      { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      {
-        name: channel === 'blue' ? TRACK_BLUE : TRACK_PUBLIC,
-        source: Track.Source.Microphone,
-        dtx: true,
-        red: true,
-      }
-    )
-    startLocalMeter()
+    const graph = await ensureMicGraph()
+    if (!graph) throw new Error('无法建立麦克风采集链路')
+    // 切换频道 = 换音轨名，LiveKit 不支持改名，因此先取消发布再重新发布（采集链路复用，不重新申请设备）
+    await unpublishMic(true)
+    publishedTrack = graph.track
+    await r.localParticipant.publishTrack(graph.track, {
+      name: channel === 'blue' ? TRACK_BLUE : TRACK_PUBLIC,
+      source: Track.Source.Microphone,
+      dtx: true,
+      red: true,
+    })
+    startLocalMeter(graph)
   }
 
   /* ---------- 远端音频 ---------- */
@@ -362,7 +419,7 @@ function createVoiceChannel() {
   }
 
   async function disconnect() {
-    await unpublishMic()
+    await unpublishMic(false)
     const r = room.value
     room.value = null
     for (const identity of [...remoteNodes.keys()]) detachRemote(identity)
