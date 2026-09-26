@@ -160,11 +160,25 @@ async function syncRoom(room: Room): Promise<void> {
     try {
         participants = await svc.listParticipants(roomName);
     } catch {
-        // 房间还不存在（没人进语音）——清掉记忆状态避免残留
-        appliedSubscriptions.clear();
+        // 房间还不存在（没人进语音）——只清掉本房间成员的记忆状态，避免影响其它房间
+        for (const member of room.members.values()) {
+            appliedSubscriptions.delete(voiceIdentity(member.userId));
+        }
         return;
     }
     if (!participants.length) return;
+
+    // 席位 / 队伍可能刚变过：先把 metadata 推给 LiveKit，前端发言栏与标签才能跟着更新
+    const liveIdentities = new Set(participants.map((p) => p.identity));
+    for (const member of room.members.values()) {
+        const identity = voiceIdentity(member.userId);
+        if (!liveIdentities.has(identity)) continue;
+        try {
+            await svc.updateParticipant(roomName, identity, { metadata: voiceMetadata(member) });
+        } catch {
+            // 个别失败不影响权限同步
+        }
+    }
 
     // 参与者的席位归属以游戏房间为准（LiveKit 侧的 metadata 只是快照）
     const seatOf = new Map<string, SeatType>();
