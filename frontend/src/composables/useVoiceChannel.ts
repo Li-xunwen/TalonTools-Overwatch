@@ -241,9 +241,11 @@ function createVoiceChannel() {
       const rms = Math.sqrt(sum / buffer.length)
       localLevel.value = rms
 
-      const threshold = Math.pow(10, currentThreshold.value / 20)
+      // 开闸按设定阈值，关闸比阈值低 6 dB——避免环境底噪正好卡在阈值上时来回开合
+      const openAt = Math.pow(10, currentThreshold.value / 20)
+      const closeAt = openAt * 0.5
       const t = now()
-      if (rms >= threshold) {
+      if (rms >= openAt || (gateOpen && rms >= closeAt)) {
         voiceSince = voiceSince || t
         silenceSince = 0
         if (!gateOpen && t - voiceSince >= 150) {
