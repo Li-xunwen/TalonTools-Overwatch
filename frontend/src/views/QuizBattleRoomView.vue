@@ -550,7 +550,10 @@
       </div>
     </div>
 
-    <!-- 设置：深色模式 / 自动播放语音 / 音量增益 -->
+    <!-- 悬浮语音组件：公共频道 / 队伍频道（右上角，默认收起为圆形） -->
+    <VoiceDock v-if="room" :room-no="roomNo" />
+
+    <!-- 设置：深色模式 / 自动播放语音 / 音量增益 / 麦克风门限 -->
     <UndercoverSettingsDialog v-if="showSettings" @close="showSettings = false" />
 
     <!-- 图片预览（项目自带的 ImageViewer） -->
@@ -605,6 +608,7 @@ import Toast from '@/components/Toast.vue'
 import UndercoverMemberSlot from '@/components/UndercoverMemberSlot.vue'
 import UndercoverUserDialog from '@/components/UndercoverUserDialog.vue'
 import UndercoverSettingsDialog from '@/components/UndercoverSettingsDialog.vue'
+import VoiceDock from '@/components/VoiceDock.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import { useRoomSettings } from '@/composables/useRoomSettings'
 import type {

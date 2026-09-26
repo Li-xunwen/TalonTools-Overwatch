@@ -507,7 +507,10 @@
       </div>
     </div>
 
-    <!-- 设置：深色模式 / 自动播放语音 / 音量增益 -->
+    <!-- 悬浮语音组件：公共频道 / 队伍频道（右上角，默认收起为圆形） -->
+    <VoiceDock v-if="room" :room-no="roomNo" />
+
+    <!-- 设置：深色模式 / 自动播放语音 / 音量增益 / 麦克风门限 -->
     <UndercoverSettingsDialog v-if="showSettings" @close="showSettings = false" />
 
     <!-- 房主强制添加成员：搜索悬浮框 -->
@@ -607,6 +610,7 @@ import UndercoverMemberSlot from '@/components/UndercoverMemberSlot.vue'
 import UndercoverUserDialog from '@/components/UndercoverUserDialog.vue'
 import UndercoverMapPicker from '@/components/UndercoverMapPicker.vue'
 import UndercoverSettingsDialog from '@/components/UndercoverSettingsDialog.vue'
+import VoiceDock from '@/components/VoiceDock.vue'
 import { useRoomSettings } from '@/composables/useRoomSettings'
 import type {
   ChatMessage,

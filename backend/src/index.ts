@@ -26,6 +26,9 @@ import {
     startFileLibraryTasks
 } from './services/fileLibrary';
 import { initUndercoverWs } from './ws/undercoverWs';
+import voiceRouter, { voiceWebhookRouter } from './routes/voice';
+import { initVoiceChannel } from './services/voiceChannel';
+import { registerVoiceRoomChangeHook } from './services/undercoverRooms';
 
 dotenv.config();
 
@@ -56,6 +59,9 @@ app.set('trust proxy', true);
 
 // 文件上传路由必须在 express.json() 之前注册，避免 multipart 被当作 JSON 解析
 app.use('/api/users', filesRouter);
+
+// 语音 webhook 要用原始请求体做签名校验，同样必须在 express.json() 之前
+app.use('/api/voice', voiceWebhookRouter);
 
 app.use(express.json());
 
@@ -147,10 +153,13 @@ app.use('/api/user', heroesRouter);
 app.use('/api/v2', dashenProfileRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/quiz', quizRouter);
+app.use('/api/voice', voiceRouter);
 
 // 用 http server 同时承载 Express 与「谁是守望先锋卧底」的 WebSocket 会话
 const server = http.createServer(app);
 initUndercoverWs(server);
+// 语音频道：把「房间状态变化 → 重算订阅权限」的挂钩注册进房间服务
+initVoiceChannel(registerVoiceRoomChangeHook);
 
 // 文件库后台任务：恢复「解析中」队列 + 定时清理中断的上传
 startFileLibraryTasks();

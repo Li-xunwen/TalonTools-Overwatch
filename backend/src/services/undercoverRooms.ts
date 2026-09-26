@@ -1120,6 +1120,13 @@ export function useItem(
     };
 }
 
+// 语音频道挂钩：房间状态变化（席位 / 队伍 / 成员）后由语音服务重算订阅权限
+let voiceRoomChangeHook: ((room: Room) => void) | null = null;
+
+export function registerVoiceRoomChangeHook(fn: (room: Room) => void): void {
+    voiceRoomChangeHook = fn;
+}
+
 // 广播一次性事件（道具动画等），不写进 state
 export function broadcastEvent(room: Room, payload: unknown): void {
     const data = JSON.stringify(payload);
@@ -1467,6 +1474,8 @@ function canSeeMessage(message: ChatMessage, userId: number): boolean {
 // 向房间内所有连接推送最新状态（每个连接带上自己的 userId；私密消息按人过滤）
 export function broadcastRoom(room: Room): void {
     const state = serializeRoom(room);
+    // 语音频道：席位 / 队伍 / 成员变化后触发订阅权限重算（内部已防抖）
+    voiceRoomChangeHook?.(room);
 
     for (const [userId, sockets] of room.sockets) {
         const payload = JSON.stringify({
