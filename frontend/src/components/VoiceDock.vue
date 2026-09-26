@@ -113,11 +113,19 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useVoiceChannel, type VoiceListenChannel, type VoiceMicChannel } from '@/composables/useVoiceChannel'
 
-const props = defineProps<{
-  roomNo: string
-  /** 连接交给父级控制（例如离开房间时传 false） */
-  enabled?: boolean
-}>()
+/**
+ * 注意：Boolean 类型的 prop 在父组件不传时，Vue 会把它转成 `false`（不是 undefined）。
+ * 所以必须显式给默认值 true，否则 `enabled === false` 永远成立、连接逻辑会被整体跳过
+ * ——这正是「组件渲染了、房间号也对，却一次都没发起连接」的原因。
+ */
+const props = withDefaults(
+  defineProps<{
+    roomNo: string
+    /** 连接交给父级控制（例如离开房间时传 false） */
+    enabled?: boolean
+  }>(),
+  { enabled: true }
+)
 
 const expanded = ref(false)
 const {
