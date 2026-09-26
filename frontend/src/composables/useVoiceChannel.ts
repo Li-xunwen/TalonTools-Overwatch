@@ -41,6 +41,8 @@ function createVoiceChannel() {
   const errorText = ref('')
   /** 断开原因（LiveKit 的 DisconnectReason），用于自检显示与排查 */
   const disconnectReason = ref('')
+  /** 自检用：connect() 被调用的次数（0 说明组件根本没触发连接） */
+  const connectAttempts = ref(0)
   const micChannel = ref<VoiceMicChannel>('muted')
   /** 当前真正发布出去的频道（用于面板上的自检显示） */
   const publishedChannel = ref<VoiceMicChannel>('muted')
@@ -413,6 +415,7 @@ function createVoiceChannel() {
   /* ---------- 连接 ---------- */
 
   async function connect(targetRoomNo: string) {
+    connectAttempts.value += 1
     if (!targetRoomNo) {
       console.warn('[语音] 房间号为空，暂不连接')
       return
@@ -532,6 +535,7 @@ function createVoiceChannel() {
     status,
     errorText,
     disconnectReason,
+    connectAttempts,
     micChannel,
     publishedChannel,
     listen,

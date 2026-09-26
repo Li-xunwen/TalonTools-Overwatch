@@ -87,6 +87,8 @@
       <!-- 自检行：连接 / 麦克风 / 实时音量，出问题时一眼能看出卡在哪一步 -->
       <div class="voice-diag" :class="status">
         <span>连接：{{ statusText }}</span>
+        <span>房间：{{ props.roomNo || '(空)' }}</span>
+        <span>尝试：{{ connectAttempts }} 次</span>
         <span>麦克风：{{ publishedText }}</span>
         <span>音量：{{ dbText }}</span>
         <span v-if="disconnectReason">断开原因：{{ disconnectReason }}</span>
@@ -122,6 +124,7 @@ const {
   status,
   errorText,
   disconnectReason,
+  connectAttempts,
   micChannel,
   publishedChannel,
   listen,
@@ -200,25 +203,23 @@ function onDocumentClick() {
   expanded.value = false
 }
 
-async function start() {
-  await connect(props.roomNo)
-}
-
+/**
+ * 连接入口直接用 immediate 的 watch：只要拿到房间号就发起连接。
+ * 真机上出现过「组件已渲染、自检显示未连接、但后端从未收到 token 请求」的情况，
+ * 说明仅靠 onMounted 触发不够可靠，这里改成 watch 立即执行 + 房间号变化时重连。
+ */
 watch(
-  () => props.roomNo,
-  async (value, old) => {
-    if (value === old) return
-    await disconnect()
-    if (value && props.enabled !== false) await start()
-  }
-)
-
-watch(
-  () => props.enabled,
-  async (value) => {
-    if (value === false) await disconnect()
-    else if (status.value === 'idle' && props.roomNo) await start()
-  }
+  [() => props.roomNo, () => props.enabled],
+  async ([roomNo, enabled], old) => {
+    const changedRoom = !old || roomNo !== old[0]
+    if (!roomNo || enabled === false) {
+      if (changedRoom) await disconnect()
+      return
+    }
+    if (changedRoom) await disconnect()
+    if (status.value === 'idle' || status.value === 'error') await connect(roomNo)
+  },
+  { immediate: true }
 )
 
 /**
@@ -244,7 +245,6 @@ function tickKeepAlive() {
 
 onMounted(async () => {
   document.addEventListener('click', onDocumentClick)
-  if (props.roomNo && props.enabled !== false) await start()
   keepAliveTimer = window.setInterval(tickKeepAlive, 4000)
 })
 
