@@ -40,6 +40,8 @@ function createVoiceChannel() {
   const status = ref<VoiceStatus>('idle')
   const errorText = ref('')
   const micChannel = ref<VoiceMicChannel>('muted')
+  /** 当前真正发布出去的频道（用于面板上的自检显示） */
+  const publishedChannel = ref<VoiceMicChannel>('muted')
   const listen = ref<Record<VoiceListenChannel, boolean>>({ public: true, blue: true })
   const localLevel = ref(0)
   const speakers = ref<VoiceSpeaker[]>([])
@@ -72,6 +74,8 @@ function createVoiceChannel() {
 
   const micGraph = shallowRef<MicGraph | null>(null)
   let publishedTrack: MediaStreamTrack | null = null
+  /** 兜底路径下用的是 LiveKit 自己创建的麦克风轨（需要用它自己的开关来取消发布） */
+  let fallbackPublished = false
   let localTimer: number | null = null
   let silenceSince = 0
   let voiceSince = 0
@@ -257,15 +261,33 @@ function createVoiceChannel() {
     }, 60)
   }
 
+  /**
+   * 兜底音量表：当 Web Audio 不可用（或 AudioContext 被浏览器挂起）时，
+   * 用 LiveKit 自己算好的 audioLevel 驱动音量环，同时以普通方式发布麦克风。
+   * 宁可门限失效也要保证有声音。
+   */
+  function startFallbackMeter() {
+    stopLocalMeter()
+    localTimer = window.setInterval(() => {
+      localLevel.value = room.value?.localParticipant.audioLevel ?? 0
+    }, 100)
+  }
+
   /* ---------- 发布 ---------- */
 
   async function unpublishMic(keepCapture = true) {
     stopLocalMeter()
     const r = room.value
-    if (r && publishedTrack) {
-      await r.localParticipant.unpublishTrack(publishedTrack, false).catch(() => undefined)
+    if (r) {
+      if (publishedTrack) {
+        await r.localParticipant.unpublishTrack(publishedTrack, false).catch(() => undefined)
+      } else if (fallbackPublished) {
+        await r.localParticipant.setMicrophoneEnabled(false).catch(() => undefined)
+      }
     }
     publishedTrack = null
+    fallbackPublished = false
+    publishedChannel.value = 'muted'
     if (!keepCapture) releaseMicGraph()
   }
 
@@ -276,18 +298,41 @@ function createVoiceChannel() {
       await unpublishMic(false)
       return
     }
-    const graph = await ensureMicGraph()
-    if (!graph) throw new Error('无法建立麦克风采集链路')
+    const trackName = channel === 'blue' ? TRACK_BLUE : TRACK_PUBLIC
+
+    let graph: MicGraph | null = null
+    try {
+      graph = await ensureMicGraph()
+    } catch (error) {
+      console.warn('[语音] Web Audio 采集链路建立失败，回退到普通麦克风发布：', error)
+      graph = null
+    }
+    const ctx = audioContext.value
+    const useGraph = Boolean(graph) && Boolean(ctx) && ctx?.state === 'running'
+
     // 切换频道 = 换音轨名，LiveKit 不支持改名，因此先取消发布再重新发布（采集链路复用，不重新申请设备）
     await unpublishMic(true)
-    publishedTrack = graph.track
-    await r.localParticipant.publishTrack(graph.track, {
-      name: channel === 'blue' ? TRACK_BLUE : TRACK_PUBLIC,
-      source: Track.Source.Microphone,
-      dtx: true,
-      red: true,
-    })
-    startLocalMeter(graph)
+
+    if (useGraph && graph) {
+      publishedTrack = graph.track
+      await r.localParticipant.publishTrack(graph.track, {
+        name: trackName,
+        source: Track.Source.Microphone,
+        dtx: true,
+        red: true,
+      })
+      startLocalMeter(graph)
+    } else {
+      // 兜底：直接发布麦克风，门限不起作用，但一定有声音
+      await r.localParticipant.setMicrophoneEnabled(
+        true,
+        { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        { name: trackName, source: Track.Source.Microphone, dtx: true, red: true }
+      )
+      fallbackPublished = true
+      startFallbackMeter()
+    }
+    publishedChannel.value = channel
   }
 
   /* ---------- 远端音频 ---------- */
@@ -459,6 +504,7 @@ function createVoiceChannel() {
     status,
     errorText,
     micChannel,
+    publishedChannel,
     listen,
     localLevel,
     speakers,

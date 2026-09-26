@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>麦克风自检 · TalonTools</title>
+<style>
+  body{margin:0;padding:24px;font:15px/1.7 -apple-system,"Segoe UI",system-ui,sans-serif;background:#12161c;color:#e6e9ee}
+  h1{font-size:17px;margin:0 0 14px}
+  button{font:inherit;padding:10px 16px;border:0;border-radius:8px;background:#2b6cff;color:#fff;cursor:pointer}
+  #bar{height:14px;background:#232a34;border-radius:7px;overflow:hidden;margin:14px 0}
+  #bar>i{display:block;height:100%;width:0;background:#5ad17a;transition:width .06s linear}
+  #out{white-space:pre-wrap;font-family:ui-monospace,Consolas,monospace;font-size:13px;color:#9aa1ab}
+  .ok{color:#5ad17a}.bad{color:#ff8a8a}.warn{color:#ffc857}
+</style>
+</head>
+<body>
+<h1>麦克风自检（与语音频道无关，只测浏览器能不能拿到麦克风）</h1>
+<button id="go">开始检测</button>
+<div id="bar"><i></i></div>
+<div id="out">点上面的按钮，浏览器会弹出麦克风授权。</div>
+<script>
+const out = document.getElementById('out')
+const bar = document.querySelector('#bar > i')
+const say = (t, cls) => { out.innerHTML += `<div class="${cls || ''}">${t}</div>` }
+
+say('页面地址：' + location.href)
+say('安全上下文：' + (window.isSecureContext ? '是（可以申请麦克风）' : '否（浏览器不会给麦克风）'), window.isSecureContext ? 'ok' : 'bad')
+say('navigator.mediaDevices：' + (navigator.mediaDevices ? '存在' : '不存在'), navigator.mediaDevices ? 'ok' : 'bad')
+
+document.getElementById('go').onclick = async () => {
+  say('正在请求麦克风…')
+  let stream
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+  } catch (e) {
+    say('失败：' + e.name + ' — ' + e.message, 'bad')
+    return
+  }
+  const track = stream.getAudioTracks()[0]
+  say('成功拿到麦克风：' + (track.label || '(未命名设备)'), 'ok')
+
+  const ctx = new (window.AudioContext || window.webkitAudioContext)()
+  await ctx.resume().catch(() => {})
+  say('AudioContext 状态：' + ctx.state, ctx.state === 'running' ? 'ok' : 'warn')
+  const source = ctx.createMediaStreamSource(stream)
+  const analyser = ctx.createAnalyser()
+  analyser.fftSize = 1024
+  source.connect(analyser)
+  const buf = new Uint8Array(analyser.fftSize)
+  setInterval(() => {
+    analyser.getByteTimeDomainData(buf)
+    let sum = 0
+    for (let i = 0; i < buf.length; i += 1) { const v = (buf[i] - 128) / 128; sum += v * v }
+    const rms = Math.sqrt(sum / buf.length)
+    bar.style.width = Math.min(100, rms * 400) + '%'
+    out.querySelector('#lvl')?.remove()
+    const line = document.createElement('div')
+    line.id = 'lvl'
+    line.textContent = '实时音量：' + (rms ? (20 * Math.log10(rms)).toFixed(1) + ' dB' : '静音')
+    out.appendChild(line)
+  }, 100)
+}
+</script>
+</body>
+</html>
