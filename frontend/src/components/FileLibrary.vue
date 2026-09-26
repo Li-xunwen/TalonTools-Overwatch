@@ -618,6 +618,8 @@ async function uploadOneFile(file: File) {
   const initRes = await api('/api/users/files/upload/init', {
     method: 'POST',
     body: JSON.stringify({
+      // 带上原始文件名：后端用它决定显示名（含中文就用文件名，否则用「图片1 / 音频1」这种默认名）
+      name: file.name,
       size: file.size,
       ext,
       mime: file.type,

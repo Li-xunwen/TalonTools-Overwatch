@@ -206,6 +206,52 @@ export async function allocateDefaultName(userId: number, ext: string): Promise<
 }
 
 /* =========================
+   上传命名策略：原始文件名含中文就沿用它
+========================= */
+
+const DISPLAY_NAME_MAX = 60;
+// 中日韩文字：只要文件名里出现这类字符就认为「是用户自己取的名字」
+const CJK_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/;
+
+/** 把上传时的原始文件名整理成可用的显示名（去扩展名、去路径、去非法字符） */
+export function sanitizeDisplayName(originalName: string, ext: string): string {
+    let base = String(originalName ?? '').trim();
+    const lowerExt = String(ext ?? '').toLowerCase();
+    if (lowerExt && base.toLowerCase().endsWith(lowerExt)) {
+        base = base.slice(0, -lowerExt.length);
+    }
+    // 少数浏览器会带上路径，只取最后一段
+    base = base.split(/[\\/]/).pop() ?? base;
+    // 显示名会出现在 URL 里，去掉会破坏链接的字符
+    base = base.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').trim();
+    return base.slice(0, DISPLAY_NAME_MAX);
+}
+
+// 同名时依次尝试「原名」「原名2」「原名3」…，都占满则返回空串
+async function ensureUniqueName(userId: number, base: string): Promise<string> {
+    for (let index = 1; index <= 50; index += 1) {
+        const candidate = index === 1 ? base : `${base}${index}`;
+        const occupied = await getUserFile(userId, candidate);
+        if (!occupied) return candidate;
+    }
+    return '';
+}
+
+/**
+ * 上传时的显示名：
+ *   原始文件名含中文（CJK）→ 用文件名（去掉扩展名、重名自动加序号）
+ *   否则 → 「图片N / 视频N / 音频N / 文件N」
+ */
+export async function resolveUploadName(userId: number, originalName: string, ext: string): Promise<string> {
+    const candidate = sanitizeDisplayName(originalName, ext);
+    if (candidate && CJK_RE.test(candidate)) {
+        const unique = await ensureUniqueName(userId, candidate);
+        if (unique) return unique;
+    }
+    return allocateDefaultName(userId, ext);
+}
+
+/* =========================
    条目创建 / 修改 / 删除
 ========================= */
 

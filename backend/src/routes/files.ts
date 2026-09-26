@@ -21,6 +21,7 @@ import {
     listUserFiles,
     normalizeExt,
     renameUserFile,
+    resolveUploadName,
     saveChunk
 } from '../services/fileLibrary';
 
@@ -108,7 +109,8 @@ router.post(
                 }
             }
 
-            const name = String(body.name ?? '').trim() || (await allocateDefaultName(userId, ext));
+            // 命名策略：原始文件名含中文就沿用（见 resolveUploadName），否则用「图片1 / 视频1 / 音频1 / 文件1」
+            const name = await resolveUploadName(userId, String(body.name ?? ''), ext);
             const session = await createUploadSession({
                 userId,
                 name,
@@ -271,7 +273,7 @@ router.post(
             const created: UserFileRow[] = [];
             for (const file of incoming) {
                 const ext = normalizeExt(file.originalname);
-                const name = await allocateDefaultName(userId, ext);
+                const name = await resolveUploadName(userId, file.originalname, ext);
                 const row = await createParsingFile({
                     userId,
                     name,
