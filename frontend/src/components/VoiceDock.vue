@@ -6,7 +6,7 @@
       class="voice-orb"
       :class="orbClass"
       :title="orbTitle"
-      @click.stop="expanded = true"
+      @click.stop="onOrbClick"
     >
       <span class="orb-ring" :style="ringStyle"></span>
       <svg v-if="micChannel === 'muted'" class="orb-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -64,7 +64,7 @@
           class="speaker-arc public"
           :class="{ off: !listen.public }"
           :title="listen.public ? '正在监听公共频道，点击静音' : '已静音公共频道，点击恢复'"
-          @click="toggleListen('public')"
+          @click="onToggleListen('public')"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 14a8 8 0 0 1 16 0" />
@@ -75,7 +75,7 @@
           class="speaker-arc blue"
           :class="{ off: !listen.blue }"
           :title="listen.blue ? '正在监听队伍频道，点击静音' : '已静音队伍频道，点击恢复'"
-          @click="toggleListen('blue')"
+          @click="onToggleListen('blue')"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 14a8 8 0 0 1 16 0" />
@@ -101,7 +101,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useVoiceChannel, type VoiceMicChannel } from '@/composables/useVoiceChannel'
+import { useVoiceChannel, type VoiceListenChannel, type VoiceMicChannel } from '@/composables/useVoiceChannel'
 
 const props = defineProps<{
   roomNo: string
@@ -121,6 +121,7 @@ const {
   disconnect,
   setMicChannel,
   toggleListen,
+  resumeAudio,
 } = useVoiceChannel()
 
 const visibleSpeakers = computed(() => speakers.value.slice(0, 6))
@@ -148,8 +149,20 @@ const ringStyle = computed(() => {
 
 /** 选中挡位后自动收起（用户确认的行为） */
 async function pickChannel(channel: VoiceMicChannel) {
+  // 点击属于用户手势：先把被自动播放策略挂起的音频放出来
+  await resumeAudio()
   await setMicChannel(channel)
   expanded.value = false
+}
+
+async function onOrbClick() {
+  await resumeAudio()
+  expanded.value = true
+}
+
+async function onToggleListen(channel: VoiceListenChannel) {
+  await resumeAudio()
+  toggleListen(channel)
 }
 
 function onDocumentClick() {

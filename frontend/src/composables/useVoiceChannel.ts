@@ -50,7 +50,7 @@ function createVoiceChannel() {
 
   // 远端音频：每个身份一个 MediaStreamAudioSource → GainNode（音量增益可超过 100%）
   const audioContext = shallowRef<AudioContext | null>(null)
-  const remoteNodes = new Map<string, { el: HTMLAudioElement; gain: GainNode }>()
+  const remoteNodes = new Map<string, { el: HTMLAudioElement; gain: GainNode | null; wired: boolean }>()
 
   // 本地门限：Analyser 取样 + 起音/释音迟滞
   const localAnalyser = shallowRef<AnalyserNode | null>(null)
@@ -235,26 +235,42 @@ function createVoiceChannel() {
 
   /* ---------- 远端音频 ---------- */
 
+  /**
+   * 只有「音量增益 > 100%」才把音频接进 Web Audio（那才能放大到 1 倍以上）。
+   * 平时直接走 <audio> 元素播放——之前无条件走 Web Audio，一旦 AudioContext 处于
+   * suspended（浏览器自动播放策略），整条链路就是静音，这是「没有声音」的元凶。
+   */
+  function wireGain(node: { el: HTMLAudioElement; gain: GainNode | null; wired: boolean }, value: number) {
+    if (node.wired || value <= 1) return
+    const ctx = ensureAudioContext()
+    if (!ctx) return
+    try {
+      const source = ctx.createMediaElementSource(node.el)
+      const gain = ctx.createGain()
+      gain.gain.value = value
+      source.connect(gain).connect(ctx.destination)
+      node.gain = gain
+      node.wired = true
+    } catch {
+      // 已经接过 Web Audio 或浏览器拒绝，退回元素音量
+      node.gain = null
+    }
+  }
+
   function attachRemote(participant: Participant, track: RemoteTrack) {
     const el = track.attach() as HTMLAudioElement
     el.autoplay = true
     el.style.display = 'none'
     document.body.appendChild(el)
-    const ctx = ensureAudioContext()
-    let gain: GainNode | null = null
-    if (ctx) {
-      try {
-        const source = ctx.createMediaElementSource(el)
-        gain = ctx.createGain()
-        gain.gain.value = gainValue()
-        source.connect(gain).connect(ctx.destination)
-      } catch {
-        gain = null
-      }
-    }
-    if (!gain) el.volume = Math.min(1, gainValue())
-    remoteNodes.set(participant.identity, { el, gain: gain as GainNode })
-    el.play().catch(() => undefined)
+    const node = { el, gain: null as GainNode | null, wired: false }
+    const value = gainValue()
+    if (value > 1) wireGain(node, value)
+    if (!node.wired) el.volume = Math.min(1, value)
+    remoteNodes.set(participant.identity, node)
+    el.play().catch(() => {
+      // 被自动播放策略拦下：等下一次用户手势（点悬浮球、点挡位）再放
+      pendingPlayback = true
+    })
   }
 
   function detachRemote(identity: string) {
@@ -266,6 +282,20 @@ function createVoiceChannel() {
       node.el.remove()
     } catch { /* 忽略 */ }
     remoteNodes.delete(identity)
+  }
+
+  // 浏览器自动播放策略：首次用户手势后恢复 AudioContext 与远端音频播放
+  let pendingPlayback = false
+
+  async function resumeAudio() {
+    const ctx = audioContext.value
+    if (ctx && ctx.state === 'suspended') await ctx.resume().catch(() => undefined)
+    const r = room.value
+    if (r && !r.canPlaybackAudio) await r.startAudio().catch(() => undefined)
+    if (pendingPlayback) {
+      pendingPlayback = false
+      for (const node of remoteNodes.values()) node.el.play().catch(() => undefined)
+    }
   }
 
   /* ---------- 连接 ---------- */
@@ -295,6 +325,8 @@ function createVoiceChannel() {
 
       r.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
         if (track.kind === Track.Kind.Audio) attachRemote(participant, track)
+        // 服务端授权后仍要尊重本地的「不监听该频道」偏好
+        applyListenPreferences()
       })
       r.on(RoomEvent.TrackUnsubscribed, (_track, _pub, participant) => detachRemote(participant.identity))
       r.on(RoomEvent.ParticipantDisconnected, (participant) => {
@@ -324,6 +356,7 @@ function createVoiceChannel() {
     } catch (error) {
       status.value = 'error'
       errorText.value = error instanceof Error ? error.message : String(error)
+      console.warn('[语音] 连接失败：', errorText.value)
       room.value = null
     }
   }
@@ -359,6 +392,7 @@ function createVoiceChannel() {
   watch(voiceVolume, () => {
     const value = gainValue()
     for (const node of remoteNodes.values()) {
+      if (!node.wired && value > 1) wireGain(node, value)
       if (node.gain) node.gain.gain.value = value
       else node.el.volume = Math.min(1, value)
     }
@@ -377,6 +411,7 @@ function createVoiceChannel() {
     setMicChannel,
     cycleMicChannel,
     toggleListen,
+    resumeAudio,
   }
 }
 

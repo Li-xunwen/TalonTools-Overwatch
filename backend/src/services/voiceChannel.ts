@@ -137,8 +137,15 @@ function canListen(listenerSeat: SeatType, publisherSeat: SeatType, trackName: s
     return false;
 }
 
-/** 已下发的订阅状态：listenerIdentity -> 已允许订阅的 trackSid 集合 */
-const appliedSubscriptions = new Map<string, Set<string>>();
+/**
+ * 已被服务端明确「禁止订阅」的音轨：listenerIdentity -> trackSid 集合。
+ *
+ * 为什么要记「禁止」而不是「允许」：LiveKit 的默认行为是参与者加入后
+ * **自动订阅房间内所有音轨**。所以真正需要下发的是撤销动作——不记这一层的话，
+ * 敌方用户会一直听得到队伍频道，隐私就形同虚设。反过来，允许集合不需要记录，
+ * 因为「本来就该能听」的音轨不动它，才能保留客户端自己的「不监听该频道」偏好。
+ */
+const deniedSubscriptions = new Map<string, Set<string>>();
 
 /** 待同步的房间（mode + roomNo） */
 const pendingSync = new Set<string>();
@@ -162,7 +169,7 @@ async function syncRoom(room: Room): Promise<void> {
     } catch {
         // 房间还不存在（没人进语音）——只清掉本房间成员的记忆状态，避免影响其它房间
         for (const member of room.members.values()) {
-            appliedSubscriptions.delete(voiceIdentity(member.userId));
+            deniedSubscriptions.delete(voiceIdentity(member.userId));
         }
         return;
     }
@@ -201,16 +208,19 @@ async function syncRoom(room: Room): Promise<void> {
         if (!listenerSeat) continue; // 不在游戏房间名单里（已退出），交给 LiveKit 断开
 
         const desired = new Set<string>();
+        const allRemote = new Set<string>();
         for (const track of tracks) {
             if (track.publisherIdentity === listener.identity) continue;
             const publisherSeat = seatOf.get(track.publisherIdentity);
             if (!publisherSeat) continue;
+            allRemote.add(track.sid);
             if (canListen(listenerSeat, publisherSeat, track.name)) desired.add(track.sid);
         }
 
-        const applied = appliedSubscriptions.get(listener.identity) ?? new Set<string>();
-        const toSubscribe = [...desired].filter((sid) => !applied.has(sid));
-        const toUnsubscribe = [...applied].filter((sid) => !desired.has(sid));
+        // 清掉已经消失的音轨（取消发布 / 对端离开）
+        const denied = new Set([...(deniedSubscriptions.get(listener.identity) ?? [])].filter((sid) => allRemote.has(sid)));
+        const toSubscribe = [...desired].filter((sid) => denied.has(sid));
+        const toUnsubscribe = [...allRemote].filter((sid) => !desired.has(sid) && !denied.has(sid));
 
         try {
             if (toSubscribe.length) await svc.updateSubscriptions(roomName, listener.identity, toSubscribe, true);
@@ -219,7 +229,9 @@ async function syncRoom(room: Room): Promise<void> {
             console.error('[语音] 更新订阅权限失败', listener.identity, error);
             continue;
         }
-        appliedSubscriptions.set(listener.identity, desired);
+        for (const sid of toSubscribe) denied.delete(sid);
+        for (const sid of toUnsubscribe) denied.add(sid);
+        deniedSubscriptions.set(listener.identity, denied);
     }
 }
 
