@@ -39,6 +39,8 @@ function createVoiceChannel() {
 
   const status = ref<VoiceStatus>('idle')
   const errorText = ref('')
+  /** 断开原因（LiveKit 的 DisconnectReason），用于自检显示与排查 */
+  const disconnectReason = ref('')
   const micChannel = ref<VoiceMicChannel>('muted')
   /** 当前真正发布出去的频道（用于面板上的自检显示） */
   const publishedChannel = ref<VoiceMicChannel>('muted')
@@ -49,6 +51,12 @@ function createVoiceChannel() {
 
   const room = shallowRef<Room | null>(null)
   const roomNo = ref('')
+  /**
+   * 会话代号：每次连接/断开都会 +1。
+   * 用来丢弃「迟到的旧操作」——例如组件重挂载时，旧实例的 disconnect() 晚于
+   * 新实例的 connect() 返回，会把状态错误地改回「未连接」。
+   */
+  let sessionSeq = 0
 
   // 远端音频：每个身份一个 MediaStreamAudioSource → GainNode（音量增益可超过 100%）
   const audioContext = shallowRef<AudioContext | null>(null)
@@ -405,11 +413,17 @@ function createVoiceChannel() {
   /* ---------- 连接 ---------- */
 
   async function connect(targetRoomNo: string) {
-    if (!targetRoomNo) return
+    if (!targetRoomNo) {
+      console.warn('[语音] 房间号为空，暂不连接')
+      return
+    }
     if (status.value === 'connecting' || status.value === 'connected') return
     roomNo.value = targetRoomNo
     status.value = 'connecting'
     errorText.value = ''
+    disconnectReason.value = ''
+    const seq = ++sessionSeq
+    console.info('[语音] 开始连接房间', targetRoomNo)
 
     try {
       const authToken = localStorage.getItem('authToken') ?? ''
@@ -423,6 +437,7 @@ function createVoiceChannel() {
         throw new Error(data.error || `获取语音 token 失败（${res.status}）`)
       }
       const data = await res.json()
+      console.info('[语音] 拿到 token，信令地址：', data.url)
 
       const r = new Room({ adaptiveStream: false, dynacast: false })
       room.value = r
@@ -441,7 +456,10 @@ function createVoiceChannel() {
       r.on(RoomEvent.TrackUnpublished, () => { applyListenPreferences(); refreshSpeakers() })
       r.on(RoomEvent.ActiveSpeakersChanged, (list) => refreshSpeakers(list))
       r.on(RoomEvent.ParticipantMetadataChanged, () => { applyListenPreferences(); refreshSpeakers() })
-      r.on(RoomEvent.Disconnected, () => {
+      r.on(RoomEvent.Disconnected, (reason?: unknown) => {
+        if (seq !== sessionSeq) return // 旧连接的断开事件，忽略
+        disconnectReason.value = reason === undefined || reason === null ? '未知' : String(reason)
+        console.warn('[语音] 连接已断开，原因：', disconnectReason.value)
         status.value = 'idle'
         safeToPublish.value = false
         stopLocalMeter()
@@ -452,7 +470,13 @@ function createVoiceChannel() {
       })
 
       await r.connect(data.url, data.token)
+      if (seq !== sessionSeq) {
+        // 期间已经被断开或重新连接，丢弃这次结果
+        await r.disconnect().catch(() => undefined)
+        return
+      }
       status.value = 'connected'
+      console.info('[语音] 已连接，身份：', r.localParticipant.identity)
       safeToPublish.value = r.canPlaybackAudio
       ensureAudioContext()
       applyListenPreferences()
@@ -466,11 +490,13 @@ function createVoiceChannel() {
   }
 
   async function disconnect() {
+    const seq = ++sessionSeq
     await unpublishMic(false)
     const r = room.value
     room.value = null
     for (const identity of [...remoteNodes.keys()]) detachRemote(identity)
     if (r) await r.disconnect().catch(() => undefined)
+    if (seq !== sessionSeq) return // 期间已经重新连接，不要覆盖新会话的状态
     status.value = 'idle'
     speakers.value = []
   }
@@ -505,6 +531,7 @@ function createVoiceChannel() {
   return {
     status,
     errorText,
+    disconnectReason,
     micChannel,
     publishedChannel,
     listen,

@@ -89,6 +89,7 @@
         <span>连接：{{ statusText }}</span>
         <span>麦克风：{{ publishedText }}</span>
         <span>音量：{{ dbText }}</span>
+        <span v-if="disconnectReason">断开原因：{{ disconnectReason }}</span>
       </div>
       <p v-if="status === 'error'" class="voice-error">{{ errorText }}</p>
     </div>
@@ -120,6 +121,7 @@ const expanded = ref(false)
 const {
   status,
   errorText,
+  disconnectReason,
   micChannel,
   publishedChannel,
   listen,
@@ -219,13 +221,39 @@ watch(
   }
 )
 
+/**
+ * 保活重连：只要还在这间房里、状态却是「未连接 / 失败」，就自动重试。
+ * 真机联调时出现过「进房后组件是 idle、既不连接也不报错」的情况，
+ * 这里让它可以自愈，不必依赖用户手动刷新。
+ */
+let keepAliveTimer: number | null = null
+let idleTicks = 0
+
+function tickKeepAlive() {
+  if (props.enabled === false || !props.roomNo) return
+  idleTicks += 1
+  if (status.value === 'idle') {
+    idleTicks = 0
+    void connect(props.roomNo)
+  } else if (status.value === 'error' && idleTicks >= 4) {
+    // 报错时放慢重试（约 16 秒一次），避免刷接口
+    idleTicks = 0
+    void connect(props.roomNo)
+  }
+}
+
 onMounted(async () => {
   document.addEventListener('click', onDocumentClick)
   if (props.roomNo && props.enabled !== false) await start()
+  keepAliveTimer = window.setInterval(tickKeepAlive, 4000)
 })
 
 onBeforeUnmount(async () => {
   document.removeEventListener('click', onDocumentClick)
+  if (keepAliveTimer !== null) {
+    window.clearInterval(keepAliveTimer)
+    keepAliveTimer = null
+  }
   await disconnect()
 })
 </script>
