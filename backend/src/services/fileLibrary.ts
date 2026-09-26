@@ -28,11 +28,13 @@ const HASH_CONCURRENCY = 2;
 // 巡检间隔
 const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 
-export type FileType = 'image' | 'video' | 'other';
+export type FileType = 'image' | 'video' | 'audio' | 'other';
 export type FileStatus = 'parsing' | 'ready' | 'failed';
 
 const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.avif', '.ico'];
 const VIDEO_EXTS = ['.mp4', '.webm', '.ogv', '.mov', '.avi', '.mkv', '.m4v'];
+// 音频：mp3 / wav 为主，另含常见的几种无损与容器格式
+const AUDIO_EXTS = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.oga', '.opus', '.flac', '.wma', '.amr'];
 
 export interface UserFileRow {
     id: number;
@@ -67,6 +69,7 @@ export function fileTypeOf(ext: string): FileType {
     const lower = ext.toLowerCase();
     if (IMAGE_EXTS.includes(lower)) return 'image';
     if (VIDEO_EXTS.includes(lower)) return 'video';
+    if (AUDIO_EXTS.includes(lower)) return 'audio';
     return 'other';
 }
 
@@ -85,11 +88,12 @@ export function normalizeExt(nameOrExt: string): string {
     return /^[a-z0-9]{1,5}$/.test(lower) ? `.${lower}` : '';
 }
 
-// 显示名默认前缀：图片 / 视频 / 文件
+// 显示名默认前缀：图片 / 视频 / 音频 / 文件
 function defaultNamePrefix(ext: string): string {
     const type = fileTypeOf(ext);
     if (type === 'image') return '图片';
     if (type === 'video') return '视频';
+    if (type === 'audio') return '音频';
     return '文件';
 }
 

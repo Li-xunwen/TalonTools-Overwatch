@@ -84,15 +84,6 @@
         </button>
       </div>
 
-      <!-- 自检行：连接 / 麦克风 / 实时音量，出问题时一眼能看出卡在哪一步 -->
-      <div class="voice-diag" :class="status">
-        <span>连接：{{ statusText }}</span>
-        <span>房间：{{ props.roomNo || '(空)' }}</span>
-        <span>尝试：{{ connectAttempts }} 次</span>
-        <span>麦克风：{{ publishedText }}</span>
-        <span>音量：{{ dbText }}</span>
-        <span v-if="disconnectReason">断开原因：{{ disconnectReason }}</span>
-      </div>
       <p v-if="status === 'error'" class="voice-error">{{ errorText }}</p>
     </div>
 
@@ -131,10 +122,7 @@ const expanded = ref(false)
 const {
   status,
   errorText,
-  disconnectReason,
-  connectAttempts,
   micChannel,
-  publishedChannel,
   listen,
   localLevel,
   speakers,
@@ -146,27 +134,6 @@ const {
 } = useVoiceChannel()
 
 const visibleSpeakers = computed(() => speakers.value.slice(0, 6))
-
-const statusText = computed(() => {
-  switch (status.value) {
-    case 'connected': return '已连接'
-    case 'connecting': return '连接中…'
-    case 'error': return '失败'
-    default: return '未连接'
-  }
-})
-
-const publishedText = computed(() => {
-  if (publishedChannel.value === 'public') return '公共麦已开'
-  if (publishedChannel.value === 'blue') return '队伍麦已开'
-  return '未开启'
-})
-
-const dbText = computed(() => {
-  const level = localLevel.value
-  if (!level) return '—'
-  return `${Math.round(20 * Math.log10(level))} dB`
-})
 
 const orbClass = computed(() => ({
   'ch-public': micChannel.value === 'public',
@@ -479,28 +446,6 @@ onBeforeUnmount(async () => {
   max-width: 148px;
   font-size: 10px;
   line-height: 1.4;
-  color: #ff8a8a;
-}
-
-/* 自检行 */
-.voice-diag {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  max-width: 160px;
-  margin-top: 2px;
-  padding-top: 4px;
-  border-top: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
-  font-size: 10px;
-  line-height: 1.3;
-  color: var(--text-secondary, #9aa1ab);
-}
-
-.voice-diag.connected {
-  color: #5ad17a;
-}
-
-.voice-diag.error {
   color: #ff8a8a;
 }
 

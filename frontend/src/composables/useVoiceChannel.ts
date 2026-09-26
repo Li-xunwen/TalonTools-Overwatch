@@ -41,8 +41,6 @@ function createVoiceChannel() {
   const errorText = ref('')
   /** 断开原因（LiveKit 的 DisconnectReason），用于自检显示与排查 */
   const disconnectReason = ref('')
-  /** 自检用：connect() 被调用的次数（0 说明组件根本没触发连接） */
-  const connectAttempts = ref(0)
   const micChannel = ref<VoiceMicChannel>('muted')
   /** 当前真正发布出去的频道（用于面板上的自检显示） */
   const publishedChannel = ref<VoiceMicChannel>('muted')
@@ -415,9 +413,7 @@ function createVoiceChannel() {
   /* ---------- 连接 ---------- */
 
   async function connect(targetRoomNo: string) {
-    connectAttempts.value += 1
     if (!targetRoomNo) {
-      console.warn('[语音] 房间号为空，暂不连接')
       return
     }
     if (status.value === 'connecting' || status.value === 'connected') return
@@ -426,7 +422,6 @@ function createVoiceChannel() {
     errorText.value = ''
     disconnectReason.value = ''
     const seq = ++sessionSeq
-    console.info('[语音] 开始连接房间', targetRoomNo)
 
     try {
       const authToken = localStorage.getItem('authToken') ?? ''
@@ -440,7 +435,6 @@ function createVoiceChannel() {
         throw new Error(data.error || `获取语音 token 失败（${res.status}）`)
       }
       const data = await res.json()
-      console.info('[语音] 拿到 token，信令地址：', data.url)
 
       const r = new Room({ adaptiveStream: false, dynacast: false })
       room.value = r
@@ -479,7 +473,6 @@ function createVoiceChannel() {
         return
       }
       status.value = 'connected'
-      console.info('[语音] 已连接，身份：', r.localParticipant.identity)
       safeToPublish.value = r.canPlaybackAudio
       ensureAudioContext()
       applyListenPreferences()
@@ -535,7 +528,6 @@ function createVoiceChannel() {
     status,
     errorText,
     disconnectReason,
-    connectAttempts,
     micChannel,
     publishedChannel,
     listen,

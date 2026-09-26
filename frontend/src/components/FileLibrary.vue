@@ -45,7 +45,7 @@
         <button class="fl-privacy-btn" @click="showPrivacy = !showPrivacy" :class="{ active: showPrivacy }">❕</button>
         <!-- 隐私提示内容 -->
         <div v-if="showPrivacy" class="fl-privacy-notice">
-          <p>🔒 你上传的文件仅你自己可见。上传的图片和视频可用于文章编辑，文件会保存在服务器上。</p>
+          <p>🔒 你上传的文件仅你自己可见。上传的图片、视频与音频可用于文章与题库编辑，文件会保存在服务器上。</p>
           <p>请勿上传违反法律法规的内容，本站保留删除违规文件的权利。</p>
         </div>
         <div v-if="loading" class="fl-loading">加载中...</div>
@@ -63,7 +63,7 @@
               selected: multiSelect ? multiSelectedKeys.has(f.name) : selectedFile === f.name,
               'multi-sel': multiSelectedKeys.has(f.name)
             }]"
-            @click="multiSelect ? toggleMultiSelect(f) : selectFile(f)"
+            @click="multiSelect ? toggleMultiSelect(f) : onItemClick(f)"
             @dblclick="multiSelect ? null : runFileAction(f)"
           >
             <!-- 多选编号角标 -->
@@ -80,6 +80,11 @@
             <div v-else-if="f.type === 'video'" class="fl-thumb fl-video-thumb">
               <video :src="f.url" preload="metadata" muted></video>
               <span class="fl-play-icon">play</span>
+            </div>
+            <!-- 音频：点击缩略图即在本页试听（不打开外部播放器） -->
+            <div v-else-if="f.type === 'audio'" class="fl-thumb fl-audio-thumb">
+              <span class="fl-audio-note">♪</span>
+              <span class="fl-audio-btn">{{ playingAudio === f.name ? '❚❚' : '▶' }}</span>
             </div>
             <div v-else class="fl-thumb fl-other-icon">
               <span class="fl-icon-text">FILE</span>
@@ -111,6 +116,8 @@
         </div>
 
       </div>
+      <!-- 音频试听用的播放器（隐藏，由缩略图点击控制） -->
+      <audio ref="audioRef" class="fl-audio-el" @ended="playingAudio = ''"></audio>
     </div>
   </div>
 </template>
@@ -220,7 +227,10 @@ onMounted(async () => {
   loading.value = false;
 });
 
-onUnmounted(stopParsingPoll);
+onUnmounted(() => {
+  stopParsingPoll();
+  stopAudioPreview();
+});
 
 function isParsing(f: FileItem): boolean {
   return f.status === 'parsing';
@@ -232,6 +242,48 @@ function selectFile(f: FileItem) {
     return;
   }
   selectedFile.value = selectedFile.value === f.name ? '' : f.name;
+}
+
+/* ---------- 音频试听 ---------- */
+const audioRef = ref<HTMLAudioElement | null>(null);
+// 正在试听的音频文件名（空串表示没有在播）
+const playingAudio = ref('');
+
+function onItemClick(f: FileItem) {
+  selectFile(f);
+  // 音频：点缩略图直接试听 / 再点暂停
+  if (f.type === 'audio') toggleAudioPreview(f);
+}
+
+function toggleAudioPreview(f: FileItem) {
+  if (isParsing(f)) {
+    alert('文件正在解析中，请稍候');
+    return;
+  }
+  const el = audioRef.value;
+  if (!el) return;
+  if (playingAudio.value === f.name) {
+    el.pause();
+    playingAudio.value = '';
+    return;
+  }
+  if (!f.url) {
+    alert('该音频暂不可播放');
+    return;
+  }
+  el.src = f.url;
+  el.currentTime = 0;
+  el.play()
+    .then(() => { playingAudio.value = f.name; })
+    .catch(() => {
+      playingAudio.value = '';
+      alert('无法播放该音频（浏览器不支持该格式或文件已损坏）');
+    });
+}
+
+function stopAudioPreview() {
+  audioRef.value?.pause();
+  playingAudio.value = '';
 }
 
 function insertFile(f: FileItem) {
@@ -791,6 +843,21 @@ function formatSize(bytes: number): string {
 .fl-parsing-thumb { background: var(--bg-secondary, #f0f0f0); }
 .fl-other-icon { background: var(--input-border, #eee); }
 .fl-icon-text { font-size: 24px; opacity: 0.5; }
+
+/* 音频缩略图：音符 + 播放/暂停按钮 */
+.fl-audio-thumb {
+  background: linear-gradient(135deg, #2f6fd0 0%, #1f4f9c 100%);
+  flex-direction: column;
+  gap: 4px;
+}
+.fl-audio-note { font-size: 26px; color: rgba(255, 255, 255, .9); line-height: 1; }
+.fl-audio-btn {
+  font-size: 11px; line-height: 1;
+  padding: 3px 8px; border-radius: 999px;
+  background: rgba(255, 255, 255, .22); color: #fff;
+}
+/* 试听用的播放器本身不占版面 */
+.fl-audio-el { display: none; }
 .fl-info { margin-top: 3px; }
 .fl-name-row { display: flex; align-items: center; gap: 4px; }
 .fl-name { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: var(--text-primary, #333); }

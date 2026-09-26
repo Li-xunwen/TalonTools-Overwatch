@@ -166,7 +166,7 @@
               v-model="form.explanationText"
               class="qb-textarea"
               rows="4"
-              placeholder="解析文字（配图用下方的图片栏添加，不会出现在文本里）"
+              placeholder="解析文字（配图 / 音频用下方的素材栏添加，不会出现在文本里）"
             ></textarea>
 
             <!-- 解析配图：仅一张；有则显示缩略图 + 删除，没有则显示加号 -->
@@ -190,6 +190,24 @@
                 title="从文件库添加解析配图"
                 @click="openFileLibrary('explanation')"
               >＋</button>
+            </div>
+
+            <!-- 解析音频：仅一段，与配图可各放一份 -->
+            <div class="qb-media-slot">
+              <template v-if="explanationAudio">
+                <audio class="qb-media-audio" :src="explanationAudio" controls preload="metadata"></audio>
+                <div class="qb-media-actions">
+                  <button class="qb-btn small" @click="openFileLibrary('explanation')">替换</button>
+                  <button class="qb-btn small plain" @click="removeExplanationAudio">删除</button>
+                  <span class="qb-resource-url" :title="explanationAudio">{{ shortUrl(explanationAudio) }}</span>
+                </div>
+              </template>
+              <button
+                v-else
+                class="qb-media-add"
+                title="从文件库添加解析音频（mp3 / wav）"
+                @click="openFileLibrary('explanation')"
+              >♪</button>
             </div>
           </label>
 
@@ -313,7 +331,14 @@
           <p v-if="revisionSnapshot.subtitle"><b>副标题：</b>{{ revisionSnapshot.subtitle }}</p>
           <p><b>选项：</b>{{ revisionOptionText }}</p>
           <p><b>答案：</b>{{ revisionSnapshot.answer }}</p>
-          <p v-if="revisionSnapshot.explanation"><b>解析：</b>{{ revisionSnapshot.explanation }}</p>
+          <p v-if="revisionExplanationText"><b>解析：</b>{{ revisionExplanationText }}</p>
+          <audio
+            v-if="revisionExplanationAudio"
+            class="qb-media-audio"
+            :src="revisionExplanationAudio"
+            controls
+            preload="metadata"
+          ></audio>
           <p><b>标签：</b>{{ (revisionSnapshot.tags ?? []).join('、') || '无' }}</p>
           <p><b>难度：</b>{{ revisionSnapshot.difficulty === undefined ? '-' : `${toDisplayDifficulty(Number(revisionSnapshot.difficulty))}/10` }}</p>
           <p v-if="revisionImages.length" class="qb-dialog-images">
@@ -388,6 +413,8 @@ interface FileItem {
   name: string
   type: string
   url: string
+  ext?: string
+  mime?: string
 }
 
 const router = useRouter()
@@ -408,6 +435,8 @@ const revisionPreview = ref<QuizRevision | null>(null)
 const editorOpen = ref(false)
 // 答案解析里已插入的那张图（仅允许一张，再选会替换）
 const explanationImage = ref('')
+// 答案解析里已插入的那段音频（仅允许一段，与配图互不冲突，可各放一份）
+const explanationAudio = ref('')
 
 // 当前登录用户的角色（从 JWT 里读，用于「争议清零」这类管理员操作）
 const isAdmin = computed(() => {
@@ -488,20 +517,30 @@ function toRawDifficulty(display: number): number {
   return Math.max(0, Math.min(255, Math.round((value / 10) * 255)))
 }
 
-/* 解析文本与配图分开：文本里不出现图片 markdown */
+/* 解析文本与配图 / 解析音频分开：文本里不出现这些标记 */
 const IMAGE_MARKDOWN_RE = /!\[[^\]]*\]\(([^)]+)\)/g
+// 解析音频用 [音频](url) 标记，与图片 markdown 区分开（没有前导感叹号）
+const AUDIO_MARKDOWN_RE = /\[音频\]\(([^)]+)\)/g
 
-function splitExplanation(raw: string): { text: string; image: string } {
+function splitExplanation(raw: string): { text: string; image: string; audio: string } {
   const source = raw ?? ''
   const matched = /!\[[^\]]*\]\(([^)]+)\)/.exec(source)
-  const text = source.replace(IMAGE_MARKDOWN_RE, '').replace(/\n{3,}/g, '\n\n').trim()
-  return { text, image: matched ? matched[1] : '' }
+  const audioMatched = AUDIO_MARKDOWN_RE.exec(source)
+  const text = source
+    .replace(IMAGE_MARKDOWN_RE, '')
+    .replace(AUDIO_MARKDOWN_RE, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  return { text, image: matched ? matched[1] : '', audio: audioMatched ? audioMatched[1] : '' }
 }
 
-function composeExplanation(text: string, image: string): string {
+function composeExplanation(text: string, image: string, audio: string): string {
   const clean = (text ?? '').trim()
-  if (!image) return clean
-  return `${clean}${clean ? '\n' : ''}![解析配图](${image})`
+  const parts: string[] = []
+  if (clean) parts.push(clean)
+  if (image) parts.push(`![解析配图](${image})`)
+  if (audio) parts.push(`[音频](${audio})`)
+  return parts.join('\n')
 }
 
 function shortUrl(url: string): string {
@@ -523,6 +562,11 @@ const revisionImages = computed(() => {
   const resources = revisionSnapshot.value.resources as QuizResources | undefined
   return resources?.images ?? []
 })
+
+// 历史快照里的解析：把图片 markdown 与 [音频](url) 标记摘出去，分别渲染
+const revisionExplanation = computed(() => splitExplanation(revisionSnapshot.value.explanation ?? ''))
+const revisionExplanationText = computed(() => revisionExplanation.value.text)
+const revisionExplanationAudio = computed(() => revisionExplanation.value.audio)
 
 // 当前题目资源（三选一，取唯一一项）
 const resourceItem = computed<{ kind: keyof QuizResources; url: string } | null>(() => {
@@ -607,6 +651,7 @@ function fillForm(question: QuizQuestion) {
   const explanation = splitExplanation(question.explanation)
   form.explanationText = explanation.text
   explanationImage.value = explanation.image
+  explanationAudio.value = explanation.audio
   form.resources = {
     // 兼容历史数据：只取每类的第一项（现在界面上仅支持一项资源）
     images: question.resources?.images?.slice(0, 1) ?? [],
@@ -642,6 +687,7 @@ function startCreate() {
   current.value = null
   revisions.value = []
   explanationImage.value = ''
+  explanationAudio.value = ''
   editorOpen.value = true
 }
 
@@ -706,7 +752,15 @@ function onFilePicked(payload: FileItem | FileItem[]) {
     if (!file?.url) continue
     // 文件库返回的是 md5 命名的稳定链接，直接作为题目资源索引保存
     if (fileTarget.value === 'explanation') {
-      setExplanationImage(file.url, file.name)
+      // 解析素材：图片进配图栏、音频进音频栏，两者各留一份
+      const looksAudio = file.type === 'audio'
+        || String(file.mime ?? '').startsWith('audio/')
+        || /\.(mp3|wav|m4a|aac|ogg|oga|opus|flac|wma|amr)$/i.test(file.ext ?? '')
+      if (looksAudio) {
+        setExplanationAudio(file.url)
+      } else {
+        setExplanationImage(file.url, file.name)
+      }
       continue
     }
 
@@ -740,6 +794,15 @@ function removeExplanationImage() {
   explanationImage.value = ''
 }
 
+// 解析音频同样只保留一段：再选会替换
+function setExplanationAudio(url: string) {
+  explanationAudio.value = url
+}
+
+function removeExplanationAudio() {
+  explanationAudio.value = ''
+}
+
 function previewImage(url: string) {
   previewImageSrc.value = url
   showImageViewer.value = true
@@ -770,7 +833,7 @@ async function submitQuestion() {
       subtitle: form.subtitle.trim(),
       options: options.map((option) => ({ key: option.key, text: option.text.trim() })),
       answer: form.answer,
-      explanation: composeExplanation(form.explanationText, explanationImage.value),
+      explanation: composeExplanation(form.explanationText, explanationImage.value, explanationAudio.value),
       resources: form.resources,
       tags: form.tags,
       difficulty: toRawDifficulty(form.difficulty),

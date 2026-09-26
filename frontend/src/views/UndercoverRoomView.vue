@@ -647,6 +647,9 @@ const dialogOrigin = ref<{ x: number; y: number; size: number } | null>(null)
 
 let socket: WebSocket | null = null
 let reconnectTimer: number | null = null
+// 连续连接失败次数：房间不存在 / 已解散时后端会直接关掉连接，
+// 无条件重连会让页面永远停在「正在连接房间会话…」，所以失败到一定次数就停止并提示
+let connectFailures = 0
 let pageActive = false
 
 const isOwner = computed(
@@ -1295,14 +1298,34 @@ function connect() {
 
   ws.onopen = () => {
     // 连接建立后立即同步一次前后台状态（房主后台存活 5 分钟依赖该标记）
+    connectFailures = 0
     send({ type: 'background', value: judgeBackground() })
   }
   ws.onmessage = handleMessage
-  ws.onclose = () => {
+  ws.onclose = (event?: CloseEvent) => {
     socket = null
-    if (pageActive) {
-      reconnectTimer = window.setTimeout(connect, RECONNECT_MS)
+    if (!pageActive) return
+
+    // 服务端明确拒绝：房间不存在（4004）/ 已满（4003）/ 参数错误（4000）——重连没有意义
+    const code = event?.code ?? 0
+    let terminal = ''
+    if (code === 4004) terminal = '房间不存在或已解散'
+    else if (code === 4003) terminal = '房间人数已满'
+    else if (code === 4000) terminal = '连接参数错误，请从房间列表重新进入'
+    if (terminal) {
+      errorMessage.value = terminal
+      showToast(terminal)
+      return
     }
+
+    // 其它情况（网络抖动、升级被拒）有限重试，避免无限转圈
+    connectFailures += 1
+    if (connectFailures >= 5) {
+      errorMessage.value = '无法连接房间，可能已被解散'
+      showToast(errorMessage.value)
+      return
+    }
+    reconnectTimer = window.setTimeout(connect, RECONNECT_MS)
   }
   ws.onerror = () => {
     // 交给 onclose 统一处理重连

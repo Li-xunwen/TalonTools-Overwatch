@@ -291,8 +291,18 @@
                     <p class="question-result">
                       正确答案：{{ quizQuestion.answer }}｜本题答对：{{ quizCorrectNames || '无人' }}
                     </p>
-                    <div v-if="quizExplanation.text || quizExplanation.images.length" class="stage-explain">
+                    <div v-if="quizExplanation.text || quizExplanation.images.length || quizExplanation.audios.length" class="stage-explain">
                       <p v-if="quizExplanation.text" class="stage-explain-text">解析：{{ quizExplanation.text }}</p>
+                      <div v-if="quizExplanation.audios.length" class="stage-explain-audios">
+                        <audio
+                          v-for="url in quizExplanation.audios"
+                          :key="url"
+                          class="stage-explain-audio"
+                          :src="url"
+                          controls
+                          preload="metadata"
+                        ></audio>
+                      </div>
                       <div v-if="quizExplanation.images.length" class="stage-explain-images">
                         <img
                           v-for="url in quizExplanation.images"
@@ -645,6 +655,9 @@ const dialogOrigin = ref<{ x: number; y: number; size: number } | null>(null)
 
 let socket: WebSocket | null = null
 let reconnectTimer: number | null = null
+// 连续连接失败次数：房间不存在 / 已解散时后端会直接关掉连接，
+// 无条件重连会让页面永远停在「正在连接房间会话…」，所以失败到一定次数就停止并提示
+let connectFailures = 0
 let pageActive = false
 
 const isOwner = computed(
@@ -967,18 +980,23 @@ function toRawDifficulty(display: number): number {
   return Math.max(0, Math.min(255, Math.round((value / 10) * 255)))
 }
 
-// 解析文本与配图分开渲染（markdown 图片会被解析出来单独显示）
+// 解析文本、配图与解析音频分开渲染（图片 markdown 与 [音频](url) 标记都会被解析出来单独显示）
 const quizExplanation = computed(() => {
   const raw = quizQuestion.value?.explanation ?? ''
   const images: string[] = []
+  const audios: string[] = []
   const text = raw
     .replace(/!\[[^\]]*\]\(([^)]+)\)/g, (_matched, url: string) => {
       images.push(url)
       return ''
     })
+    .replace(/\[音频\]\(([^)]+)\)/g, (_matched, url: string) => {
+      audios.push(url)
+      return ''
+    })
     .replace(/\n{3,}/g, '\n\n')
     .trim()
-  return { text, images }
+  return { text, images, audios }
 })
 
 const quizOnlineCount = computed(() => (room.value?.members ?? []).filter((m) => m.connected).length)
@@ -1398,14 +1416,34 @@ function connect() {
 
   ws.onopen = () => {
     // 连接建立后立即同步一次前后台状态（房主后台存活 5 分钟依赖该标记）
+    connectFailures = 0
     send({ type: 'background', value: judgeBackground() })
   }
   ws.onmessage = handleMessage
-  ws.onclose = () => {
+  ws.onclose = (event?: CloseEvent) => {
     socket = null
-    if (pageActive) {
-      reconnectTimer = window.setTimeout(connect, RECONNECT_MS)
+    if (!pageActive) return
+
+    // 服务端明确拒绝：房间不存在（4004）/ 已满（4003）/ 参数错误（4000）——重连没有意义
+    const code = event?.code ?? 0
+    let terminal = ''
+    if (code === 4004) terminal = '房间不存在或已解散'
+    else if (code === 4003) terminal = '房间人数已满'
+    else if (code === 4000) terminal = '连接参数错误，请从房间列表重新进入'
+    if (terminal) {
+      errorMessage.value = terminal
+      showToast(terminal)
+      return
     }
+
+    // 其它情况（网络抖动、升级被拒）有限重试，避免无限转圈
+    connectFailures += 1
+    if (connectFailures >= 5) {
+      errorMessage.value = '无法连接房间，可能已被解散'
+      showToast(errorMessage.value)
+      return
+    }
+    reconnectTimer = window.setTimeout(connect, RECONNECT_MS)
   }
   ws.onerror = () => {
     // 交给 onclose 统一处理重连
@@ -4447,6 +4485,18 @@ onUnmounted(deactivatePage)
   border-radius: 10px;
   object-fit: contain;
   cursor: zoom-in;
+}
+
+.stage-explain-audios {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.stage-explain-audio {
+  width: 100%;
+  max-width: 340px;
 }
 
 .stage-result-list {
