@@ -33,7 +33,8 @@ export type EventType =
   | 'quiz_question_update'
   | 'quiz_question_dispute'
   | 'quiz_question_dispute_reset'
-  | 'quiz_question_answer'
+    | 'quiz_question_answer'
+    | 'quiz_tag_rename'
 ;
 
 export interface EventLogOptions {

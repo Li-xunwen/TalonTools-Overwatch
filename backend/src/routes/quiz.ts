@@ -79,7 +79,9 @@ function clampDifficulty(value: unknown): number {
 
 function normalizeAnswerSeconds(value: unknown): number {
     const num = Number(value);
-    if (!Number.isFinite(num) || num <= 0) return DEFAULT_ANSWER_SECONDS;
+    // 0（或负数）表示不限时：房间里一直等到所有人都作答才结束本题
+    if (Number.isFinite(num) && num <= 0) return 0;
+    if (!Number.isFinite(num)) return DEFAULT_ANSWER_SECONDS;
     return Math.max(MIN_ANSWER_SECONDS, Math.min(MAX_ANSWER_SECONDS, Math.round(num)));
 }
 
@@ -461,6 +463,42 @@ router.put('/questions/:id', express.json(), authenticateToken, async (req: Auth
 /* =========================
    争议 / 作答统计
 ========================= */
+
+// 重命名标签：把所有带该标签的题目一起改名（编辑题库里的「长按标签重命名」）
+router.put('/tags/:name', express.json(), authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const from = String(req.params.name ?? '').trim();
+        const to = String(req.body?.newName ?? '').trim().slice(0, 20);
+        if (!from) return res.status(400).json({ error: '缺少原标签' });
+        if (!to) return res.status(400).json({ error: '新标签不能为空' });
+        if (from === to) return res.json({ updated: 0 });
+
+        const [rows] = await pool.query<any[]>('SELECT id, tags FROM quiz_questions');
+        let updated = 0;
+        for (const row of rows) {
+            const tags = parseJsonColumn<string[]>(row.tags, []);
+            if (!Array.isArray(tags) || !tags.includes(from)) continue;
+            const next = Array.from(new Set(tags.map((tag) => (tag === from ? to : tag)))).slice(0, MAX_TAGS);
+            await pool.query(
+                'UPDATE quiz_questions SET tags = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                [JSON.stringify(next), row.id]
+            );
+            updated += 1;
+        }
+
+        userEventLogger.logEvent({
+            userId: req.user!.userId,
+            eventType: 'quiz_tag_rename',
+            eventData: { from, to, updated },
+            ipAddress: req.ip
+        });
+
+        res.json({ updated });
+    } catch (error) {
+        console.error('[题库] 重命名标签失败:', error);
+        res.status(500).json({ error: 'server error' });
+    }
+});
 
 router.post('/questions/:id/dispute', express.json(), authenticateToken, async (req: AuthRequest, res: Response) => {
     try {

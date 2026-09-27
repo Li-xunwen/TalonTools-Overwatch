@@ -208,9 +208,9 @@
                       第 {{ quizIndex + 1 }} / {{ quizTotal }} 题
                       <span class="stage-tag">难度 {{ toDisplayDifficulty(quizQuestion.difficulty) }}/10</span>
                     </h3>
-                    <span class="stage-countdown" :class="{ urgent: stageRemainSeconds <= 3 }">
-                      {{ stagePhaseLabel }} {{ stageRemainSeconds }}s
-                    </span>
+                  <span class="stage-countdown" :class="{ urgent: !stageUnlimited && stageRemainSeconds <= 3 }">
+                    {{ stageCountdownText }}
+                  </span>
                   </div>
 
                   <p v-if="quizQuestion.subtitle" class="stage-subtitle">{{ quizQuestion.subtitle }}</p>
@@ -284,7 +284,7 @@
                   <p v-if="quizPhase === 'question'" class="question-result">
                     <template v-if="iAmSpectator">观众席不参与作答，本题结束后可查看结算</template>
                     <template v-else-if="myQuizAnswer">已选择 {{ myQuizAnswer }}（倒计时结束前可改选），等待本题结束…</template>
-                    <template v-else>点击选项作答（{{ stageRemainSeconds }}s）</template>
+                    <template v-else>点击选项作答{{ answerHintSuffix }}</template>
                     ｜已作答 {{ quizAnsweredUserIds.length }}/{{ quizOnlineCount }} 人
                   </p>
 
@@ -1008,6 +1008,11 @@ const quizOnlineCount = computed(
 
 const stagePhaseLabel = computed(() => (quizPhase.value === 'vote' ? '下一题投票' : '作答倒计时'))
 
+// 本题不限时（题目答题时长设为 0）：等到所有人都作答才结束
+const stageUnlimited = computed(
+  () => quizPhase.value === 'question' && !(quiz.value?.questionEndsAt ?? 0)
+)
+
 // 当前阶段剩余秒数（作答 10s / 投票 30s）
 const stageRemainSeconds = computed(() => {
   const state = quiz.value
@@ -1016,6 +1021,14 @@ const stageRemainSeconds = computed(() => {
   if (!endsAt) return 0
   return Math.max(0, Math.ceil((endsAt - nowTick.value) / 1000))
 })
+
+const stageCountdownText = computed(() =>
+  stageUnlimited.value ? '不限时作答' : `${stagePhaseLabel.value} ${stageRemainSeconds.value}s`
+)
+
+const answerHintSuffix = computed(() =>
+  stageUnlimited.value ? '（不限时，所有人作答后结束）' : `（${stageRemainSeconds.value}s）`
+)
 
 // 本题答对的人
 const quizCorrectNames = computed(() => {
@@ -1865,8 +1878,8 @@ const ITEM_IMPACT_ICON: Record<ItemType, string> = {
 
 // 道具音效（frontend/public/audio）：命中瞬间播放
 const ITEM_SOUND: Record<ItemType, string> = {
-  egg: '/audio/砸鸡蛋.mp3',
-  rose: '/audio/玫瑰.mp3'
+  egg: '/audio/砸鸡蛋.wav',
+  rose: '/audio/玫瑰.wav'
 }
 
 const itemAudioTemplates = new Map<ItemType, HTMLAudioElement>()
@@ -2575,6 +2588,35 @@ function applyQuestionVolume() {
 }
 
 watch(effectiveQuestionPercent, () => applyQuestionVolume())
+
+/* ---------- 进入题目 / 解析时自动播放音频 ---------- */
+// 换到新题 → 自动播题目音频；进入解析（投票）阶段 → 自动播解析音频
+async function autoPlayStageAudio() {
+  await nextTick()
+  applyQuestionVolume()
+  const selector =
+    quizPhase.value === 'question'
+      ? '.question-audio'
+      : quizPhase.value === 'vote'
+        ? '.stage-explain-audio'
+        : ''
+  if (!selector) return
+  const el = document.querySelector<HTMLAudioElement>(selector)
+  if (!el) return
+  try {
+    el.currentTime = 0
+    await el.play()
+  } catch {
+    // 被浏览器自动播放策略拦下时静默忽略，用户可手动点播放
+  }
+}
+
+watch(
+  [() => quiz.value?.question?.id ?? 0, () => quizPhase.value],
+  () => {
+    void autoPlayStageAudio()
+  }
+)
 
 function stopVoice() {
   const audio = audioEl.value
@@ -4346,6 +4388,27 @@ onUnmounted(deactivatePage)
   gap: 6px;
 }
 
+/* 房间里的表单控件（本轮题量等）：与题库编辑页保持同一套样式，
+   否则 <input type="number"> 会回落到浏览器默认外观 */
+.qb-input,
+.qb-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-family: inherit;
+}
+
+.qb-input.small {
+  width: auto;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+}
+
 .stage-label {
   font-size: 0.8rem;
   color: var(--text-primary);
@@ -4542,8 +4605,10 @@ onUnmounted(deactivatePage)
 }
 
 .stage-explain-image {
-  width: 160px;
-  max-height: 120px;
+  /* 解析配图按容器宽度缩放 */
+  width: 100%;
+  height: auto;
+  max-height: none;
   border-radius: 10px;
   object-fit: contain;
   cursor: zoom-in;

@@ -56,7 +56,7 @@
             <span v-if="item.subtitle" class="qb-item-sub">{{ item.subtitle }}</span>
             <span class="qb-item-meta">
               难度 {{ toDisplayDifficulty(item.difficulty) }}/10 · 正确率 {{ (item.accuracy * 100).toFixed(1) }}% ·
-              争议 {{ item.disputeCount }} · {{ item.answerSeconds || 10 }}s · v{{ item.version }}
+              争议 {{ item.disputeCount }} · {{ item.answerSeconds ? item.answerSeconds + 's' : '不限时' }} · v{{ item.version }}
               <template v-if="item.status === 'draft'"> · 草稿</template>
             </span>
             <span class="qb-item-editor">
@@ -224,14 +224,28 @@
               <button class="qb-btn small" @click="addTag">添加</button>
             </div>
             <div class="qb-tag-list">
-              <span v-for="tag in form.tags" :key="tag" class="qb-chip active">
+              <span
+                v-for="tag in form.tags"
+                :key="tag"
+                class="qb-chip active"
+                title="长按可重命名该标签（所有带此标签的题目一起改）"
+                @pointerdown="startTagPress(tag)"
+                @pointerup="endTagPress"
+                @pointerleave="endTagPress"
+                @pointercancel="endTagPress"
+              >
                 {{ tag }}
-                <button class="qb-chip-close" @click="removeTag(tag)">✕</button>
+                <button class="qb-chip-close" @pointerdown.stop @click="removeTag(tag)">✕</button>
               </span>
               <button
                 v-for="tag in suggestedTags"
                 :key="`suggest-${tag.name}`"
                 class="qb-chip"
+                title="长按可重命名该标签（所有带此标签的题目一起改）"
+                @pointerdown="startTagPress(tag.name)"
+                @pointerup="endTagPress"
+                @pointerleave="endTagPress"
+                @pointercancel="endTagPress"
                 @click="quickAddTag(tag.name)"
               >+ {{ tag.name }}</button>
             </div>
@@ -243,12 +257,12 @@
           </label>
 
           <label class="qb-field">
-            <span class="qb-label">答题时长（秒，5~60，默认 10）</span>
+            <span class="qb-label">答题时长（秒，5~60，默认 10；填 0 表示不限时）</span>
             <input
               v-model.number="form.answerSeconds"
               class="qb-input small"
               type="number"
-              min="5"
+              min="0"
               max="60"
               step="1"
             >
@@ -728,12 +742,67 @@ function addTag() {
 }
 
 function quickAddTag(tag: string) {
+  // 长按已经触发重命名时，抬起手指带来的这次 click 忽略掉
+  if (tagPressFired) {
+    tagPressFired = false
+    return
+  }
   if (form.tags.includes(tag)) return
   form.tags.push(tag)
 }
 
 function removeTag(tag: string) {
   form.tags = form.tags.filter((item) => item !== tag)
+}
+
+/* ---------- 长按标签重命名（所有带该标签的题目一起改） ---------- */
+const TAG_PRESS_MS = 600
+let tagPressTimer: number | null = null
+let tagPressFired = false
+
+function startTagPress(name: string) {
+  endTagPress()
+  tagPressFired = false
+  tagPressTimer = window.setTimeout(() => {
+    tagPressTimer = null
+    tagPressFired = true
+    void renameTag(name)
+  }, TAG_PRESS_MS)
+}
+
+function endTagPress() {
+  if (tagPressTimer !== null) {
+    window.clearTimeout(tagPressTimer)
+    tagPressTimer = null
+  }
+}
+
+async function renameTag(name: string) {
+  const input = window.prompt(`重命名标签「${name}」\n所有带该标签的题目会一起改名：`, name)
+  if (input === null) return
+  const next = input.trim().slice(0, 20)
+  if (!next || next === name) return
+
+  try {
+    const res = await authFetch(`/api/quiz/tags/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ newName: next })
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      showToast(data.error || '重命名标签失败')
+      return
+    }
+    const data = await res.json()
+    // 正在编辑的题目同步替换，其它题目由后端批量更新
+    form.tags = form.tags.map((tag) => (tag === name ? next : tag))
+    showToast(`标签已改为「${next}」，共更新 ${data.updated ?? 0} 道题`)
+    await loadTags()
+    await loadQuestions()
+  } catch (error) {
+    console.error('重命名标签失败:', error)
+    showToast('重命名标签失败')
+  }
 }
 
 /* =========================
@@ -837,7 +906,10 @@ async function submitQuestion() {
       resources: form.resources,
       tags: form.tags,
       difficulty: toRawDifficulty(form.difficulty),
-      answerSeconds: Math.max(5, Math.min(60, Number(form.answerSeconds) || 10)),
+      // 0 表示不限时，其余限制在 5~60 秒
+      answerSeconds: Number(form.answerSeconds) > 0
+        ? Math.max(5, Math.min(60, Math.round(Number(form.answerSeconds))))
+        : 0,
       status: form.status
     }
 
@@ -1075,6 +1147,10 @@ async function resetDispute() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  /* 长按重命名：避免长按选中文字 / 弹出系统菜单 */
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
   padding: 4px 10px;
   border: none;
   border-radius: 999px;

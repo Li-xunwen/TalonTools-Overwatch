@@ -1534,6 +1534,8 @@ function destroyRoom(room: Room, message: string): void {
 export const QUIZ_QUESTION_COUNT = 10;
 export const QUIZ_QUESTION_MS = 10 * 1000;
 export const QUIZ_VOTE_MS = 30 * 1000;
+// 全员作答后剩余作答时间缩短到的上限（不足这个时间则不处理）
+const QUIZ_ALL_ANSWERED_GRACE_MS = 3 * 1000;
 // 本轮题量范围（房主可设置，默认 10）
 export const QUIZ_MIN_QUESTIONS = 1;
 export const QUIZ_MAX_QUESTIONS = 30;
@@ -1726,14 +1728,22 @@ async function drawQuizQuestions(room: Room): Promise<QuizQuestionSnapshot[]> {
 // 答题时长：默认 10s，允许 5~60s
 function normalizeAnswerSeconds(value: unknown): number {
     const num = Number(value);
-    if (!Number.isFinite(num) || num <= 0) return QUIZ_QUESTION_MS / 1000;
+    // 0（或负数）表示不限时：由「所有人都作答」来结束本题
+    if (Number.isFinite(num) && num <= 0) return 0;
+    if (!Number.isFinite(num)) return QUIZ_QUESTION_MS / 1000;
     return Math.max(5, Math.min(60, Math.round(num)));
 }
 
-// 当前题目的作答时长（毫秒）
+// 当前题目的作答时长（毫秒）；0 表示不限时
 function currentQuestionMs(room: Room): number {
     const question = room.quiz.questions[room.quiz.index];
     return normalizeAnswerSeconds(question?.answerSeconds) * 1000;
+}
+
+// 本题的截止时间；不限时（时长为 0）时返回 0，processQuizTimers 会跳过
+function startQuestionDeadline(room: Room, now = Date.now()): number {
+    const ms = currentQuestionMs(room);
+    return ms > 0 ? now + ms : 0;
 }
 
 // 开始游戏（房主）：抽题 → 进入第一题
@@ -1752,7 +1762,7 @@ export async function startQuiz(room: Room, userId: number): Promise<{ ok: boole
     room.quiz.readyUserIds = [];
     room.quiz.startedAt = Date.now();
     room.quiz.phase = 'question';
-    room.quiz.questionEndsAt = Date.now() + currentQuestionMs(room);
+    room.quiz.questionEndsAt = startQuestionDeadline(room);
     room.quiz.voteEndsAt = 0;
     room.rosterLocked = true;
 
@@ -1787,6 +1797,21 @@ export function answerQuiz(
     const correct = key === question.answer;
     room.quiz.answers[userId] = { option: key, correct };
     if (correct) room.quiz.scores[userId] = (room.quiz.scores[userId] ?? 0) + 1;
+
+    // 所有人都作答后：剩余时间缩短到 3 秒（不足 3 秒不动；不限时则此时开始 3 秒倒计时）
+    const participants = [...room.members.values()].filter(
+        (member) => member.connected && member.seat !== 'spectator'
+    );
+    const allAnswered =
+        participants.length > 0 &&
+        participants.every((member) => room.quiz.answers[member.userId] !== undefined);
+    if (allAnswered) {
+        const now = Date.now();
+        const remain = room.quiz.questionEndsAt ? room.quiz.questionEndsAt - now : Number.POSITIVE_INFINITY;
+        if (remain > QUIZ_ALL_ANSWERED_GRACE_MS) {
+            room.quiz.questionEndsAt = now + QUIZ_ALL_ANSWERED_GRACE_MS;
+        }
+    }
 
     return { ok: true };
 }
@@ -1827,13 +1852,32 @@ export function advanceQuizQuestion(room: Room, now = Date.now()): void {
     }
 
     room.quiz.phase = 'question';
-    room.quiz.questionEndsAt = now + currentQuestionMs(room);
+    room.quiz.questionEndsAt = startQuestionDeadline(room, now);
 }
 
 // 倒计时推进：作答 10s 结束 → 投票 30s；投票超时 → 下一题
 export function processQuizTimers(room: Room, now: number): boolean {
     if (room.mode !== 'quiz') return false;
     const quiz = room.quiz;
+
+    // 在线成员全部作答 → 把剩余作答时间收束到 3 秒（不足 3 秒不动）。
+    // 放在巡检里而不是只靠 answerQuiz，是为了覆盖「有人答完就掉线」以及
+    // 「不限时题目」这两种情况，否则会一直卡在作答阶段。
+    if (quiz.phase === 'question') {
+        const participants = [...room.members.values()].filter(
+            (member) => member.connected && member.seat !== 'spectator'
+        );
+        const allAnswered =
+            participants.length > 0 &&
+            participants.every((member) => quiz.answers[member.userId] !== undefined);
+        if (allAnswered) {
+            const remain = quiz.questionEndsAt ? quiz.questionEndsAt - now : Number.POSITIVE_INFINITY;
+            if (remain > QUIZ_ALL_ANSWERED_GRACE_MS) {
+                quiz.questionEndsAt = now + QUIZ_ALL_ANSWERED_GRACE_MS;
+                return true;
+            }
+        }
+    }
 
     if (quiz.phase === 'question' && quiz.questionEndsAt && now >= quiz.questionEndsAt) {
         quiz.phase = 'vote';

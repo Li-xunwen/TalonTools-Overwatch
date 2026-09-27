@@ -30,45 +30,6 @@
           </button>
         </div>
 
-        <!-- 麦克风阈值：低于该音量的声音不上行（每人独立，保存在本地） -->
-        <div class="setting-block">
-          <div class="setting-row">
-            <span class="setting-label">麦克风阈值</span>
-            <span class="setting-value">{{ micThreshold }} dB</span>
-          </div>
-          <input
-            v-model.number="micThreshold"
-            class="volume-range"
-            type="range"
-            :min="MIC_THRESHOLD_MIN"
-            :max="MIC_THRESHOLD_MAX"
-            step="1"
-          >
-          <!-- 实时音量条：绿条越过刻度线说明已经超过阈值、开始上行 -->
-          <div class="level-meter">
-            <i :style="{ width: levelPercent + '%' }"></i>
-            <b class="level-mark" :style="{ left: markThreshold + '%' }"></b>
-          </div>
-          <p class="setting-hint">对着话筒说话，绿条越过刻度线才有声音发出；数值越低越灵敏（噪声也更容易被送出去）</p>
-        </div>
-
-        <!-- 麦克风增益：上行前的音量放大 -->
-        <div class="setting-block">
-          <div class="setting-row">
-            <span class="setting-label">麦克风增益</span>
-            <span class="setting-value">{{ micGain }}%</span>
-          </div>
-          <input
-            v-model.number="micGain"
-            class="volume-range"
-            type="range"
-            :min="MIC_GAIN_MIN"
-            :max="MIC_GAIN_MAX"
-            step="5"
-          >
-          <p class="setting-hint">100% 为你原本的音量；说话声音偏小可以调高，调太高会把环境噪声一起放大</p>
-        </div>
-
         <!-- 总音量：右侧箭头展开「道具音量 / 题目音量」 -->
         <div class="setting-block">
           <div class="setting-row">
@@ -118,6 +79,45 @@
             </div>
           </div>
           <p class="setting-hint">100% 为原始音量，最高 200%；道具与题目音量会在总音量基础上再乘一次</p>
+        </div>
+
+        <!-- 麦克风增益：上行前的音量放大 -->
+        <div class="setting-block">
+          <div class="setting-row">
+            <span class="setting-label">麦克风增益</span>
+            <span class="setting-value">{{ micGain }}%</span>
+          </div>
+          <input
+            v-model.number="micGain"
+            class="volume-range"
+            type="range"
+            :min="MIC_GAIN_MIN"
+            :max="MIC_GAIN_MAX"
+            step="5"
+          >
+          <p class="setting-hint">100% 为你原本的音量；说话声音偏小可以调高，调太高会把环境噪声一起放大</p>
+        </div>
+
+        <!-- 麦克风阈值：低于该音量的声音不上行（每人独立，保存在本地） -->
+        <div class="setting-block">
+          <div class="setting-row">
+            <span class="setting-label">麦克风阈值</span>
+            <span class="setting-value">{{ micThreshold }} dB</span>
+          </div>
+          <input
+            v-model.number="micThreshold"
+            class="volume-range"
+            type="range"
+            :min="MIC_THRESHOLD_MIN"
+            :max="MIC_THRESHOLD_MAX"
+            step="1"
+          >
+          <!-- 实时音量条：绿条越过刻度线说明已经超过阈值、开始上行 -->
+          <div class="level-meter">
+            <i :style="{ width: levelPercent + '%' }"></i>
+            <b class="level-mark" :style="{ left: markThreshold + '%' }"></b>
+          </div>
+          <p class="setting-hint">对着话筒说话，绿条越过刻度线才有声音发出；数值越低越灵敏（噪声也更容易被送出去）</p>
         </div>
 
         <button class="settings-done" @click="emit('close')">完成</button>

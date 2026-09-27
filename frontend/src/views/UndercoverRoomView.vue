@@ -1743,8 +1743,8 @@ const ITEM_IMPACT_ICON: Record<ItemType, string> = {
 
 // 道具音效（frontend/public/audio）：命中瞬间播放
 const ITEM_SOUND: Record<ItemType, string> = {
-  egg: '/audio/砸鸡蛋.mp3',
-  rose: '/audio/玫瑰.mp3'
+  egg: '/audio/砸鸡蛋.wav',
+  rose: '/audio/玫瑰.wav'
 }
 
 const itemAudioTemplates = new Map<ItemType, HTMLAudioElement>()
