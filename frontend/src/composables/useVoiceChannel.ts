@@ -158,11 +158,16 @@ function createVoiceChannel() {
       speakers.value = []
       return
     }
+    // 发言栏的显示门限跟随「麦克风阈值」设置：低于该音量的说话者不显示
+    const levelThreshold = Math.pow(10, micThreshold.value / 20)
     const list = active ?? r.activeSpeakers ?? []
     const result: VoiceSpeaker[] = []
     for (const p of list) {
       const channel = channelOf(p)
       if (!listen.value[channel]) continue
+      // 只有在拿到音量数值时才按阈值过滤；拿不到（0/undefined）就退回 LiveKit 的说话判定
+      const level = p.audioLevel
+      if (typeof level === 'number' && level > 0 && level < levelThreshold) continue
       const meta = metadataOf(p)
       result.push({ identity: p.identity, channel, ...meta })
     }
@@ -545,6 +550,9 @@ function createVoiceChannel() {
     const graph = micGraph.value
     if (graph) graph.micGain.gain.value = micGainValue()
   })
+
+  // 阈值变化后按新门限重新筛选发言栏
+  watch(micThreshold, () => refreshSpeakers())
 
   return {
     status,

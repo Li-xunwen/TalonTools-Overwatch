@@ -149,9 +149,13 @@ const orbTitle = computed(() => {
 })
 
 const ringStyle = computed(() => {
-  const level = micChannel.value === 'muted' ? 0 : Math.min(1, localLevel.value * 4)
+  // 用 dBFS 映射（-60dB→0、0dB→1）而不是直接乘系数：
+  // 小声说话（-40dB 左右）也能明显推动圆环，灵敏度更高
+  const rms = localLevel.value
+  const db = rms > 0 ? 20 * Math.log10(rms) : -60
+  const level = micChannel.value === 'muted' ? 0 : Math.max(0, Math.min(1, (db + 60) / 60))
   return {
-    transform: `scale(${(1 + level * 0.35).toFixed(3)})`,
+    transform: `scale(${(1 + level * 0.45).toFixed(3)})`,
     opacity: String(micChannel.value === 'muted' ? 0 : 0.25 + level * 0.75),
   }
 })
