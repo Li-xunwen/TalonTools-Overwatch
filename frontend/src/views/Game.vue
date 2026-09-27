@@ -8,24 +8,20 @@
       <div class="section game-section">
         <!-- 谁是守望先锋卧底入口（置于我的世界板块上方） -->
         <div class="undercover-entry" @click="goUndercover">
-          <div class="undercover-icon">🕵️</div>
           <h2 class="section-title">谁是守望先锋卧底</h2>
-          <p class="undercover-desc">
+          <p class="entry-desc">
             谁是卧底 · 守望先锋专场，找出潜伏在队伍里的那个卧底，进入房间开一局
           </p>
-          <span class="undercover-enter">点击进入</span>
+          <span class="entry-enter">点击进入</span>
         </div>
 
         <!-- 守望先锋刷题战入口 -->
         <div class="quiz-entry" @click="goQuizBattle">
-          <div class="undercover-icon">
-            <img class="undercover-icon-img" src="/res/imge/答题小美.png" alt="守望先锋刷题战">
-          </div>
           <h2 class="section-title">守望先锋刷题战</h2>
-          <p class="undercover-desc">
+          <p class="entry-desc">
             3v3 组队抢答，比拼守望知识与反应速度，进房间开一局
           </p>
-          <span class="undercover-enter">点击进入</span>
+          <span class="entry-enter">点击进入</span>
         </div>
 
         <div class="section-divider"></div>
@@ -155,44 +151,42 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
   transform: translateY(-1px);
 }
 
-/* 刷题战入口卡片背景：卧底死神。
+/* 两张入口卡片的背景图：卧底入口用卧底死神，刷题战入口用答题小美。
    用伪元素而不是直接写在 background 上，避免 hover 的 background 简写把图覆盖掉 */
+.undercover-entry,
 .quiz-entry {
   position: relative;
   overflow: hidden;
 }
 
+.undercover-entry::before,
 .quiz-entry::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: url('/res/imge/卧底死神.png') center / cover no-repeat;
-  opacity: 0.35;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0.32;
   pointer-events: none;
   z-index: 0;
 }
 
+.undercover-entry::before {
+  background-image: url('/res/imge/卧底死神.png');
+}
+
+.quiz-entry::before {
+  background-image: url('/res/imge/答题小美.png');
+}
+
+.undercover-entry > *,
 .quiz-entry > * {
   position: relative;
   z-index: 1;
 }
 
-.undercover-icon {
-  font-size: 56px;
-  line-height: 1;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
-}
-
-/* 入口图标支持用图片（守望先锋刷题战用「答题小美」） */
-.undercover-icon-img {
-  width: 72px;
-  height: 72px;
-  object-fit: contain;
-  border-radius: 18px;
-  vertical-align: middle;
-}
-
-.undercover-desc {
+.entry-desc {
   font-size: 1rem;
   line-height: 1.6;
   color: var(--text-primary);
@@ -201,7 +195,7 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
   max-width: 520px;
 }
 
-.undercover-enter {
+.entry-enter {
   display: inline-block;
   margin-top: 16px;
   padding: 8px 22px;

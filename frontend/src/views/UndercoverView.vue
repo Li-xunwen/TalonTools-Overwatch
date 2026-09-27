@@ -11,7 +11,6 @@
           <h1 class="undercover-title">谁是守望先锋卧底</h1>
           <span class="header-spacer"></span>
         </div>
-        <div class="header-icon">🕵️</div>
         <p class="undercover-subtitle">找出潜伏在队伍里的卧底</p>
         <button class="create-room-btn" @click="createRoom">创建房间+</button>
       </div>
@@ -394,13 +393,6 @@ onUnmounted(deactivatePage)
   gap: 12px;
 }
 
-.header-icon {
-  margin-top: 12px;
-  font-size: 52px;
-  line-height: 1;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
-}
-
 .undercover-title {
   flex: 1;
   font-size: 1.9rem;
@@ -654,10 +646,6 @@ onUnmounted(deactivatePage)
 @media (max-width: 768px) {
   .undercover-title {
     font-size: 1.5rem;
-  }
-
-  .header-icon {
-    font-size: 44px;
   }
 
   .room-list {

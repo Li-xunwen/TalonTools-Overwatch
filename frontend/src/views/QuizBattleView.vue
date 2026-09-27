@@ -1,18 +1,17 @@
 <template>
-  <div class="undercover-page news-page">
+  <div class="quiz-page news-page">
     <ThemeToggle />
     <Toast :message="toastMessage" :duration="3000" />
 
     <div class="content-area">
       <!-- 游戏标题卡片 -->
-      <div class="undercover-header">
+      <div class="quiz-header">
         <div class="header-top">
           <button class="home-btn" title="返回游戏页" @click="goGame">🏠</button>
-          <h1 class="undercover-title">守望先锋刷题战</h1>
+          <h1 class="quiz-title">守望先锋刷题战</h1>
           <span class="header-spacer"></span>
         </div>
-        <div class="header-icon">📝</div>
-        <p class="undercover-subtitle">组队抢答，比谁的守望知识更硬</p>
+        <p class="quiz-subtitle">组队抢答，比谁的守望知识更硬</p>
         <button class="edit-bank-btn" @click="goQuestionBank">编辑题库</button>
         <button class="create-room-btn" @click="createRoom">创建房间+</button>
       </div>
@@ -352,25 +351,25 @@ onUnmounted(deactivatePage)
 </script>
 
 <style scoped>
-.undercover-page {
+.quiz-page {
   min-height: 100vh;
   padding-bottom: 24px;
 }
 
-.undercover-page .content-area {
+.quiz-page .content-area {
   max-width: 1200px;
   padding-top: 20px;
 }
 
 /* 本页不显示底部导航栏，取消 FooterBar 为其预留的 70px 留白 */
-.undercover-page :deep(.footer-bar) {
+.quiz-page :deep(.footer-bar) {
   padding-bottom: 0;
 }
 
 /* =========================
    游戏标题卡片
 ========================= */
-.undercover-header {
+.quiz-header {
   position: relative;
   text-align: center;
   background: var(--card-bg);
@@ -378,6 +377,23 @@ onUnmounted(deactivatePage)
   padding: 20px 20px 72px;
   margin: 20px 0;
   box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* 标题卡片背景：答题小美（伪元素铺底，不影响卡片背景色与圆角） */
+.quiz-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/res/imge/答题小美.png') center / cover no-repeat;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.quiz-header > * {
+  position: relative;
+  z-index: 1;
 }
 
 .header-top {
@@ -386,21 +402,14 @@ onUnmounted(deactivatePage)
   gap: 12px;
 }
 
-.header-icon {
-  margin-top: 12px;
-  font-size: 52px;
-  line-height: 1;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
-}
-
-.undercover-title {
+.quiz-title {
   flex: 1;
   font-size: 1.9rem;
   margin: 0;
   color: var(--text-primary);
 }
 
-.undercover-subtitle {
+.quiz-subtitle {
   margin: 8px 0 0;
   font-size: 0.95rem;
   opacity: 0.75;
@@ -671,12 +680,8 @@ onUnmounted(deactivatePage)
    手机适配
 ========================= */
 @media (max-width: 768px) {
-  .undercover-title {
+  .quiz-title {
     font-size: 1.5rem;
-  }
-
-  .header-icon {
-    font-size: 44px;
   }
 
   .room-list {
