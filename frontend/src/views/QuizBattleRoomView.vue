@@ -240,6 +240,7 @@
                       :src="quizResourceItem.url"
                       controls
                       preload="metadata"
+                      @loadedmetadata="applyQuestionVolume"
                     ></audio>
 
                     <div class="question-options">
@@ -301,6 +302,7 @@
                           :src="url"
                           controls
                           preload="metadata"
+                          @loadedmetadata="applyQuestionVolume"
                         ></audio>
                       </div>
                       <div v-if="quizExplanation.images.length" class="stage-explain-images">
@@ -999,7 +1001,10 @@ const quizExplanation = computed(() => {
   return { text, images, audios }
 })
 
-const quizOnlineCount = computed(() => (room.value?.members ?? []).filter((m) => m.connected).length)
+// 观众席不参与作答与投票，所以分母只算在线且非观众席的成员
+const quizOnlineCount = computed(
+  () => (room.value?.members ?? []).filter((m) => m.connected && m.seat !== 'spectator').length
+)
 
 const stagePhaseLabel = computed(() => (quizPhase.value === 'vote' ? '下一题投票' : '作答倒计时'))
 
@@ -1876,8 +1881,26 @@ function playItemSound(item: ItemType) {
 
   // 每次命中播一份副本，支持多人同时被砸/被献花
   const audio = template.cloneNode(true) as HTMLAudioElement
-  // 跟随「音量增益」设置（元素音量上限为 1）
-  audio.volume = Math.min(Math.max(sfxVolumeScale(), 0), 1)
+  // 跟随「总音量 × 道具音量」；超过 100% 需要走 Web Audio 增益（元素音量上限为 1）
+  const percent = Math.max(0, Math.min(effectiveItemPercent.value, 400))
+  if (percent > 100) {
+    const context = getSfxContext()
+    if (context) {
+      try {
+        const source = context.createMediaElementSource(audio)
+        const gain = context.createGain()
+        gain.gain.value = percent / 100
+        source.connect(gain).connect(context.destination)
+        audio.volume = 1
+      } catch {
+        audio.volume = 1
+      }
+    } else {
+      audio.volume = 1
+    }
+  } else {
+    audio.volume = percent / 100
+  }
   void audio.play().catch((error) => {
     console.error('道具音效播放失败（可能被浏览器自动播放策略拦截）', error)
   })
@@ -2099,9 +2122,9 @@ watch(
 ========================= */
 let sfxContext: AudioContext | null = null
 
-// 音量增益（0~200%）换算成倍数，作用于录音提示音与语音播放
+// 总音量（0~200%）换算成倍数，作用于录音提示音等界面音效
 function sfxVolumeScale(): number {
-  return Math.max(0, Math.min(Number(voiceVolume.value) || 0, 200)) / 100
+  return Math.max(0, Math.min(Number(masterVolume.value) || 0, 200)) / 100
 }
 
 function getSfxContext(): AudioContext | null {
@@ -2459,8 +2482,8 @@ const playingVoiceId = ref<number | null>(null)
 const voiceCache = new Map<number, string>()
 let lastAutoPlayedMessageId = 0
 
-// 本地偏好（设置弹窗里可改）：自动播放语音 / 音量增益
-const { autoPlayVoice, voiceVolume } = useRoomSettings()
+// 本地偏好（设置弹窗里可改）：自动播放语音 / 总音量 / 道具音量 / 题目音量
+const { autoPlayVoice, masterVolume, effectiveItemPercent, effectiveQuestionPercent } = useRoomSettings()
 
 // 音量增益：≤100% 直接用元素音量；>100% 需要 Web Audio 增益节点
 let voiceAudioContext: AudioContext | null = null
@@ -2495,7 +2518,7 @@ function applyVoiceVolume() {
   const audio = audioEl.value
   if (!audio) return
 
-  const percent = Math.max(0, Math.min(Number(voiceVolume.value) || 0, 200))
+  const percent = Math.max(0, Math.min(Number(masterVolume.value) || 0, 200))
 
   if (percent > 100) {
     const gain = ensureVoiceGainNode()
@@ -2511,8 +2534,47 @@ function applyVoiceVolume() {
   if (voiceGainNode) voiceGainNode.gain.value = Math.min(percent / 100, 1)
 }
 
-watch(voiceVolume, () => applyVoiceVolume())
+watch(masterVolume, () => applyVoiceVolume())
 watch(audioEl, () => applyVoiceVolume())
+
+/* ---------- 题目音量（题目音频 + 解析音频） ---------- */
+const questionAudioGains = new WeakMap<HTMLAudioElement, GainNode>()
+
+// 题目/解析音频元素是模板渲染出来的，用类名找出来统一设置音量；
+// 超过 100% 时接一个 Web Audio 增益节点（元素音量上限是 1）
+function applyQuestionVolume() {
+  const percent = Math.max(0, Math.min(effectiveQuestionPercent.value, 400))
+  const elements = document.querySelectorAll<HTMLAudioElement>('.question-audio, .stage-explain-audio')
+  elements.forEach((el) => {
+    const gain = questionAudioGains.get(el)
+    if (gain) {
+      gain.gain.value = percent / 100
+      el.volume = 1
+      return
+    }
+    if (percent <= 100) {
+      el.volume = percent / 100
+      return
+    }
+    const context = getSfxContext()
+    if (!context) {
+      el.volume = 1
+      return
+    }
+    try {
+      const source = context.createMediaElementSource(el)
+      const node = context.createGain()
+      node.gain.value = percent / 100
+      source.connect(node).connect(context.destination)
+      questionAudioGains.set(el, node)
+      el.volume = 1
+    } catch {
+      el.volume = 1
+    }
+  })
+}
+
+watch(effectiveQuestionPercent, () => applyQuestionVolume())
 
 function stopVoice() {
   const audio = audioEl.value

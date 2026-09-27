@@ -30,58 +30,94 @@
           </button>
         </div>
 
-        <!-- 音量增益：单独调节网页音量 -->
+        <!-- 麦克风阈值：低于该音量的声音不上行（每人独立，保存在本地） -->
         <div class="setting-block">
           <div class="setting-row">
-            <span class="setting-label">音量增益</span>
-            <span class="setting-value">{{ voiceVolume }}%</span>
+            <span class="setting-label">麦克风阈值</span>
+            <span class="setting-value">{{ micThreshold }} dB</span>
           </div>
           <input
-            v-model.number="voiceVolume"
+            v-model.number="micThreshold"
             class="volume-range"
             type="range"
-            min="0"
-            max="200"
-            step="5"
+            :min="MIC_THRESHOLD_MIN"
+            :max="MIC_THRESHOLD_MAX"
+            step="1"
           >
-          <p class="setting-hint">100% 为原始音量，超过 100% 会放大（仅作用于本网页的语音播放）</p>
-        </div>
-
-        <!-- 频道麦克风阈值：低于阈值的音量不上行（每人独立，保存在本地） -->
-        <div class="setting-block">
-          <div class="setting-row">
-            <span class="setting-label">频道麦克风阈值</span>
-            <span class="setting-value">{{ micThresholdPublic }} / {{ micThresholdBlue }} dB</span>
-          </div>
-          <div class="threshold-row">
-            <span class="threshold-tag public">公共</span>
-            <input
-              v-model.number="micThresholdPublic"
-              class="volume-range"
-              type="range"
-              :min="MIC_THRESHOLD_MIN"
-              :max="MIC_THRESHOLD_MAX"
-              step="1"
-            >
-          </div>
-          <div class="threshold-row">
-            <span class="threshold-tag blue">队伍</span>
-            <input
-              v-model.number="micThresholdBlue"
-              class="volume-range"
-              type="range"
-              :min="MIC_THRESHOLD_MIN"
-              :max="MIC_THRESHOLD_MAX"
-              step="1"
-            >
-          </div>
           <!-- 实时音量条：绿条越过刻度线说明已经超过阈值、开始上行 -->
           <div class="level-meter">
             <i :style="{ width: levelPercent + '%' }"></i>
-            <b class="level-mark public" :style="{ left: markPublic + '%' }"></b>
-            <b class="level-mark blue" :style="{ left: markBlue + '%' }"></b>
+            <b class="level-mark" :style="{ left: markThreshold + '%' }"></b>
           </div>
           <p class="setting-hint">对着话筒说话，绿条越过刻度线才有声音发出；数值越低越灵敏（噪声也更容易被送出去）</p>
+        </div>
+
+        <!-- 麦克风增益：上行前的音量放大 -->
+        <div class="setting-block">
+          <div class="setting-row">
+            <span class="setting-label">麦克风增益</span>
+            <span class="setting-value">{{ micGain }}%</span>
+          </div>
+          <input
+            v-model.number="micGain"
+            class="volume-range"
+            type="range"
+            :min="MIC_GAIN_MIN"
+            :max="MIC_GAIN_MAX"
+            step="5"
+          >
+          <p class="setting-hint">100% 为你原本的音量；说话声音偏小可以调高，调太高会把环境噪声一起放大</p>
+        </div>
+
+        <!-- 总音量：右侧箭头展开「道具音量 / 题目音量」 -->
+        <div class="setting-block">
+          <div class="setting-row">
+            <span class="setting-label">总音量</span>
+            <span class="volume-head">
+              <span class="setting-value">{{ masterVolume }}%</span>
+              <button
+                class="volume-toggle"
+                :class="{ open: showVolumeDetails }"
+                :title="showVolumeDetails ? '收起分项音量' : '展开道具 / 题目音量'"
+                @click="showVolumeDetails = !showVolumeDetails"
+              >▾</button>
+            </span>
+          </div>
+          <input
+            v-model.number="masterVolume"
+            class="volume-range"
+            type="range"
+            :min="VOLUME_MIN"
+            :max="VOLUME_MAX"
+            step="5"
+          >
+          <div v-if="showVolumeDetails" class="volume-details">
+            <div class="threshold-row">
+              <span class="threshold-tag">道具</span>
+              <input
+                v-model.number="itemVolume"
+                class="volume-range"
+                type="range"
+                :min="VOLUME_MIN"
+                :max="VOLUME_MAX"
+                step="5"
+              >
+              <span class="setting-value small">{{ itemVolume }}%</span>
+            </div>
+            <div class="threshold-row">
+              <span class="threshold-tag">题目</span>
+              <input
+                v-model.number="questionVolume"
+                class="volume-range"
+                type="range"
+                :min="VOLUME_MIN"
+                :max="VOLUME_MAX"
+                step="5"
+              >
+              <span class="setting-value small">{{ questionVolume }}%</span>
+            </div>
+          </div>
+          <p class="setting-hint">100% 为原始音量，最高 200%；道具与题目音量会在总音量基础上再乘一次</p>
         </div>
 
         <button class="settings-done" @click="emit('close')">完成</button>
@@ -92,9 +128,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useTheme } from '@/composables/useTheme'
-import { useRoomSettings, MIC_THRESHOLD_MIN, MIC_THRESHOLD_MAX } from '@/composables/useRoomSettings'
+import {
+  useRoomSettings,
+  MIC_THRESHOLD_MIN,
+  MIC_THRESHOLD_MAX,
+  MIC_GAIN_MIN,
+  MIC_GAIN_MAX,
+  VOLUME_MIN,
+  VOLUME_MAX
+} from '@/composables/useRoomSettings'
 import { useVoiceChannel } from '@/composables/useVoiceChannel'
 
 const emit = defineEmits<{
@@ -102,8 +146,18 @@ const emit = defineEmits<{
 }>()
 
 const { isDark, toggleTheme } = useTheme()
-const { autoPlayVoice, voiceVolume, micThresholdPublic, micThresholdBlue } = useRoomSettings()
+const {
+  autoPlayVoice,
+  masterVolume,
+  itemVolume,
+  questionVolume,
+  micThreshold,
+  micGain
+} = useRoomSettings()
 const { localLevel } = useVoiceChannel()
+
+// 分项音量默认收起，点总音量右侧的箭头展开
+const showVolumeDetails = ref(false)
 
 // 音量条刻度：-60 dBFS ~ 0 dBFS 映射到 0~100%
 function toPercent(db: number) {
@@ -116,8 +170,7 @@ const levelPercent = computed(() => {
   return toPercent(20 * Math.log10(rms))
 })
 
-const markPublic = computed(() => toPercent(micThresholdPublic.value))
-const markBlue = computed(() => toPercent(micThresholdBlue.value))
+const markThreshold = computed(() => toPercent(micThreshold.value))
 </script>
 
 <style scoped>
@@ -245,11 +298,53 @@ const markBlue = computed(() => toPercent(micThresholdBlue.value))
   color: #3e8ed0;
 }
 
+/* 总音量右侧的展开箭头 */
+.volume-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.volume-toggle {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.volume-toggle:hover {
+  opacity: 1;
+}
+
+.volume-toggle.open {
+  transform: rotate(180deg);
+}
+
+.volume-details {
+  margin-top: 6px;
+  padding: 6px 0 2px;
+  border-top: 1px dashed var(--glass-border);
+}
+
+.setting-value.small {
+  flex: 0 0 auto;
+  width: 42px;
+  text-align: right;
+}
+
 /* 实时音量条 + 两条阈值刻度 */
 .level-meter {
   position: relative;
   height: 8px;
-  margin: 8px 0 0 42px;
+  margin: 8px 0 0;
   border-radius: 4px;
   background: var(--bg-secondary);
   box-shadow: inset 0 0 0 1px var(--glass-border);

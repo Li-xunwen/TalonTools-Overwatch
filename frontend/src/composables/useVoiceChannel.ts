@@ -35,7 +35,7 @@ const TRACK_BLUE = 'ch-blue'
 type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
 function createVoiceChannel() {
-  const { micThresholdPublic, micThresholdBlue, voiceVolume } = useRoomSettings()
+  const { micThreshold, micGain, masterVolume } = useRoomSettings()
 
   const status = ref<VoiceStatus>('idle')
   const errorText = ref('')
@@ -76,6 +76,7 @@ function createVoiceChannel() {
     source: MediaStreamAudioSourceNode
     analyser: AnalyserNode
     gate: GainNode
+    micGain: GainNode
     dest: MediaStreamAudioDestinationNode
     track: MediaStreamTrack
   }
@@ -89,9 +90,7 @@ function createVoiceChannel() {
   let voiceSince = 0
   let gateOpen = false
 
-  const currentThreshold = computed(() =>
-    micChannel.value === 'blue' ? micThresholdBlue.value : micThresholdPublic.value
-  )
+  const currentThreshold = computed(() => micThreshold.value)
 
   /* ---------- 工具 ---------- */
 
@@ -107,7 +106,12 @@ function createVoiceChannel() {
   }
 
   function gainValue(): number {
-    return Math.max(0, Math.min(2, (Number(voiceVolume.value) || 100) / 100))
+    return Math.max(0, Math.min(2, (Number(masterVolume.value) || 100) / 100))
+  }
+
+  /** 麦克风增益：上行前的放大倍数（0~2） */
+  function micGainValue(): number {
+    return Math.max(0, Math.min(2, (Number(micGain.value) || 100) / 100))
   }
 
   function metadataOf(participant: Participant) {
@@ -213,12 +217,24 @@ function createVoiceChannel() {
     analyser.fftSize = 1024
     const gate = ctx.createGain()
     gate.gain.value = 0 // 先关闸，等门限判断
+    // 麦克风增益：门限之后再放大，避免放大后的底噪把门限顶开
+    const gainNode = ctx.createGain()
+    gainNode.gain.value = micGainValue()
     const dest = ctx.createMediaStreamDestination()
     source.connect(analyser) // 分析原始音量（不受门限影响）
     source.connect(gate)
-    gate.connect(dest)
+    gate.connect(gainNode)
+    gainNode.connect(dest)
 
-    const graph: MicGraph = { stream, source, analyser, gate, dest, track: dest.stream.getAudioTracks()[0] }
+    const graph: MicGraph = {
+      stream,
+      source,
+      analyser,
+      gate,
+      micGain: gainNode,
+      dest,
+      track: dest.stream.getAudioTracks()[0]
+    }
     micGraph.value = graph
     // AudioContext 处于 suspended 时整条链路都是静音，进房间后的第一次点击必须把它唤醒
     if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined)
@@ -515,13 +531,19 @@ function createVoiceChannel() {
   }
 
   // 音量增益变化时实时应用到已连接的远端音频
-  watch(voiceVolume, () => {
+  watch(masterVolume, () => {
     const value = gainValue()
     for (const node of remoteNodes.values()) {
       if (!node.wired && value > 1) wireGain(node, value)
       if (node.gain) node.gain.gain.value = value
       else node.el.volume = Math.min(1, value)
     }
+  })
+
+  // 麦克风增益变化时实时应用到上行链路
+  watch(micGain, () => {
+    const graph = micGraph.value
+    if (graph) graph.micGain.gain.value = micGainValue()
   })
 
   return {

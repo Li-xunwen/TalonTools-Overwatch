@@ -26,6 +26,9 @@ export type RoomMode = 'undercover' | 'quiz';
 // 房间无用户后 1 分钟销毁
 const ROOM_EMPTY_DESTROY_MS = 60 * 1000;
 
+// 房间内所有人（含队伍栏保留的断线玩家）都离线满 3 分钟 → 解散房间
+const ROOM_ALL_OFFLINE_DESTROY_MS = 3 * 60 * 1000;
+
 // 房主断线后多久自动移交房主（默认 1 分钟；可用环境变量覆盖，便于调试）
 // 注意：房主只是切到后台（仍在线）时始终不移交
 const HOST_DISCONNECT_TRANSFER_MS = Number(process.env.UNDERCOVER_HOST_TRANSFER_MS ?? 60 * 1000);
@@ -141,6 +144,7 @@ export interface Room {
     team2Name: string;
     createdAt: number;
     emptySince: number | null;   // 变为空的时间（用于 1 分钟销毁计时）
+    allOfflineSince: number | null;  // 全员离线开始的时间（用于 3 分钟自动解散）
     members: Map<number, RoomMember>;
     sockets: Map<number, Set<WebSocket>>;
     chat: ChatMessage[];
@@ -446,7 +450,8 @@ export function createRoom(userId: number, battletag: string, mode: RoomMode = '
         team1Name: '队伍1',
         team2Name: '队伍2',
         createdAt: Date.now(),
-        emptySince: null,
+    emptySince: null,
+    allOfflineSince: null,
         members: new Map(),
         sockets: new Map(),
         chat: [],
@@ -1797,10 +1802,12 @@ export function voteNextQuiz(room: Room, userId: number): { ok: boolean; message
 
     room.quiz.votes[userId] = 'next';
 
-    // 在线成员过半同意 → 立即进入下一题
-    const online = [...room.members.values()].filter((member) => member.connected);
-    const voted = Object.keys(room.quiz.votes).length;
-    if (online.length > 0 && voted * 2 >= online.length) advanceQuizQuestion(room);
+    // 之前是「在线成员过半同意」就立即进入下一题，会出现只有 1 个人在线时
+    // 一票就触发的情况；改为需要**所有在线且非观众席的成员**都投票才立即进入，
+    // 否则等 30 秒倒计时结束自动进入（断线玩家不阻塞）。
+    const online = [...room.members.values()].filter((member) => member.connected && member.seat !== 'spectator');
+    const voted = online.filter((member) => room.quiz.votes[member.userId] !== undefined).length;
+    if (online.length > 0 && voted === online.length) advanceQuizQuestion(room);
 
     return { ok: true };
 }
@@ -1907,6 +1914,19 @@ async function tick(): Promise<void> {
 
             room.emptySince = null;
 
+            // 全员离线（队伍栏成员断线后仍留在房间，所以不能只靠「无成员」判断）
+            // 满 ROOM_ALL_OFFLINE_DESTROY_MS → 解散房间
+            const anyConnected = [...room.members.values()].some((member) => member.connected);
+            if (anyConnected) {
+                room.allOfflineSince = null;
+            } else {
+                if (room.allOfflineSince === null) room.allOfflineSince = now;
+                if (now - room.allOfflineSince >= ROOM_ALL_OFFLINE_DESTROY_MS) {
+                    destroyRoom(room, '房间内所有人已离线超过 3 分钟，房间已自动解散');
+                    continue;
+                }
+            }
+
             // 房主断线满 1 分钟 → 自动移交房主（只切后台仍算在线，始终不移交）
             const owner = room.members.get(room.ownerUserId);
             if (
@@ -1915,15 +1935,9 @@ async function tick(): Promise<void> {
                 owner.disconnectedSince !== null &&
                 now - owner.disconnectedSince >= HOST_DISCONNECT_TRANSFER_MS
             ) {
-                const previousOwner = room.ownerUserId;
                 await transferOwner(room);
-
-                const newOwner = room.members.get(room.ownerUserId);
-                if (room.ownerUserId !== previousOwner && newOwner) {
-                    pushSystemMessage(room, `房主已转让给 ${nameWithoutIdNumber(newOwner.battletag)}`);
-                } else {
-                    broadcastRoom(room);
-                }
+                // 房主转让不再发系统消息，只广播最新状态（房主标签会随之更新）
+                broadcastRoom(room);
             }
         }
     } catch (error) {

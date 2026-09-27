@@ -258,11 +258,11 @@ export function initUndercoverWs(server: HttpServer): void {
 
                 case 'transferOwner': {
                     const targetUserId = Number(msg.userId);
-                    const targetTag = room.members.get(targetUserId)?.battletag ?? '';
                     const result = transferOwnerTo(room, ctx.userId, targetUserId);
 
                     if (!result.ok) sendTo(ws, { type: 'error', message: result.message ?? '转让房主失败' });
-                    else pushSystemMessage(room, `房主已转让给 ${nameWithoutIdNumber(targetTag)}`);
+                    // 房主转让不再发系统消息，只广播最新状态（房主标签会随之更新）
+                    else broadcastRoom(room);
                     break;
                 }
 
