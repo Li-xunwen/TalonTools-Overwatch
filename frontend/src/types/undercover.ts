@@ -49,7 +49,7 @@ export type ChatKind = 'text' | 'voice'
 export type GameState = 'map' | 'undercover' | 'ready' | 'start' | 'settle'
 
 // 互动道具：鸡蛋 / 玫瑰花
-export type ItemType = 'egg' | 'rose'
+export type ItemType = 'egg' | 'rose' | 'ice'
 
 export interface ItemEvent {
   id: number

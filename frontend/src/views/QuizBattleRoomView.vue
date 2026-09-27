@@ -61,7 +61,7 @@
             <img class="item-icon" :src="itemTriggerIcon" :alt="activeItemTitle">
           </button>
 
-          <!-- 悬浮窗：鸡蛋 / 玫瑰花 -->
+            <!-- 悬浮窗：鸡蛋 / 玫瑰花 / 冰冰冰 -->
           <div v-if="showItemPanel" class="item-panel">
             <button
               v-for="item in ITEMS"
@@ -75,7 +75,7 @@
           </div>
 
           <span v-if="activeItem && !showItemPanel" class="item-tip">
-            点击目标头像{{ activeItem === 'egg' ? '砸鸡蛋' : '献花' }}
+            点击目标头像{{ activeItemTitle }}
             <template v-if="activeItemSentCount > 0">
               <b class="item-count">×</b>{{ activeItemSentCount }}
             </template>
@@ -313,7 +313,7 @@
                           :src="url"
                           alt="解析配图"
                           @click="openImagePreview(url)"
-                          @load="fitQuizPanel"
+                          @load="fitExplainImages"
                         >
                       </div>
                     </div>
@@ -1862,22 +1862,25 @@ async function copyBattletag(battletag: string) {
 ========================= */
 const ITEMS: { type: ItemType; icon: string; title: string }[] = [
   { type: 'egg', icon: '/ico/鸡蛋.svg', title: '砸鸡蛋' },
-  { type: 'rose', icon: '/ico/玫瑰花.svg', title: '献花' }
+  { type: 'rose', icon: '/ico/玫瑰花.svg', title: '献花' },
+  { type: 'ice', icon: '/ico/冰冰冰.png', title: '冰冰冰' }
 ]
 
 // 道具图标与命中后的动画图
 const ITEM_FLY_ICON: Record<ItemType, string> = {
   egg: '/ico/鸡蛋.svg',
-  rose: '/ico/玫瑰花.svg'
+  rose: '/ico/玫瑰花.svg',
+  ice: '/ico/冰冰冰.png'
 }
 
 const ITEM_IMPACT_ICON: Record<ItemType, string> = {
   egg: '/ico/鸡蛋破碎.svg',
-  rose: '/ico/玫瑰花绽放.svg'
+  rose: '/ico/玫瑰花绽放.svg',
+  ice: '/ico/冰冰冰变问号.svg'
 }
 
-// 道具音效（frontend/public/audio）：命中瞬间播放
-const ITEM_SOUND: Record<ItemType, string> = {
+// 道具音效（frontend/public/audio）：命中瞬间播放；没有配音频的道具就静音
+const ITEM_SOUND: Partial<Record<ItemType, string>> = {
   egg: '/audio/砸鸡蛋.wav',
   rose: '/audio/玫瑰.wav'
 }
@@ -1885,9 +1888,12 @@ const ITEM_SOUND: Record<ItemType, string> = {
 const itemAudioTemplates = new Map<ItemType, HTMLAudioElement>()
 
 function playItemSound(item: ItemType) {
+  const source = ITEM_SOUND[item]
+  if (!source) return
+
   let template = itemAudioTemplates.get(item)
   if (!template) {
-    template = new Audio(ITEM_SOUND[item])
+    template = new Audio(source)
     template.preload = 'auto'
     itemAudioTemplates.set(item, template)
   }
@@ -1922,8 +1928,9 @@ function playItemSound(item: ItemType) {
 // 预热：进入房间时先把两个音效下载好，避免第一次命中才有延迟
 function preloadItemSounds() {
   for (const item of ITEMS) {
+    if (!ITEM_SOUND[item.type]) continue
     if (itemAudioTemplates.has(item.type)) continue
-    const audio = new Audio(ITEM_SOUND[item.type])
+    const audio = new Audio(ITEM_SOUND[item.type] as string)
     audio.preload = 'auto'
     itemAudioTemplates.set(item.type, audio)
   }
@@ -1935,7 +1942,7 @@ const RING_LENGTH = 2 * Math.PI * 16   // 与模板里 r=16 对应
 const activeItem = ref<ItemType | ''>('')
 const itemProgress = ref(0)
 // 提示里的数字是「已发送数量」，与 3 秒使用窗口无关，可以一直累加
-const itemSentCounts = ref<Record<ItemType, number>>({ egg: 0, rose: 0 })
+const itemSentCounts = ref<Record<ItemType, number>>({ egg: 0, rose: 0, ice: 0 })
 // 道具悬浮窗是否展开（收起时按钮只显示道具图标）
 const showItemPanel = ref(false)
 
@@ -2589,11 +2596,27 @@ function applyQuestionVolume() {
 
 watch(effectiveQuestionPercent, () => applyQuestionVolume())
 
+/**
+ * 解析配图按「容器（答题面板）高度的一半」显示：
+ * 面板高度是动态的（320~400px），百分比高度在滚动容器里不生效，
+ * 所以按实际 clientHeight 折半后写到图片容器上，再让图片 contain 缩放。
+ */
+function fitExplainImages() {
+  const panel = document.querySelector<HTMLElement>('.quiz-panel')
+  const boxes = document.querySelectorAll<HTMLElement>('.stage-explain-images')
+  if (!boxes.length) return
+  const half = Math.max(120, Math.round((panel?.clientHeight ?? 400) / 2))
+  boxes.forEach((box) => {
+    box.style.height = `${half}px`
+  })
+}
+
 /* ---------- 进入题目 / 解析时自动播放音频 ---------- */
 // 换到新题 → 自动播题目音频；进入解析（投票）阶段 → 自动播解析音频
 async function autoPlayStageAudio() {
   await nextTick()
   applyQuestionVolume()
+  fitExplainImages()
   const selector =
     quizPhase.value === 'question'
       ? '.question-audio'
@@ -4602,12 +4625,14 @@ onUnmounted(deactivatePage)
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  /* 高度由 fitExplainImages() 按答题面板高度的 1/2 设置 */
+  width: 100%;
 }
 
 .stage-explain-image {
-  /* 解析配图按容器宽度缩放 */
+  /* 解析配图缩放至容器宽度、高度不超过容器的 1/2 */
   width: 100%;
-  height: auto;
+  height: 100%;
   max-height: none;
   border-radius: 10px;
   object-fit: contain;
