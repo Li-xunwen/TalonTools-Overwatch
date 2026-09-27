@@ -15,6 +15,8 @@
           <span class="entry-enter">点击进入</span>
         </div>
 
+        <div class="entry-divider"></div>
+
         <!-- 守望先锋刷题战入口 -->
         <div class="quiz-entry" @click="goQuizBattle">
           <h2 class="section-title">守望先锋刷题战</h2>
@@ -138,6 +140,21 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
   border-radius: 24px;
   padding: 24px 16px;
   transition: 0.2s ease;
+  /* 两个入口统一 16:9，内容垂直居中 */
+  aspect-ratio: 16 / 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+/* 两个入口之间的分割线 */
+.entry-divider {
+  height: 1px;
+  max-width: 72%;
+  margin: 16px auto;
+  background: var(--glass-border, rgba(0, 0, 0, 0.08));
 }
 
 .undercover-entry:hover,

@@ -1863,14 +1863,14 @@ async function copyBattletag(battletag: string) {
 const ITEMS: { type: ItemType; icon: string; title: string }[] = [
   { type: 'egg', icon: '/ico/鸡蛋.svg', title: '砸鸡蛋' },
   { type: 'rose', icon: '/ico/玫瑰花.svg', title: '献花' },
-  { type: 'ice', icon: '/ico/冰冰冰.png', title: '冰冰冰' }
+  { type: 'ice', icon: '/ico/冰冰冰.webp', title: '冰冰冰' }
 ]
 
 // 道具图标与命中后的动画图
 const ITEM_FLY_ICON: Record<ItemType, string> = {
   egg: '/ico/鸡蛋.svg',
   rose: '/ico/玫瑰花.svg',
-  ice: '/ico/冰冰冰.png'
+  ice: '/ico/冰冰冰.webp'
 }
 
 const ITEM_IMPACT_ICON: Record<ItemType, string> = {

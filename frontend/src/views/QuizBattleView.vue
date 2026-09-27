@@ -7,7 +7,9 @@
       <!-- 游戏标题卡片 -->
       <div class="quiz-header">
         <div class="header-top">
-          <button class="home-btn" title="返回游戏页" @click="goGame">🏠</button>
+          <button class="home-btn" title="返回游戏页" @click="goGame">
+            <img class="home-btn-icon" src="/res/imge/首页.webp" alt="返回游戏页">
+          </button>
           <h1 class="quiz-title">守望先锋刷题战</h1>
           <span class="header-spacer"></span>
         </div>
@@ -432,6 +434,14 @@ onUnmounted(deactivatePage)
   justify-content: center;
   transition: 0.2s ease;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* 首页按钮图标（res/imge/首页.webp） */
+.home-btn-icon {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .home-btn:hover {
