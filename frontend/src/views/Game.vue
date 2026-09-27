@@ -155,6 +155,28 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
   transform: translateY(-1px);
 }
 
+/* 刷题战入口卡片背景：卧底死神。
+   用伪元素而不是直接写在 background 上，避免 hover 的 background 简写把图覆盖掉 */
+.quiz-entry {
+  position: relative;
+  overflow: hidden;
+}
+
+.quiz-entry::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/res/imge/卧底死神.png') center / cover no-repeat;
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.quiz-entry > * {
+  position: relative;
+  z-index: 1;
+}
+
 .undercover-icon {
   font-size: 56px;
   line-height: 1;

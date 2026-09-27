@@ -369,6 +369,23 @@ onUnmounted(deactivatePage)
   padding: 20px 20px 72px;
   margin: 20px 0;
   box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* 标题卡片背景：卧底死神（伪元素铺底，不影响卡片本身的背景色与圆角） */
+.undercover-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/res/imge/卧底死神.png') center / cover no-repeat;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.undercover-header > * {
+  position: relative;
+  z-index: 1;
 }
 
 .header-top {
