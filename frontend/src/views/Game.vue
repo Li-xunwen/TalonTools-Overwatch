@@ -18,7 +18,9 @@
 
         <!-- 守望先锋刷题战入口 -->
         <div class="quiz-entry" @click="goQuizBattle">
-          <div class="undercover-icon">📝</div>
+          <div class="undercover-icon">
+            <img class="undercover-icon-img" src="/res/imge/答题小美.png" alt="守望先锋刷题战">
+          </div>
           <h2 class="section-title">守望先锋刷题战</h2>
           <p class="undercover-desc">
             3v3 组队抢答，比拼守望知识与反应速度，进房间开一局
@@ -157,6 +159,15 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
   font-size: 56px;
   line-height: 1;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
+}
+
+/* 入口图标支持用图片（守望先锋刷题战用「答题小美」） */
+.undercover-icon-img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  border-radius: 18px;
+  vertical-align: middle;
 }
 
 .undercover-desc {

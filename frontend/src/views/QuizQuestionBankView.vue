@@ -11,7 +11,6 @@
           <p class="qb-subtitle">守望先锋刷题战 · 题目 / 资源 / 提交历史</p>
         </div>
         <div class="qb-header-actions">
-          <button class="qb-btn" @click="tagDialogOpen = true">编辑标签</button>
           <button class="qb-btn" @click="startCreate">新建题目</button>
         </div>
       </div>
@@ -322,6 +321,9 @@
       @close="tagDialogOpen = false"
       @changed="onTagsChanged"
     />
+
+    <!-- 编辑标签：右下角小按钮 -->
+    <button class="qb-tag-fab" title="编辑标签" @click="tagDialogOpen = true">🏷️ 标签</button>
 
     <!-- 图片预览 -->
     <ImageViewer
@@ -994,6 +996,31 @@ async function resetDispute() {
   font-size: 0.85rem;
   opacity: 0.7;
   color: var(--text-primary);
+}
+
+/* 编辑标签：右下角小按钮 */
+.qb-tag-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-family: inherit;
+  line-height: 1.4;
+  cursor: pointer;
+  opacity: 0.85;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22), inset 0 0 0 1px var(--glass-border);
+  transition: 0.15s ease;
+}
+
+.qb-tag-fab:hover {
+  opacity: 1;
+  transform: translateY(-1px);
 }
 
 .qb-header-actions {
