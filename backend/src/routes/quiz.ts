@@ -500,6 +500,39 @@ router.put('/tags/:name', express.json(), authenticateToken, async (req: AuthReq
     }
 });
 
+// 删除标签：把所有题目里的该标签移除（标签没有独立表，是按题目的 tags 聚合出来的）
+router.delete('/tags/:name', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const name = String(req.params.name ?? '').trim();
+        if (!name) return res.status(400).json({ error: '缺少标签名' });
+
+        const [rows] = await pool.query<any[]>('SELECT id, tags FROM quiz_questions');
+        let updated = 0;
+        for (const row of rows) {
+            const tags = parseJsonColumn<string[]>(row.tags, []);
+            if (!Array.isArray(tags) || !tags.includes(name)) continue;
+            const next = tags.filter((tag) => tag !== name);
+            await pool.query(
+                'UPDATE quiz_questions SET tags = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                [JSON.stringify(next), row.id]
+            );
+            updated += 1;
+        }
+
+        userEventLogger.logEvent({
+            userId: req.user!.userId,
+            eventType: 'quiz_tag_delete',
+            eventData: { name, updated },
+            ipAddress: req.ip
+        });
+
+        res.json({ updated });
+    } catch (error) {
+        console.error('[题库] 删除标签失败:', error);
+        res.status(500).json({ error: 'server error' });
+    }
+});
+
 router.post('/questions/:id/dispute', express.json(), authenticateToken, async (req: AuthRequest, res: Response) => {
     try {
         const id = Number(req.params.id);

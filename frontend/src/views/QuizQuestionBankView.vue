@@ -11,6 +11,7 @@
           <p class="qb-subtitle">守望先锋刷题战 · 题目 / 资源 / 提交历史</p>
         </div>
         <div class="qb-header-actions">
+          <button class="qb-btn" @click="tagDialogOpen = true">编辑标签</button>
           <button class="qb-btn" @click="startCreate">新建题目</button>
         </div>
       </div>
@@ -228,11 +229,6 @@
                 v-for="tag in form.tags"
                 :key="tag"
                 class="qb-chip active"
-                title="长按可重命名该标签（所有带此标签的题目一起改）"
-                @pointerdown="startTagPress(tag)"
-                @pointerup="endTagPress"
-                @pointerleave="endTagPress"
-                @pointercancel="endTagPress"
               >
                 {{ tag }}
                 <button class="qb-chip-close" @pointerdown.stop @click="removeTag(tag)">✕</button>
@@ -241,11 +237,6 @@
                 v-for="tag in suggestedTags"
                 :key="`suggest-${tag.name}`"
                 class="qb-chip"
-                title="长按可重命名该标签（所有带此标签的题目一起改）"
-                @pointerdown="startTagPress(tag.name)"
-                @pointerup="endTagPress"
-                @pointerleave="endTagPress"
-                @pointercancel="endTagPress"
                 @click="quickAddTag(tag.name)"
               >+ {{ tag.name }}</button>
             </div>
@@ -325,6 +316,13 @@
       @select="onFilePicked"
     />
 
+    <!-- 标签管理（qb-header 的「编辑标签」按钮打开） -->
+    <QuizTagDialog
+      v-if="tagDialogOpen"
+      @close="tagDialogOpen = false"
+      @changed="onTagsChanged"
+    />
+
     <!-- 图片预览 -->
     <ImageViewer
       :visible="showImageViewer"
@@ -377,6 +375,7 @@ import { useRouter } from 'vue-router'
 import Toast from '@/components/Toast.vue'
 import FileLibrary from '@/components/FileLibrary.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
+import QuizTagDialog from '@/components/QuizTagDialog.vue'
 import { authFetch } from '@/utils/request'
 
 interface QuizOption {
@@ -742,11 +741,6 @@ function addTag() {
 }
 
 function quickAddTag(tag: string) {
-  // 长按已经触发重命名时，抬起手指带来的这次 click 忽略掉
-  if (tagPressFired) {
-    tagPressFired = false
-    return
-  }
   if (form.tags.includes(tag)) return
   form.tags.push(tag)
 }
@@ -755,54 +749,18 @@ function removeTag(tag: string) {
   form.tags = form.tags.filter((item) => item !== tag)
 }
 
-/* ---------- 长按标签重命名（所有带该标签的题目一起改） ---------- */
-const TAG_PRESS_MS = 600
-let tagPressTimer: number | null = null
-let tagPressFired = false
+/* ---------- 标签管理弹窗（qb-header 的「编辑标签」） ---------- */
+const tagDialogOpen = ref(false)
 
-function startTagPress(name: string) {
-  endTagPress()
-  tagPressFired = false
-  tagPressTimer = window.setTimeout(() => {
-    tagPressTimer = null
-    tagPressFired = true
-    void renameTag(name)
-  }, TAG_PRESS_MS)
-}
-
-function endTagPress() {
-  if (tagPressTimer !== null) {
-    window.clearTimeout(tagPressTimer)
-    tagPressTimer = null
+// 弹窗里改名 / 删除后：同步正在编辑的题目，并刷新标签列表与题目列表
+function onTagsChanged(payload: { action: 'rename' | 'delete'; from: string; to?: string }) {
+  if (payload.action === 'rename' && payload.to) {
+    form.tags = form.tags.map((tag) => (tag === payload.from ? payload.to as string : tag))
+  } else if (payload.action === 'delete') {
+    form.tags = form.tags.filter((tag) => tag !== payload.from)
   }
-}
-
-async function renameTag(name: string) {
-  const input = window.prompt(`重命名标签「${name}」\n所有带该标签的题目会一起改名：`, name)
-  if (input === null) return
-  const next = input.trim().slice(0, 20)
-  if (!next || next === name) return
-
-  try {
-    const res = await authFetch(`/api/quiz/tags/${encodeURIComponent(name)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ newName: next })
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      showToast(data.error || '重命名标签失败')
-      return
-    }
-    const data = await res.json()
-    // 正在编辑的题目同步替换，其它题目由后端批量更新
-    form.tags = form.tags.map((tag) => (tag === name ? next : tag))
-    showToast(`标签已改为「${next}」，共更新 ${data.updated ?? 0} 道题`)
-    await loadTags()
-    await loadQuestions()
-  } catch (error) {
-    console.error('重命名标签失败:', error)
-    showToast('重命名标签失败')
-  }
+  void loadTags()
+  void loadQuestions()
 }
 
 /* =========================

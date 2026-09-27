@@ -1882,7 +1882,8 @@ const ITEM_IMPACT_ICON: Record<ItemType, string> = {
 // 道具音效（frontend/public/audio）：命中瞬间播放；没有配音频的道具就静音
 const ITEM_SOUND: Partial<Record<ItemType, string>> = {
   egg: '/audio/砸鸡蛋.wav',
-  rose: '/audio/玫瑰.wav'
+  rose: '/audio/玫瑰.wav',
+  ice: '/audio/冰冰冰.wav'
 }
 
 const itemAudioTemplates = new Map<ItemType, HTMLAudioElement>()
