@@ -7,6 +7,7 @@ import { userEventLogger } from '../utils/db';
 import {
     PENDING_DIR,
     UPLOAD_CHUNK_SIZE,
+    MAX_FILE_SIZE,
     UserFileRow,
     allocateDefaultName,
     cancelUploadSession,
@@ -84,6 +85,9 @@ router.post(
             };
 
             const size = Math.max(0, Number(body.size) || 0);
+            if (size > MAX_FILE_SIZE) {
+                return res.status(400).json({ error: '单个文件最大 5GB' });
+            }
             // 优先用前端传来的扩展名；没有就按原始文件名推导
             const ext = body.ext
                 ? normalizeExt(String(body.ext))
@@ -257,7 +261,8 @@ const stagingUpload = multer({
         },
         filename: (_req, _file, cb) => cb(null, `${crypto.randomUUID()}.part`)
     }),
-    limits: { fileSize: 500 * 1024 * 1024 }
+    // 旧版一次性上传通道：与分片通道保持一致的上限（5GB）
+    limits: { fileSize: MAX_FILE_SIZE }
 });
 
 router.post(

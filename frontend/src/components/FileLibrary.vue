@@ -46,6 +46,7 @@
         <!-- 隐私提示内容 -->
         <div v-if="showPrivacy" class="fl-privacy-notice">
           <p>🔒 你上传的文件仅你自己可见。上传的图片、视频与音频可用于文章与题库编辑，文件会保存在服务器上。</p>
+          <p>单个文件最大 5GB，上传中断可以续传（同一个文件再次选择即可接着传）。</p>
           <p>请勿上传违反法律法规的内容，本站保留删除违规文件的权利。</p>
         </div>
         <div v-if="loading" class="fl-loading">加载中...</div>
@@ -149,6 +150,8 @@ interface UploadRecord {
 
 const UPLOAD_RECORDS_KEY = 'fileLibraryUploads';
 const UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024;
+// 单个文件上限：5GB（与后端 MAX_FILE_SIZE 保持一致）
+const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024;
 
 interface UploadProgressState {
   visible: boolean;
@@ -545,7 +548,7 @@ async function onUpload(e: Event) {
       uploadProgress.completed++;
     } catch (err: any) {
       console.error('上传失败:', file.name, err);
-      alert(`上传失败: ${file.name}`);
+      alert(`上传失败: ${file.name}\n${err?.message ?? ''}`);
     }
   }
 
@@ -610,6 +613,9 @@ function uploadChunk(
 
 // 分片上传 + 断点续传 + 完成后进入「解析中」
 async function uploadOneFile(file: File) {
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`单个文件最大 5GB，当前文件 ${formatSize(file.size)}`)
+  }
   const records = readUploadRecords();
   const key = uploadKeyOf(file);
   const previous = records[key];

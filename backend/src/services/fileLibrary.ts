@@ -19,6 +19,9 @@ const STAGING_DIR = path.join(PENDING_DIR, 'staging');
 // 分片大小：4MB
 export const UPLOAD_CHUNK_SIZE = 4 * 1024 * 1024;
 
+// 单个文件上限：5GB（分片上传，按片校验；超出直接拒绝）
+export const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024;
+
 // 上传会话超时（小时）：超时后分片自动删除
 const UPLOAD_TTL_HOURS = Number(process.env.FILE_UPLOAD_TTL_HOURS ?? 12);
 
