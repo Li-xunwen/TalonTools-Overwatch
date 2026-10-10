@@ -1181,7 +1181,39 @@ watch(() => route.fullPath, () => { fetchPage(); });
 .footer-beian .sep { margin: 0 8px; color: var(--accent); }
 
 @media (max-width: 760px) {
-    .container { padding: 24px 20px; }
+    /* 小屏：外层留白收紧，内容可用宽度更大 */
+    .page-view { padding: 16px 12px; }
+
+    /* 容器改为「内容自适应 + 水平垂直居中」：
+       短内容（含加载中/报错卡片）会在视口里居中；长内容自然向下排（auto 边距不会裁切顶部） */
+    .container {
+        width: 100%;
+        flex: 0 0 auto;
+        margin: auto;
+        padding: 20px 16px;
+    }
+
+    /* 顶栏按钮允许换行，避免把页面撑出横向滚动 */
+    .top-nav-bar {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px 12px;
+    }
+
+    /* 正文里的长链接/长单词允许断行，宽表格就地横向滚动 */
+    .markdown-body :deep(p),
+    .markdown-body :deep(li),
+    .markdown-body :deep(a) {
+        overflow-wrap: anywhere;
+    }
+
+    .markdown-body :deep(table) {
+        display: block;
+        overflow-x: auto;
+    }
+
+    .markdown-section { padding: 16px 14px; }
+
     .title { font-size: 24px; }
     .markdown-body :deep(h2) { font-size: 19px; }
     .edit-heading-input { font-size: 17px; }
