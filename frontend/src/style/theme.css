@@ -145,16 +145,9 @@ a:hover {
 /* ==========================================
    毛玻璃基座 — 所有表面容器
    ========================================== */
-.join-play {
-  position: relative;
-  width: 100%;
-  min-height: 100vh;
-  overflow: hidden;
-}
-
 /* 页面外壳容器：首页 / 游戏页 / 新闻页等共用。
-   以前这组样式写在 MainView.vue 的非 scoped 块里，导致直接刷新 /Game 或 /News 时
-   拿不到 1200px 约束（只有先从主页跳过来才有），因此提到全局样式。 */
+   注意 max-width 必须写在这里（全局样式）：以前它写在 MainView.vue 的非 scoped 块里，
+   导致直接刷新 /Game 或 /News 时拿不到 1200px 约束（只有先从主页跳过来才生效）。 */
 .join-play {
   position: relative;
   width: 100%;
