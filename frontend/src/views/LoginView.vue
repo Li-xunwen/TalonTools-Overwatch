@@ -221,6 +221,7 @@ async function handleLogin() {
     }
     const token = data.token;
     if (!token) throw new Error("服务器未返回令牌");
+    rememberUser(tag);
     saveAuthData(token);
     console.log("登录成功，Token 已存入 LocalStorage");
     goAfterLogin();
@@ -275,11 +276,51 @@ async function autoLogin() {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// ---------- 本地登录历史（自动填充 + 优先补全） ----------
+const HISTORY_KEY = "loginBattletagHistory";
+const HISTORY_MAX = 8;
+
+function readHistory(): string[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    return Array.isArray(list) ? list.map((item) => String(item)).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+const historyUsers = ref<string[]>(readHistory());
+
+/** 记录登录过的战网ID：最近使用的排最前，去重，最多保留 8 个 */
+function rememberUser(tag: string) {
+  const name = tag.trim();
+  if (!name) return;
+  const next = [name, ...historyUsers.value.filter((item) => item !== name)].slice(0, HISTORY_MAX);
+  historyUsers.value = next;
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+  } catch {
+    // 隐私模式等场景下写入失败：忽略，不影响登录
+  }
+}
+
+/** 进页面时用本地历史自动填充战网ID（已有输入则不覆盖，避免打断浏览器自动填充） */
+function prefillFromHistory() {
+  if (battletag.value.trim()) return;
+  const last = historyUsers.value[0];
+  if (last) battletag.value = last;
+}
+
 // ---------- 自动补全逻辑 ----------
+// 本地历史优先排在前面，后面接服务端用户列表（去掉重复）
 const filteredUsers = computed(() => {
   const keyword = battletag.value.trim().toLowerCase();
-  if (!keyword) return validUsers.value;
-  return validUsers.value.filter((item) => item.toLowerCase().includes(keyword));
+  const merged = [
+    ...historyUsers.value,
+    ...validUsers.value.filter((item) => !historyUsers.value.includes(item))
+  ];
+  if (!keyword) return merged;
+  return merged.filter((item) => item.toLowerCase().includes(keyword));
 });
 
 function filterUsers() {
@@ -419,6 +460,7 @@ async function handleSubmitBind() {
     const loginData = await loginRes.json();
 
     if (loginRes.ok && loginData.token) {
+      rememberUser(pendingBindBattletag.value);
       saveAuthData(loginData.token);
       goAfterLogin();
     } else {
@@ -449,6 +491,7 @@ function initBindCaptcha() {
 // 生命周期
 onMounted(async () => {
   initTheme();
+  prefillFromHistory();
   await loadUserList();
   await autoLogin();
   document.addEventListener("click", handleClickOutside);
