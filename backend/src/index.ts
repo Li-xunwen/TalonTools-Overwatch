@@ -145,6 +145,9 @@ app.get('/api/heroeslist', async (req, res) => {
 app.use('/api/minecraft', minecraftRouter);
 app.use('/api/undercover', undercoverRouter);
 app.use('/api/bind-phone', bindPhone);
+// info 的 GET 是公开的，必须挂在带全局鉴权的 /api 路由之前，
+// 否则会被 user/like/evaluation 的 router.use(authenticateToken) 先拦下
+app.use('/api/info', infoRouter);
 app.use('/api', userRouter);
 app.use('/api', pagesRouter);
 app.use('/api', likeRouter);
@@ -155,7 +158,6 @@ app.use('/api/v2', dashenProfileRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/quiz', quizRouter);
 app.use('/api/voice', voiceRouter);
-app.use('/api/info', infoRouter);
 
 // 用 http server 同时承载 Express 与「谁是守望先锋卧底」的 WebSocket 会话
 const server = http.createServer(app);
