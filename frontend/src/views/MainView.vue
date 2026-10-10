@@ -533,15 +533,6 @@ body {
 
 
 
-.join-play {
-    position: relative;
-    width: 100%;
-    max-width: 1200px;
-    min-height: 100vh;
-    overflow: hidden;
-    margin: 0 auto;  
-}
-
 .poster-wrapper {
   width: 100%;
   /* 保持宽高比，防止塌陷 */

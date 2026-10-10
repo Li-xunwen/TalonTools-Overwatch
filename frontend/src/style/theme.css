@@ -152,6 +152,18 @@ a:hover {
   overflow: hidden;
 }
 
+/* 页面外壳容器：首页 / 游戏页 / 新闻页等共用。
+   以前这组样式写在 MainView.vue 的非 scoped 块里，导致直接刷新 /Game 或 /News 时
+   拿不到 1200px 约束（只有先从主页跳过来才有），因此提到全局样式。 */
+.join-play {
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  min-height: 100vh;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
 .content-area {
   position: relative;
   z-index: 3;
@@ -450,3 +462,4 @@ body.is-card-dragging {
 .record-btn .record-label {
   pointer-events: none;
 }
+.content-area {
