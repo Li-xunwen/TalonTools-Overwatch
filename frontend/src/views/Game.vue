@@ -76,7 +76,7 @@
             <div class="server-card-name">{{ item.name }}</div>
             <div v-if="item.subtitle" class="server-card-subtitle">{{ item.subtitle }}</div>
             <p v-if="item.usage" class="server-card-usage">{{ item.usage }}</p>
-            <div v-if="item.expires" class="server-card-expires">小字：{{ item.expires }} 到期</div>
+            <div v-if="item.expires" class="server-card-expires">Tips：{{ item.expires }} 到期</div>
           </div>
         </div>
         <p v-else class="our-servers-empty">暂无服务器信息</p>
