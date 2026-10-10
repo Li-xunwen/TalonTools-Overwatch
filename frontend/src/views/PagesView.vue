@@ -9,7 +9,7 @@
         <div class="container" v-else-if="error">
             <div class="state-card error-card">
                 <span class="state-icon">⚠️</span><p class="state-text">{{ error }}</p>
-                <button v-if="isAuthError" class="btn-retry" @click="$router.push('/')">返回登录</button>
+                <button v-if="isAuthError" class="btn-retry" @click="goLogin">返回登录</button>
                 <button v-else class="btn-retry" @click="fetchPage">重试</button>
             </div>
         </div>
@@ -23,9 +23,16 @@
                     <router-link to="/main" class="nav-link back-home">首页</router-link>
                 </div>
                 <!-- 第二行：作者操作按钮 -->
-                <div v-if="isAuthor" class="nav-line nav-line-author">
+                <div v-if="isAuthor || isAdmin" class="nav-line nav-line-author">
                     <button class="nav-link btn-edit" @click="enterEditMode">✏️ 编辑</button>
+                    <button
+                        v-if="isAuthor && pageData.status !== 4"
+                        class="nav-link btn-draft"
+                        :disabled="statusSaving"
+                        @click="withdrawToDraft"
+                    >↩️ 撤回为草稿</button>
                     <button class="nav-link btn-transfer" @click="showTransferDialog = true">🔄 转让作者</button>
+                    <button v-if="isAdmin" class="nav-link btn-status" @click="showStatusDialog = true">⚙️ 设置文章状态</button>
                 </div>
             </div>
             <h1 class="title" v-html="renderedPageTitle"></h1>
@@ -234,6 +241,14 @@
             @transferred="onTransferComplete"
         />
 
+        <PageStatusDialog
+            v-if="showStatusDialog"
+            :page-id="pageData.id"
+            :current-status="pageData.status"
+            @close="showStatusDialog = false"
+            @changed="onStatusChanged"
+        />
+
         <div class="back-link" v-if="pageData && !loading && !isEditing"><a href="#" @click.prevent="scrollToTop">🔝 回到最顶上</a></div>
         <div class="footer-beian">
             <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ icpNumber }}</a>
@@ -251,6 +266,7 @@ import DOMPurify from 'dompurify';
 import ThemeToggle from '@/components/ThemeToggle.vue';
 import FileLibrary from '@/components/FileLibrary.vue';
 import TransferAuthorDialog from '@/components/TransferAuthorDialog.vue';
+import PageStatusDialog from '@/components/PageStatusDialog.vue';
 import { authFetch } from '@/utils/request';
 import {
     PageSection, parseSections, mergeSections,
@@ -288,6 +304,8 @@ const isAuthError = ref(false);
 const pageData = ref<any>(null);
 const isEditing = ref(false);
 const isAuthor = ref(false);
+// 管理员（后端 pages 状态接口只认 ADMIN 角色）：可设置任意文章状态
+const isAdmin = ref(false);
 const editTitle = ref('');
 const editSections = ref<PageSection[]>([]);
 const editingSectionIdx = ref(-1);
@@ -297,6 +315,45 @@ const fileLibrarySectionIdx = ref(0);
 
 // ===== 转让作者 =====
 const showTransferDialog = ref(false);
+
+// ===== 文章状态（管理员设置 / 作者撤回草稿） =====
+const showStatusDialog = ref(false);
+const statusSaving = ref(false);
+
+/** 未登录时去登录页，并带上来源路径，登录成功后自动回到本页 */
+function goLogin() {
+    router.push({ path: '/', query: { redirect: route.fullPath } });
+}
+
+/** 作者撤回为草稿（status=4） */
+async function withdrawToDraft() {
+    if (statusSaving.value) return;
+    if (!confirm('确定撤回为草稿吗？撤回后只有你自己能查看，需要重新提交审核。')) return;
+    statusSaving.value = true;
+    try {
+        const res = await authFetch(`/api/pages/${pageData.value.id}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 4 })
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            alert(data.error || '撤回失败');
+            return;
+        }
+        pageData.value.status = 4;
+        alert('已撤回为草稿');
+    } catch (err) {
+        console.error('撤回为草稿失败:', err);
+        alert('网络错误，请稍后重试');
+    } finally {
+        statusSaving.value = false;
+    }
+}
+
+function onStatusChanged(newStatus: number) {
+    pageData.value.status = newStatus;
+    showStatusDialog.value = false;
+}
 
 function onTransferComplete(payload: { newAuthorId: number; newAuthorName: string }) {
     pageData.value.author_id = payload.newAuthorId;
@@ -440,6 +497,7 @@ async function fetchPage() {
             if (token) {
                 const p = JSON.parse(atob(token.split('.')[1]));
                 isAuthor.value = p.userId === pageData.value.author_id;
+                isAdmin.value = p.role === 'ADMIN';
             }
         } catch {}
         // 页面加载成功后获取点赞和评论数据
@@ -958,6 +1016,11 @@ watch(() => route.fullPath, () => { fetchPage(); });
 .btn-edit { color: var(--button-bg); font-size: 14px; padding: 4px 14px; border: 1px solid var(--button-bg); border-radius: 48px; }
 .btn-edit:hover { background: var(--button-bg); color: #fff; text-decoration: none; }
 .btn-transfer { color: #f59e0b; font-size: 14px; padding: 4px 14px; border: 1px solid #f59e0b; border-radius: 48px; margin-left: 6px; }
+.btn-draft { color: #8b5cf6; font-size: 14px; padding: 4px 14px; border: 1px solid #8b5cf6; border-radius: 48px; }
+.btn-draft:hover:not(:disabled) { background: #8b5cf6; color: #fff; text-decoration: none; }
+.btn-draft:disabled { opacity: .5; cursor: not-allowed; }
+.btn-status { color: #ef4444; font-size: 14px; padding: 4px 14px; border: 1px solid #ef4444; border-radius: 48px; }
+.btn-status:hover { background: #ef4444; color: #fff; text-decoration: none; }
 .btn-transfer:hover { background: #f59e0b; color: #fff; text-decoration: none; }
 .edit-nav-bar { display: flex; justify-content: space-between; align-items: center; }
 .edit-action-bar { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 16px 0 24px; }

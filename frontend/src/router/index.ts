@@ -125,8 +125,8 @@ router.beforeEach((to, _from, next) => {
       localStorage.removeItem('authToken')
       localStorage.removeItem('tokenExpiresAt')
 
-      // 跳转到登录页
-      next('/')
+      // 跳转到登录页，并带上来源路径：登录成功后回到原来要去的页面
+      next({ path: '/', query: { redirect: to.fullPath } })
       return
     }
   }

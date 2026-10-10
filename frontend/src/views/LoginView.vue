@@ -73,7 +73,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import ThemeToggle from "@/components/ThemeToggle.vue";
 import { useTheme } from "@/composables/useTheme";
 import { createCaptcha } from "@/utils/captcha";
@@ -82,6 +82,20 @@ const icpNumber = import.meta.env.VITE_ICP_NUMBER || "待备案";
 const policeNumber = import.meta.env.VITE_POLICE_NUMBER || "办理中";
 
 const router = useRouter();
+const route = useRoute();
+
+/**
+ * 登录成功后的去向：带 ?redirect=/pages/12 时回到来源页，否则回 /main。
+ * 只接受站内绝对路径（且不能是 // 开头的协议相对地址），避免被拿去做开放重定向。
+ */
+function goAfterLogin() {
+  const redirect = String(route.query.redirect ?? "");
+  if (redirect.startsWith("/") && !redirect.startsWith("//")) {
+    router.push(redirect);
+    return;
+  }
+  router.push("/main");
+}
 const { initTheme } = useTheme();
 
 // 正常登录相关
@@ -209,7 +223,7 @@ async function handleLogin() {
     if (!token) throw new Error("服务器未返回令牌");
     saveAuthData(token);
     console.log("登录成功，Token 已存入 LocalStorage");
-    router.push("/main");
+    goAfterLogin();
   } catch (err: any) {
     console.error("登录网络错误详情:", err);
     let errorMsg = err.message || "登录过程中发生错误";
@@ -235,7 +249,7 @@ async function autoLogin() {
     if (res.ok) {
       console.log("自动登录成功，正在跳转...");
       await sleep(1500);
-      router.push("/main");
+      goAfterLogin();
     } else if (res.status === 403) {
       const data = await res.json();
       if (data.error === "请先绑定手机号") {
@@ -406,7 +420,7 @@ async function handleSubmitBind() {
 
     if (loginRes.ok && loginData.token) {
       saveAuthData(loginData.token);
-      router.push("/main");
+      goAfterLogin();
     } else {
       bindErrorMessage.value = loginData.error || "绑定成功但登录失败，请手动重新登录";
       needBindPhone.value = false; // 返回登录界面
