@@ -148,8 +148,11 @@ app.use('/api/bind-phone', bindPhone);
 // info 的 GET 是公开的，必须挂在带全局鉴权的 /api 路由之前，
 // 否则会被 user/like/evaluation 的 router.use(authenticateToken) 先拦下
 app.use('/api/info', infoRouter);
-app.use('/api', userRouter);
+// pages 的 GET（列表 / 详情 / 点赞 / 评论）按 status 决定是否公开（status 2/3 所有人可见），
+// 同样必须排在带全局鉴权的 /api 路由之前，否则匿名访问会被 401 拦掉、状态判断根本没机会执行。
+// pagesRouter 内部各路由自己做了鉴权（authenticateToken / parseUser），不依赖这里的顺序。
 app.use('/api', pagesRouter);
+app.use('/api', userRouter);
 app.use('/api', likeRouter);
 app.use('/api', evaluationRouter);
 app.use('/api/user', rankRouter);
