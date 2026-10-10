@@ -36,6 +36,7 @@ export type EventType =
     | 'quiz_question_answer'
     | 'quiz_tag_rename'
     | 'quiz_tag_delete'
+    | 'info_update'
 ;
 
 export interface EventLogOptions {

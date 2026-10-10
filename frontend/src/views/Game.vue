@@ -62,6 +62,26 @@
         </div>
       </div>
 
+      <div class="section-divider"></div>
+
+      <!-- 我们的服务器（服主维护，存在 info 表：game.donated_servers） -->
+      <div class="section our-servers">
+        <div class="our-servers-head">
+          <h2 class="section-title">{{ serverInfo?.title || '我们的服务器' }}</h2>
+          <button v-if="isAdmin" class="server-edit-btn" @click="showServerEditor = true">编辑</button>
+        </div>
+        <p v-if="serverInfo?.desc" class="our-servers-desc">{{ serverInfo.desc }}</p>
+        <div v-if="serverInfo?.servers?.length" class="server-grid">
+          <div v-for="(item, index) in serverInfo.servers" :key="`${item.name}-${index}`" class="server-card">
+            <div class="server-card-name">{{ item.name }}</div>
+            <div v-if="item.subtitle" class="server-card-subtitle">{{ item.subtitle }}</div>
+            <p v-if="item.usage" class="server-card-usage">{{ item.usage }}</p>
+            <div v-if="item.expires" class="server-card-expires">小字：{{ item.expires }} 到期</div>
+          </div>
+        </div>
+        <p v-else class="our-servers-empty">暂无服务器信息</p>
+      </div>
+
       <!-- 近期动态 -->
       <div class="section">
         <h2 class="section-title">📢 近期动态 / 施工中</h2>
@@ -74,16 +94,23 @@
       </div>
     </div>
   </div>
+  <OurServersDialog
+    v-if="showServerEditor"
+    :value="serverInfo"
+    @close="showServerEditor = false"
+    @saved="loadServerInfo"
+  />
   <FooterBar />
   <BottomNav />
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import BottomNav from '@/components/BottomNav.vue'
 import FooterBar from '@/components/FooterBar.vue'
+import OurServersDialog, { type OurServersValue } from '@/components/OurServersDialog.vue'
 
 const router = useRouter()
 
@@ -100,6 +127,36 @@ function goQuizBattle() {
 const serverStatus = ref<any>(null)
 let refreshTimer: number | null = null
 
+/* ---------- 我们的服务器（存在 info 表的 game.donated_servers） ---------- */
+const serverInfo = ref<OurServersValue | null>(null)
+const showServerEditor = ref(false)
+
+// 只有管理员看得到编辑按钮（从 JWT 的 role 判断）
+const isAdmin = computed(() => {
+  try {
+    const token = localStorage.getItem('authToken') ?? ''
+    const payload = token.split('.')[1]
+    if (!payload) return false
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4)
+    const json = JSON.parse(atob(padded))
+    return json?.role === 'ADMIN' || json?.role === 'MODERATOR'
+  } catch {
+    return false
+  }
+})
+
+async function loadServerInfo() {
+  try {
+    const res = await fetch('/api/info/game.donated_servers')
+    if (!res.ok) return
+    const data = await res.json()
+    serverInfo.value = data?.value ?? null
+  } catch (error) {
+    console.error('加载服务器信息失败:', error)
+  }
+}
+
 async function fetchServerStatus() {
   try {
     const token = localStorage.getItem('authToken')
@@ -115,6 +172,7 @@ async function fetchServerStatus() {
 onMounted(() => {
   fetchServerStatus()
   refreshTimer = window.setInterval(fetchServerStatus, 30000)
+  void loadServerInfo()
 })
 
 onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
@@ -229,6 +287,104 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
   max-width: 82%;
   margin: 28px auto 32px;
   background: var(--glass-border, rgba(0, 0, 0, 0.08));
+}
+
+/* ========== 我们的服务器（info 表 game.donated_servers） ========== */
+.our-servers {
+  text-align: left;
+}
+
+.our-servers-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.our-servers-head .section-title {
+  margin-bottom: 0;
+}
+
+.server-edit-btn {
+  flex: 0 0 auto;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  opacity: 0.85;
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+  transition: 0.15s ease;
+}
+
+.server-edit-btn:hover {
+  opacity: 1;
+}
+
+.our-servers-desc {
+  margin: 10px auto 18px;
+  max-width: 640px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  opacity: 0.75;
+  text-align: center;
+}
+
+.our-servers-empty {
+  margin: 12px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  opacity: 0.6;
+  text-align: center;
+}
+
+.server-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.server-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: var(--bg-secondary);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+}
+
+.server-card-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.server-card-subtitle {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent, #42b983);
+}
+
+.server-card-usage {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  opacity: 0.85;
+}
+
+.server-card-expires {
+  margin-top: auto;
+  padding-top: 6px;
+  font-size: 0.72rem;
+  color: var(--text-primary);
+  opacity: 0.55;
 }
 
 .minecraft-subtitle {

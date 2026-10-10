@@ -27,6 +27,7 @@ import {
 } from './services/fileLibrary';
 import { initUndercoverWs } from './ws/undercoverWs';
 import voiceRouter, { voiceWebhookRouter } from './routes/voice';
+import infoRouter from './routes/info';
 import { initVoiceChannel } from './services/voiceChannel';
 import { registerVoiceRoomChangeHook } from './services/undercoverRooms';
 
@@ -154,6 +155,7 @@ app.use('/api/v2', dashenProfileRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/quiz', quizRouter);
 app.use('/api/voice', voiceRouter);
+app.use('/api/info', infoRouter);
 
 // 用 http server 同时承载 Express 与「谁是守望先锋卧底」的 WebSocket 会话
 const server = http.createServer(app);
