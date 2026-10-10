@@ -17,10 +17,16 @@
         <!-- 阅读模式 -->
         <div class="container" v-else-if="pageData && !isEditing">
             <div class="top-nav-bar">
-                <a href="javascript:void(0)" @click="$router.back()" class="nav-link back-prev">← 返回上一页</a>
-                <button v-if="isAuthor" class="nav-link btn-edit" @click="enterEditMode">✏️ 编辑</button>
-                <button v-if="isAuthor" class="nav-link btn-transfer" @click="showTransferDialog = true">🔄 转让作者</button>
-                <router-link to="/main" class="nav-link back-home">返回首页 →</router-link>
+                <!-- 第一行：上一页 / 首页 -->
+                <div class="nav-line nav-line-primary">
+                    <a href="javascript:void(0)" @click="$router.back()" class="nav-link back-prev">上一页</a>
+                    <router-link to="/main" class="nav-link back-home">首页</router-link>
+                </div>
+                <!-- 第二行：作者操作按钮 -->
+                <div v-if="isAuthor" class="nav-line nav-line-author">
+                    <button class="nav-link btn-edit" @click="enterEditMode">✏️ 编辑</button>
+                    <button class="nav-link btn-transfer" @click="showTransferDialog = true">🔄 转让作者</button>
+                </div>
             </div>
             <h1 class="title" v-html="renderedPageTitle"></h1>
             <div class="meta-info">
@@ -937,7 +943,14 @@ watch(() => route.fullPath, () => { fetchPage(); });
 .btn-retry:hover { background: var(--button-bg); color: #fff; }
 .spinner { width: 36px; height: 36px; border: 3px solid var(--input-border); border-top-color: var(--button-bg); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 16px; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.top-nav-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid var(--input-border); }
+.top-nav-bar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid var(--input-border); }
+.nav-line { display: flex; align-items: center; gap: 12px; }
+/* 第一行：上一页靠左、首页靠右 */
+.nav-line-primary { justify-content: space-between; }
+/* 第二行：作者操作按钮独立成行，靠右 */
+.nav-line-author { justify-content: flex-end; }
+/* 编辑模式的顶栏只有两个链接，保持一行 */
+.edit-nav-bar { flex-direction: row; justify-content: space-between; }
 .nav-link { font-size: 14px; font-weight: 600; text-decoration: none; transition: opacity .2s; cursor: pointer; background: none; border: none; }
 .nav-link.back-prev { color: var(--accent); }
 .nav-link.back-home { color: var(--button-bg); }
@@ -1193,10 +1206,9 @@ watch(() => route.fullPath, () => { fetchPage(); });
         padding: 20px 16px;
     }
 
-    /* 顶栏按钮允许换行，避免把页面撑出横向滚动 */
-    .top-nav-bar {
+    /* 顶栏内每一行允许换行，避免把页面撑出横向滚动 */
+    .nav-line {
         flex-wrap: wrap;
-        justify-content: center;
         gap: 6px 12px;
     }
 
