@@ -72,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onActivated, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ThemeToggle from "@/components/ThemeToggle.vue";
 import { useTheme } from "@/composables/useTheme";
@@ -249,6 +249,8 @@ async function autoLogin() {
     });
     if (res.ok) {
       console.log("自动登录成功，正在跳转...");
+      // 已登录状态下也把账号补进本地历史
+      rememberUser(battletagFromToken());
       await sleep(1500);
       goAfterLogin();
     } else if (res.status === 403) {
@@ -304,11 +306,34 @@ function rememberUser(tag: string) {
   }
 }
 
+/**
+ * 从（可能已过期的）token 里取出上次登录的战网ID：
+ * 第一次访问、本地还没积累历史时用它兜底，保证"刷新后有用户名"。
+ * 注意用 TextDecoder 解码，中文战网ID 用 atob 直接 JSON.parse 会乱码。
+ */
+function battletagFromToken(): string {
+  try {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const payload = token?.split(".")[1];
+    if (!payload) return "";
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const bytes = Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
+    const json = JSON.parse(new TextDecoder().decode(bytes));
+    return String(json?.battletag ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
 /** 进页面时用本地历史自动填充战网ID（已有输入则不覆盖，避免打断浏览器自动填充） */
 function prefillFromHistory() {
   if (battletag.value.trim()) return;
-  const last = historyUsers.value[0];
-  if (last) battletag.value = last;
+  const last = historyUsers.value[0] || battletagFromToken();
+  if (!last) return;
+  battletag.value = last;
+  // 兜底来源也顺手补进历史，下次就不用再解 token 了
+  if (!historyUsers.value.includes(last)) rememberUser(last);
 }
 
 // ---------- 自动补全逻辑 ----------
@@ -502,6 +527,11 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener("click", handleClickOutside);
   if (bindTimer) clearInterval(bindTimer);
+});
+
+// 页面被 keep-alive 缓存时，从别的页面切回登录页不会再触发 onMounted，这里补一次填充
+onActivated(() => {
+  prefillFromHistory();
 });
 </script>
 
