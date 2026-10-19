@@ -191,56 +191,57 @@
     <FileLibrary v-if="showFileLibrary" mode="download" @close="showFileLibrary = false" />
 
     <!-- Hero Picker -->
-    <div v-if="showHeroPicker" class="hero-picker">
+    <div v-if="showHeroPicker" class="hero-picker" role="dialog" aria-modal="true" aria-label="选择英雄">
 
-      <button class="picker-close" @click="showHeroPicker = false">
+      <button type="button" class="picker-close" aria-label="关闭" @click="showHeroPicker = false">
         ×
       </button>
       <div class="picker-title">
         选择英雄
       </div>
-      <div class="hero-groups">
-        <!-- Tank -->
-        <div class="hero-group">
-          <div class="group-title">
-            重装
-          </div>
-          <div class="hero-grid">
-            <div v-for="hero in tankHeroes" :key="hero.name" class="hero-picker-item" @click="selectHero(hero.name)">
-              <img :src="getHeroImage(hero.name)">
-              <div class="hero-name">{{ hero.zh_name }}</div>
-            </div>
-          </div>
-        </div>
-        <!-- DPS -->
-        <div class="hero-group">
-          <div class="group-title">
-            输出
-          </div>
-          <div class="hero-grid">
-            <div v-for="hero in dpsHeroes" :key="hero.name" class="hero-picker-item" @click="selectHero(hero.name)">
-              <img :src="getHeroImage(hero.name)">
-              <div class="hero-name">
-                {{ hero.zh_name }}
-              </div>
-            </div>
-          </div>
-        </div>
+      <div class="hero-picker-meta">
+        <span>已选 {{ profile.heroes.length }}/5</span>
+        <span>点击职责可收起分组</span>
+      </div>
 
-        <!-- Support -->
-        <div class="hero-group">
-          <div class="group-title">
-            辅助
+      <div v-if="heroesLoading" class="hero-picker-loading">
+        正在加载英雄列表…
+      </div>
+      <div v-else class="hero-groups">
+        <section
+          v-for="group in heroRoleGroups"
+          :key="group.key"
+          class="hero-group"
+          :class="{ collapsed: !openHeroGroups[group.key] }"
+        >
+          <button
+            type="button"
+            class="group-title"
+            :aria-expanded="openHeroGroups[group.key]"
+            @click="toggleHeroGroup(group.key)"
+          >
+            <span class="group-dot" :style="{ background: group.color }"></span>
+            <span class="group-name">{{ group.label }}</span>
+            <span class="group-count">{{ group.heroes.length }}</span>
+            <svg class="group-chevron" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <div v-show="openHeroGroups[group.key]" class="hero-grid">
+            <button
+              v-for="hero in group.heroes"
+              :key="hero.name"
+              type="button"
+              class="hero-picker-item"
+              :class="{ picked: profile.heroes.includes(hero.name) }"
+              :title="hero.zh_name"
+              @click="selectHero(hero.name)"
+            >
+              <img :src="getHeroImage(hero.name)" :alt="hero.zh_name" loading="lazy">
+              <span class="hero-name">{{ hero.zh_name }}</span>
+            </button>
           </div>
-          <div class="hero-grid">
-            <div v-for="hero in supportHeroes" :key="hero.name" class="hero-picker-item" @click="selectHero(hero.name)">
-              <img :src="getHeroImage(hero.name)">
-              <div class="hero-name">
-                {{ hero.zh_name }}
-              </div>
-            </div>
-          </div>
-        </div>
+        </section>
       </div>
     </div>
 
@@ -385,6 +386,21 @@ const tankHeroes = ref<{ name: string; zh_name: string }[]>([])
 const dpsHeroes = ref<{ name: string; zh_name: string }[]>([])
 const supportHeroes = ref<{ name: string; zh_name: string }[]>([])
 const heroesLoading = ref(true)
+const openHeroGroups = ref<Record<string, boolean>>({
+  tank: true,
+  damage: true,
+  support: true,
+})
+
+const heroRoleGroups = computed(() => [
+  { key: 'tank', label: '重装', color: '#5aa9ff', heroes: tankHeroes.value },
+  { key: 'damage', label: '输出', color: '#ff7a7a', heroes: dpsHeroes.value },
+  { key: 'support', label: '支援', color: '#47d99a', heroes: supportHeroes.value },
+])
+
+function toggleHeroGroup(key: string) {
+  openHeroGroups.value[key] = !openHeroGroups.value[key]
+}
 
 // 获取英雄列表
 async function loadHeroesList() {
@@ -1227,11 +1243,14 @@ onMounted(() => {
 }
 
 .hero-picker {
-  width: 95%;
-  max-width: 900px;
-  max-height: 85vh;
+  width: min(720px, calc(100vw - 24px));
+  max-height: min(88vh, 860px);
   overflow-y: auto;
-  padding: 24px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 16px 18px 18px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .5);
 }
 
 .picker-close {
@@ -1255,50 +1274,156 @@ onMounted(() => {
   margin-bottom: 24px;
 }
 
+.hero-picker .picker-title {
+  font-size: 20px;
+  margin-bottom: 2px;
+}
+
+.hero-picker-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 2px 8px;
+  color: rgba(255, 255, 255, .45);
+  font-size: 11px;
+}
+
+.hero-picker-loading {
+  padding: 28px 0;
+  text-align: center;
+  color: rgba(255, 255, 255, .55);
+  font-size: 13px;
+}
+
 .hero-groups {
   display: flex;
-  gap: 20px;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .hero-group {
-  flex: 1;
+  padding-top: 2px;
+  border-top: 1px solid rgba(255, 255, 255, .07);
+}
+
+.hero-group:first-child {
+  padding-top: 0;
+  border-top: none;
 }
 
 .group-title {
-  text-align: center;
-  margin-bottom: 12px;
-  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 4px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: rgba(255, 255, 255, .88);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.group-title:hover {
+  background: rgba(255, 255, 255, .05);
+}
+
+.group-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.group-name {
+  line-height: 1;
+}
+
+.group-count {
+  color: rgba(255, 255, 255, .38);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.group-chevron {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  color: rgba(255, 255, 255, .45);
+  transition: transform .2s ease;
+}
+
+.hero-group.collapsed .group-chevron {
+  transform: rotate(-90deg);
 }
 
 .hero-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 5px;
+  padding: 2px 0 8px;
 }
 
 .hero-picker-item {
-  background: var(--surface);
-  border-radius: 10px;
-  padding: 8px;
-  text-align: center;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 5px 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .055);
+  color: inherit;
+  font: inherit;
   cursor: pointer;
-
-  transition: .15s;
+  transition: background .15s, border-color .15s, transform .15s;
 }
 
 .hero-picker-item:hover {
-  transform: scale(1.05);
+  background: rgba(255, 255, 255, .12);
+  transform: translateY(-1px);
+}
+
+.hero-picker-item:active {
+  transform: scale(.97);
 }
 
 .hero-picker-item img {
-  width: 52px;
-  height: 52px;
+  width: 42px;
+  height: 42px;
   object-fit: contain;
+  border-radius: 7px;
 }
 
 .hero-name {
-  margin-top: 4px;
-  font-size: 12px;
+  max-width: 100%;
+  margin-top: 2px;
+  color: rgba(255, 255, 255, .82);
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hero-picker-item.picked {
+  opacity: .45;
+  border-color: rgba(71, 217, 154, .45);
+}
+
+.hero-picker-item.picked::after {
+  content: '✓';
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  color: #47d99a;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 /* =========================
@@ -1470,12 +1595,61 @@ onMounted(() => {
 @media (max-width: 768px) {
   /* .rank-list 保持默认的 4 列布局，不再强制改为 2 列 */
 
-  .hero-groups {
-    flex-direction: column;
-  }
-
   .rank-picker {
     width: 92%;
+  }
+
+  .hero-picker {
+    width: calc(100vw - 20px);
+    max-height: 90vh;
+    padding: 14px 14px 16px;
+  }
+
+  .hero-grid {
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  }
+
+  .hero-picker-item img {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (max-width: 420px) {
+  .hero-picker {
+    width: calc(100vw - 12px);
+    padding: 12px 10px;
+    border-radius: 14px;
+  }
+
+  .hero-picker .picker-title {
+    font-size: 18px;
+  }
+
+  .hero-picker-meta {
+    margin-bottom: 6px;
+    font-size: 10px;
+  }
+
+  .hero-grid {
+    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+    gap: 4px;
+    padding-bottom: 6px;
+  }
+
+  .hero-picker-item {
+    padding: 4px 1px 3px;
+    border-radius: 8px;
+  }
+
+  .hero-picker-item img {
+    width: 37px;
+    height: 37px;
+    border-radius: 6px;
+  }
+
+  .hero-name {
+    font-size: 10px;
   }
 }
 </style>
