@@ -146,6 +146,7 @@ const eventTypes = [
   'create_user',
   'dashen-quick-strength',
   'dashen-competitive-strength',
+  'dashen-hero-treemap',
   'SMS_REQUEST',
   // 文件操作
   'file_upload',

@@ -33,6 +33,9 @@ function getCacheTTL(path: string): number {
     if (path.includes('/dashen-competitive-strength')) {
         return 6*3600;
     }
+    if (path.includes('/dashen-hero-treemap')) {
+        return 24*3600;
+    }
 
     // 默认（可扩展其他路径）
     return 36000;
@@ -46,7 +49,8 @@ async function proxyAndCache(req: AuthRequest, res: any) {
     const cacheTTL = getCacheTTL(req.path);   // 动态获取缓存时间
     // 从 token 中获取当前用户 ID
     const currentUserId = req.user?.userId;
-    const eventType = req.path.includes('/dashen-profile') ? 'view_profile' : req.path.includes('/dashen-summary') ? 'view_summary' 
+    const eventType = req.path.includes('/dashen-hero-treemap') ? 'dashen-hero-treemap'
+    : req.path.includes('/dashen-profile') ? 'view_profile' : req.path.includes('/dashen-summary') ? 'view_summary'
     : req.path.includes('/dashen-match') ? 'view_match' : req.path.includes('/dashen-quick-strength') ? 'dashen-quick-strength' : 'dashen-competitive-strength';
 
     // 记录日志（异步，不阻塞）
@@ -86,12 +90,20 @@ async function proxyAndCache(req: AuthRequest, res: any) {
         if (isImage) {
             const buffer = response.data;
             const base64 = buffer.toString('base64');
-            await levelSetEx(cacheKey, cacheTTL, base64);
+            try {
+                await levelSetEx(cacheKey, cacheTTL, base64);
+            } catch (cacheError) {
+                console.error('[Cache] 图片缓存写入失败:', cacheError);
+            }
             res.set('Content-Type', response.headers['content-type'] || 'image/png');
             res.send(buffer);
         } else {
             const jsonData = response.data;
-            await levelSetEx(cacheKey, cacheTTL, JSON.stringify(jsonData));
+            try {
+                await levelSetEx(cacheKey, cacheTTL, JSON.stringify(jsonData));
+            } catch (cacheError) {
+                console.error('[Cache] JSON 缓存写入失败:', cacheError);
+            }
             res.json(jsonData);
         }
     } catch (error: any) {
@@ -118,6 +130,7 @@ router.post('/dashen-quick-strength', proxyAndCache);
 router.post('/dashen-competitive-strength', proxyAndCache);
 router.post('/dashen-quick-strength/image', proxyAndCache);
 router.post('/dashen-competitive-strength/image', proxyAndCache);
+router.post('/dashen-hero-treemap/image', proxyAndCache);
 router.post('/dashen-match/detail/replies', proxyAndCache);
 
 export default router;

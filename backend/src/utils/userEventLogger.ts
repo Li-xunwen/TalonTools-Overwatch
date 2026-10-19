@@ -15,6 +15,7 @@ export type EventType =
   | 'create_user'
   | 'dashen-quick-strength'
   | 'dashen-competitive-strength'
+  | 'dashen-hero-treemap'
   | 'SMS_REQUEST'
   // file operations
   | 'file_upload'

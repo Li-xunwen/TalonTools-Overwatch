@@ -51,6 +51,12 @@
           <div class="btn-icon">⚔️</div>
           <div class="btn-label">对局强度</div>
         </div>
+        <div class="action-btn" @click.stop="onTreemapClick">
+          <div class="btn-icon treemap-btn-icon">
+            <img src="/ico/擅长领域.svg" alt="英雄云图">
+          </div>
+          <div class="btn-label">英雄云图</div>
+        </div>
         <!-- 管理按钮（仅管理员可见） -->
         <div class="action-btn" @click.stop="onSummaryClick">
           <div v-if="isAdmin" class="action-btn" @click.stop="onAdminClick">
@@ -204,6 +210,58 @@
       </div>
     </Transition>
 
+    <!-- 英雄云图浮层 -->
+    <Transition name="fade">
+      <div v-if="expandTreemap" class="treemap-list" @click.stop>
+        <div class="treemap-modes">
+          <div class="treemap-mode-group">
+            <div class="treemap-mode-heading">快速</div>
+            <button
+              v-for="mode in quickTreemapModes"
+              :key="mode.key"
+              type="button"
+              class="treemap-mode-item"
+              :class="{ active: selectedTreemapMode === mode.key }"
+              :title="mode.hint"
+              @click.stop="fetchTreemapImage(mode)"
+            >
+              {{ mode.label }}
+            </button>
+          </div>
+          <div class="treemap-mode-group">
+            <div class="treemap-mode-heading">竞技</div>
+            <button
+              v-for="mode in competitiveTreemapModes"
+              :key="mode.key"
+              type="button"
+              class="treemap-mode-item"
+              :class="{ active: selectedTreemapMode === mode.key }"
+              :title="mode.hint"
+              @click.stop="fetchTreemapImage(mode)"
+            >
+              {{ mode.label }}
+            </button>
+          </div>
+        </div>
+        <div v-if="treemapLoading" class="treemap-loading">
+          <div class="loading-spinner"></div>
+          <span>正在生成英雄云图...</span>
+        </div>
+        <div v-else-if="treemapError" class="treemap-error">
+          {{ treemapError }}
+        </div>
+        <img
+          v-else-if="treemapImageUrl"
+          :src="treemapImageUrl"
+          class="treemap-image"
+          @click="openImageViewer(treemapImageUrl)"
+        />
+        <div v-else class="treemap-hint">
+          选择模式后查询
+        </div>
+      </div>
+    </Transition>
+
     <!-- 管理浮层 -->
     <Transition name="fade">
       <div v-if="expandAdmin" class="admin-panel" @click.stop>
@@ -260,6 +318,7 @@ const emit = defineEmits<{
   (e: 'expand-summary', username: string): void
   (e: 'expand-match', username: string): void
   (e: 'expand-strength', username: string): void
+  (e: 'expand-treemap', username: string): void
   (e: 'expand-admin', username: string): void
   (e: 'close-float'): void   // 关闭当前浮层（用于自动关闭）
 }>()
@@ -304,6 +363,34 @@ const showStrengthImage = ref(false)
 const strengthLoading = ref(false)
 const strengthImageUrl = ref('')
 const strengthError = ref<string | null>(null)
+
+// 英雄云图相关状态
+const expandTreemap = computed(() => props.currentExpandId === `treemap-${props.user.username}`)
+interface TreemapModeOption {
+  key: string
+  label: string
+  apiMode?: string
+  hint?: string
+}
+const quickTreemapModes: TreemapModeOption[] = [
+  { key: 'quick', label: '快速5v5' },
+  { key: 'quick6v6', label: '快速6v6' },
+  { key: 'open', label: '开放快速' },
+]
+const competitiveTreemapModes: TreemapModeOption[] = [
+  { key: 'competitive', label: '竞技5v5' },
+  {
+    key: 'competitive6v6',
+    label: '竞技6v6',
+    apiMode: 'competitive_open',
+    hint: '暂时使用开放竞技数据',
+  },
+  { key: 'competitive_open', label: '开放竞技' },
+]
+const selectedTreemapMode = ref('')
+const treemapLoading = ref(false)
+const treemapImageUrl = ref('')
+const treemapError = ref<string | null>(null)
 
 // 管理按钮相关
 const isAdmin = computed(() => props.selfRole === 'ADMIN' || props.selfRole === 'MODERATOR')
@@ -904,6 +991,57 @@ function handleCompetitiveStrength() {
   fetchStrengthImage('dashen-competitive-strength')
 }
 
+// 点击英雄云图按钮
+function onTreemapClick() {
+  emit('expand-treemap', props.user.username)
+}
+
+async function fetchTreemapImage(option: TreemapModeOption) {
+  if (treemapImageUrl.value && treemapImageUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(treemapImageUrl.value)
+  }
+  treemapImageUrl.value = ''
+  selectedTreemapMode.value = option.key
+  treemapLoading.value = true
+  treemapError.value = null
+
+  const token = localStorage.getItem('authToken')
+  try {
+    const res = await fetch('/api/v2/dashen-hero-treemap/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        include_previous_season: true,
+        mode: option.apiMode || option.key,
+        bnet_id: props.user.username
+      })
+    })
+    if (!res.ok) {
+      let errMsg = `请求失败: ${res.status}`
+      try {
+        const errData = await res.json()
+        errMsg = errData.error === 'hero_treemap_empty'
+          ? '该模式暂无英雄使用数据'
+          : errData.message || errData.error || errMsg
+      } catch {
+        errMsg = res.statusText || errMsg
+      }
+      throw new Error(errMsg)
+    }
+
+    const blob = await res.blob()
+    treemapImageUrl.value = URL.createObjectURL(blob)
+  } catch (err: any) {
+    console.error('英雄云图查询失败:', err)
+    treemapError.value = err.message || '加载失败'
+  } finally {
+    treemapLoading.value = false
+  }
+}
+
 function onAdminClick() {
   if (expandAdmin.value) {
     emit('close-float')
@@ -990,6 +1128,9 @@ onMounted(() => {
 onUnmounted(() => {
   if (careerImageUrl.value && careerImageUrl.value.startsWith('blob:')) {
     URL.revokeObjectURL(careerImageUrl.value)
+  }
+  if (treemapImageUrl.value && treemapImageUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(treemapImageUrl.value)
   }
   if (autoCloseTimer) clearTimeout(autoCloseTimer)
 })
@@ -1651,6 +1792,100 @@ onUnmounted(() => {
 
 .strength-error {
   color: #ff6666;
+}
+
+/* 英雄云图 */
+.treemap-btn-icon img {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.treemap-list {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color, rgba(128, 128, 128, .25));
+}
+
+.treemap-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.treemap-mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.treemap-mode-heading {
+  color: var(--text-primary);
+  font-size: 10px;
+  text-align: center;
+  opacity: .55;
+}
+
+.treemap-mode-item {
+  padding: 6px 4px;
+  border: 1px solid var(--border-color, rgba(128, 128, 128, .35));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+
+.treemap-mode-item:hover {
+  background: rgba(59, 130, 246, .1);
+  border-color: rgba(59, 130, 246, .55);
+}
+
+.treemap-mode-item.active {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, .14);
+  color: #3b82f6;
+}
+
+.treemap-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 0;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.treemap-loading .loading-spinner {
+  border-color: rgba(128, 128, 128, .3);
+  border-top-color: #3b82f6;
+}
+
+.treemap-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 8px;
+  border-radius: 8px;
+  cursor: zoom-in;
+}
+
+.treemap-error {
+  padding: 8px 0;
+  color: #ff6666;
+  font-size: 12px;
+}
+
+.treemap-hint {
+  padding: 8px 0 2px;
+  color: var(--text-primary);
+  font-size: 11px;
+  text-align: center;
+  opacity: .6;
 }
 
 @keyframes spin {

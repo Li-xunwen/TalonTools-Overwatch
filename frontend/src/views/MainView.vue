@@ -23,7 +23,8 @@
             :fetch-evaluations="fetchEvaluations" @expand-like="handleExpandLike" @expand-eval="handleExpandEval"
             @like-click="handleLikeClick" @eval-submit="handleEvalSubmit" @expand-career="handleExpandCareer"
             @expand-summary="handleExpandSummary" @expand-match="handleExpandMatch"
-            @expand-strength="handleExpandStrength" @expand-admin="handleExpandAdmin" />
+            @expand-strength="handleExpandStrength" @expand-treemap="handleExpandTreemap"
+            @expand-admin="handleExpandAdmin" />
         </div>
       </div>
     </div>
@@ -440,6 +441,11 @@ function handleExpandStrength(username: string) {
   } else {
     currentExpandId.value = `strength-${username}`; // 展开
   }
+}
+
+function handleExpandTreemap(username: string) {
+  const id = `treemap-${username}`
+  currentExpandId.value = currentExpandId.value === id ? '' : id
 }
 
 function handleExpandAdmin(username: string) {
