@@ -18,7 +18,7 @@
           <button v-if="isAdmin" class="add-member-btn" @click="createNewMember">+</button>
         </div>
         <div class="members-grid">
-          <MemberCard v-for="member in filteredMembers" :key="member.username" :user="member" :self-tag="selfTag"
+          <MemberCard v-for="member in visibleMembers" :key="member.username" :user="member" :self-tag="selfTag"
             :self-role="selfRole" :current-expand-id="currentExpandId" :like-cache="likeCache" :eval-cache="evalCache"
             :fetch-evaluations="fetchEvaluations" @expand-like="handleExpandLike" @expand-eval="handleExpandEval"
             @like-click="handleLikeClick" @eval-submit="handleEvalSubmit" @expand-career="handleExpandCareer"
@@ -26,6 +26,7 @@
             @expand-strength="handleExpandStrength" @expand-treemap="handleExpandTreemap"
             @expand-admin="handleExpandAdmin" />
         </div>
+        <div ref="loadMoreSentinel" class="load-more-sentinel" :class="{ hidden: !hasMoreMembers }"></div>
       </div>
     </div>
   </div>
@@ -36,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, reactive, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, reactive, nextTick, watch } from 'vue'
 import MemberCard from './MemberCard.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import PosterHeroes from '@/components/PosterHeroes.vue'
@@ -77,6 +78,10 @@ const likePending = new Map<string, boolean>()
 const selfRole = ref<string | null>(null)
 const searchKeyword = ref('')
 const isAdmin = computed(() => selfRole.value === 'ADMIN' || selfRole.value === 'MODERATOR')
+const PAGE_SIZE = 20
+const visibleMemberCount = ref(PAGE_SIZE)
+const loadMoreSentinel = ref<HTMLElement | null>(null)
+let memberObserver: IntersectionObserver | null = null
 // ---------- 辅助函数 ----------
 async function fetchUserList(): Promise<string[]> {
   const res = await fetch('/api/users/battletaglist')
@@ -231,7 +236,12 @@ function handleExpandEval(username: string) {
   currentExpandId.value = currentExpandId.value === id ? '' : id
 }
 
-function scrollToCard(username: string) {
+async function scrollToCard(username: string) {
+  const index = filteredMembers.value.findIndex(member => member.username === username)
+  if (index >= visibleMemberCount.value) {
+    visibleMemberCount.value = Math.ceil((index + 1) / PAGE_SIZE) * PAGE_SIZE
+    await nextTick()
+  }
   const cards = document.querySelectorAll('.member-card')
   for (const card of cards) {
     const idEl = card.querySelector('.member-id')
@@ -273,6 +283,7 @@ const MAX_CONCURRENT = 10; // 并发数
 async function loadMembers() {
   const usernames = await fetchUserList();
   members.value = [];
+  visibleMemberCount.value = PAGE_SIZE;
 
   const limit = pLimit(MAX_CONCURRENT);
   const tasks = usernames.map(username =>
@@ -463,6 +474,29 @@ const filteredMembers = computed(() => {
   )
 })
 
+const visibleMembers = computed(() => filteredMembers.value.slice(0, visibleMemberCount.value))
+const hasMoreMembers = computed(() => visibleMemberCount.value < filteredMembers.value.length)
+
+function loadMoreMembers() {
+  if (!hasMoreMembers.value) return
+  visibleMemberCount.value = Math.min(
+    visibleMemberCount.value + PAGE_SIZE,
+    filteredMembers.value.length
+  )
+}
+
+function setupMemberObserver() {
+  if (!('IntersectionObserver' in window) || !loadMoreSentinel.value) return
+  memberObserver = new IntersectionObserver((entries) => {
+    if (entries.some(entry => entry.isIntersecting)) loadMoreMembers()
+  }, { rootMargin: '200px 0px' })
+  memberObserver.observe(loadMoreSentinel.value)
+}
+
+watch(searchKeyword, () => {
+  visibleMemberCount.value = PAGE_SIZE
+})
+
 // 处理搜索输入（可选，防抖优化）
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 function handleSearch() {
@@ -476,11 +510,14 @@ function clearSearch() {
 
 onMounted(async () => {
   await loadMembers()
+  await nextTick()
+  setupMemberObserver()
   document.addEventListener('click', handleGlobalClick)
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handleGlobalClick)
+  memberObserver?.disconnect()
 })
 </script>
 
@@ -563,6 +600,15 @@ body {
   margin-top: 20px;
   justify-content: center;
   /* 添加此行：使列在容器中居中 */
+}
+
+.load-more-sentinel {
+  width: 100%;
+  height: 1px;
+}
+
+.load-more-sentinel.hidden {
+  display: none;
 }
 
 /* 搜索栏样式 */

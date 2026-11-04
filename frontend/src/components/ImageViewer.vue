@@ -1,20 +1,30 @@
 <template>
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="visible" class="image-viewer-mask" @click="close" @wheel.prevent="onWheel">
-        <div class="image-viewer-container" @click.stop>
+      <div v-if="visible" class="image-viewer-mask" @click="close" @wheel="onWheel">
+        <div ref="containerEl" class="image-viewer-container" :class="{ 'long-image': isLongLayout }" @click.stop>
           <img
             ref="imgEl"
             :src="src"
             class="image-viewer-img"
-            :class="{ interacting: isInteracting, panning: isPanning, zoomable: scale > 1 }"
-            title="滚轮缩放，放大后拖动平移，双击重置"
+            :class="{
+              interacting: isInteracting,
+              panning: isPanning,
+              zoomable: scale > 1,
+              scrollable: isLongLayout && scale <= 1,
+              scrolling: isScrollDragging
+            }"
+            :title="isLongLayout
+              ? '长图：滚轮或拖动浏览，Ctrl+滚轮缩放，双击重置'
+              : '滚轮缩放，放大后拖动平移，双击重置'"
             :style="{
               transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale}) rotate(${rotateDeg}deg)`,
-              maxWidth: (rotateDeg % 180 === 0) ? '90vw' : '90vh',
-              maxHeight: (rotateDeg % 180 === 0) ? '90vh' : '90vw'
+              width: isLongLayout ? '100%' : undefined,
+              maxWidth: isLongLayout ? '100%' : ((rotateDeg % 180 === 0) ? '90vw' : '90vh'),
+              maxHeight: isLongLayout ? 'none' : ((rotateDeg % 180 === 0) ? '90vh' : '90vw')
             }"
             draggable="false"
+            @load="onImageLoad"
             @click.stop
             @dblclick.stop="resetView"
             @pointerdown="startPan"
@@ -40,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 
 const props = defineProps<{
   visible: boolean
@@ -58,13 +68,24 @@ const MIN_SCALE = 0.5
 const MAX_SCALE = 8
 
 const imgEl = ref<HTMLImageElement | null>(null)
+const containerEl = ref<HTMLElement | null>(null)
+const naturalWidth = ref(0)
+const naturalHeight = ref(0)
 const scale = ref(1)
 const offsetX = ref(0)
 const offsetY = ref(0)
 const isPanning = ref(false)
 const isInteracting = ref(false)
 const isPinching = ref(false)
+const isScrollDragging = ref(false)
 const activePointers = new Map<number, { x: number; y: number }>()
+
+const isLongImage = computed(() =>
+  naturalWidth.value > 0 && naturalHeight.value / naturalWidth.value >= 1.5
+)
+const isLongLayout = computed(() =>
+  isLongImage.value && rotateDeg.value % 180 === 0
+)
 
 let interactionTimer: ReturnType<typeof setTimeout> | null = null
 let panStartX = 0
@@ -79,6 +100,8 @@ let pinchAnchorX = 0
 let pinchAnchorY = 0
 let layoutCenterX = 0
 let layoutCenterY = 0
+let scrollStartY = 0
+let scrollStartTop = 0
 
 function markInteracting() {
   isInteracting.value = true
@@ -94,11 +117,26 @@ function resetView() {
   offsetY.value = 0
   isPanning.value = false
   isPinching.value = false
+  isScrollDragging.value = false
   activePointers.clear()
+  if (containerEl.value) containerEl.value.scrollTop = 0
+}
+
+function onImageLoad(e: Event) {
+  const image = e.target as HTMLImageElement
+  naturalWidth.value = image.naturalWidth
+  naturalHeight.value = image.naturalHeight
 }
 
 function onWheel(e: WheelEvent) {
-  if (e.target !== imgEl.value || !imgEl.value) return
+  if (e.target !== imgEl.value || !imgEl.value) {
+    e.preventDefault()
+    return
+  }
+
+  // 长图在 1x 时滚轮用于浏览整张长图，Ctrl+滚轮才缩放。
+  if (isLongLayout.value && scale.value <= 1 && !e.ctrlKey) return
+  e.preventDefault()
 
   const factor = Math.exp(-e.deltaY * 0.0015)
   const nextScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale.value * factor))
@@ -146,6 +184,7 @@ function beginPinch() {
   pinchAnchorY = midY - layoutCenterY
   isPinching.value = true
   isPanning.value = false
+  isScrollDragging.value = false
 }
 
 function startPan(e: PointerEvent) {
@@ -164,6 +203,15 @@ function startPan(e: PointerEvent) {
 
   if (activePointers.size >= 2) {
     beginPinch()
+    markInteracting()
+    return
+  }
+
+  if (isLongLayout.value && scale.value <= 1 && containerEl.value) {
+    isScrollDragging.value = true
+    isPanning.value = false
+    scrollStartY = e.clientY
+    scrollStartTop = containerEl.value.scrollTop
     markInteracting()
     return
   }
@@ -209,6 +257,14 @@ function onPan(e: PointerEvent) {
     return
   }
 
+  if (isScrollDragging.value) {
+    if (containerEl.value) {
+      containerEl.value.scrollTop = scrollStartTop - (e.clientY - scrollStartY)
+    }
+    e.preventDefault()
+    return
+  }
+
   if (!isPanning.value) return
   offsetX.value = panStartOffsetX + (e.clientX - panStartX)
   offsetY.value = panStartOffsetY + (e.clientY - panStartY)
@@ -223,6 +279,13 @@ function endPan(e: PointerEvent) {
     target.releasePointerCapture(e.pointerId)
   } catch {
     // 指针可能已经释放
+  }
+
+  if (isScrollDragging.value) {
+    isScrollDragging.value = false
+    isPanning.value = false
+    markInteracting()
+    return
   }
 
   if (activePointers.size >= 2) {
@@ -240,6 +303,12 @@ function endPan(e: PointerEvent) {
       panStartY = remaining.y
       panStartOffsetX = offsetX.value
       panStartOffsetY = offsetY.value
+    } else if (activePointers.size === 1 && isLongLayout.value && containerEl.value) {
+      const remaining = [...activePointers.values()][0]
+      isScrollDragging.value = true
+      isPanning.value = false
+      scrollStartY = remaining.y
+      scrollStartTop = containerEl.value.scrollTop
     } else {
       isPanning.value = false
     }
@@ -283,11 +352,15 @@ function filenameFromSrc(src: string) {
 watch(() => props.visible, (newVal) => {
   if (newVal) {
     rotateDeg.value = 0
+    naturalWidth.value = 0
+    naturalHeight.value = 0
     resetView()
   }
 })
 watch(() => props.src, () => {
   rotateDeg.value = 0
+  naturalWidth.value = 0
+  naturalHeight.value = 0
   resetView()
 })
 
@@ -324,6 +397,22 @@ const close = () => {
   justify-content: center;
 }
 
+.image-viewer-container.long-image {
+  width: 90vw;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-items: flex-start;
+  justify-content: center;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.image-viewer-container.long-image .image-viewer-img {
+  flex: 0 0 auto;
+}
+
 .image-viewer-img {
   object-fit: contain;
   cursor: default;
@@ -345,6 +434,14 @@ const close = () => {
 }
 
 .image-viewer-img.panning {
+  cursor: grabbing;
+}
+
+.image-viewer-img.scrollable {
+  cursor: grab;
+}
+
+.image-viewer-img.scrolling {
   cursor: grabbing;
 }
 

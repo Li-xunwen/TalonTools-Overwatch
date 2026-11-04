@@ -980,9 +980,24 @@ async function toggleInlineReplyLike(p: P, r: any) {
 .ci-cancel:hover { border-color: #ef4444; color: #ef4444; }
 
 @media (max-width: 760px) {
+  .news-page .content-area { padding-left: 0; padding-right: 0; }
+  .page-list-wrap { width: 100%; max-width: none; padding: 0 12px; }
+  .page-list-section {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    border-radius: var(--glass-radius);
+  }
   .page-grid { gap: 14px; padding: 0 8px; }
   .page-card { padding: 14px 12px 10px; }
   .card-title { font-size: 15px; }
+  .patch-image {
+    width: calc(100% + 38px);
+    max-width: calc(100% + 38px);
+    margin-left: -19px;
+    margin-right: -19px;
+    border-radius: 1px;
+  }
 }
 
 html[data-theme="dark"] .page-card { background: #162032; }
