@@ -184,8 +184,8 @@ async function fetchAndStorePatchNotes(req: AuthRequest, res: any) {
     const dir = path.join(PATCH_ROOT, kind);
     await fs.mkdir(dir, { recursive: true });
 
-    let metadata: any = null;
-    let md5: string | null = null;
+    let metadata: any;
+    let md5: string;
     try {
         const metadataResponse = await axios.post(
             `${DaShenURL}/patch-notes`,
@@ -202,28 +202,27 @@ async function fetchAndStorePatchNotes(req: AuthRequest, res: any) {
         }
         md5 = buildPatchRecordMd5(metadata);
     } catch (error: any) {
-        console.warn('[patch-notes] 元数据获取失败，回退图片 MD5:', error.message);
+        console.error('[patch-notes] 元数据获取失败:', error.message);
+        return res.status(502).json({ error: '获取补丁元数据失败，无法去重' });
     }
 
-    if (md5) {
-        let existing: Buffer | null = null;
+    let existing: Buffer | null = null;
+    try {
+        existing = await fs.readFile(path.join(dir, `${md5}.png`));
+    } catch (error: any) {
+        if (error.code !== 'ENOENT') throw error;
+    }
+    if (existing) {
         try {
-            existing = await fs.readFile(path.join(dir, `${md5}.png`));
-        } catch (error: any) {
-            if (error.code !== 'ENOENT') throw error;
+            await ensurePatchSidecar(dir, kind, md5, metadata);
+        } catch (error) {
+            console.error('[patch-notes] 元数据侧车写入失败:', error);
         }
-        if (existing) {
-            try {
-                await ensurePatchSidecar(dir, kind, md5, metadata);
-            } catch (error) {
-                console.error('[patch-notes] 元数据侧车写入失败:', error);
-            }
-            res.set('Content-Type', 'image/png');
-            res.set('X-Patch-Kind', kind);
-            res.set('X-Patch-MD5', md5);
-            res.set('X-Patch-Added', '0');
-            return res.send(existing);
-        }
+        res.set('Content-Type', 'image/png');
+        res.set('X-Patch-Kind', kind);
+        res.set('X-Patch-MD5', md5);
+        res.set('X-Patch-Added', '0');
+        return res.send(existing);
     }
 
     try {
@@ -245,10 +244,6 @@ async function fetchAndStorePatchNotes(req: AuthRequest, res: any) {
         const buffer = Buffer.from(response.data);
         if (buffer.length > 25 * 1024 * 1024) {
             return res.status(502).json({ error: '补丁图超过 25MB' });
-        }
-
-        if (!md5) {
-            md5 = crypto.createHash('md5').update(buffer).digest('hex');
         }
 
         let added = false;
