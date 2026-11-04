@@ -1,10 +1,14 @@
 import { Router } from 'express';
 import axios from 'axios';
+import crypto from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
 import { levelGet, levelSetEx } from '../services/levelCache';
 import { getCacheKey } from '../utils/cacheHelpers';
 import { userEventLogger } from '../utils/db';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, authenticateToken } from '../middleware/auth';
 import { getUserIdByBattletag } from '../utils/userHelper';
+import { PATCH_ROOT, normalizeKind } from './patchNotes';
 
 const router = Router();
 const DaShenURL = process.env.DASHEN_URL;
@@ -119,7 +123,170 @@ async function proxyAndCache(req: AuthRequest, res: any) {
     }
 }
 
+function buildPatchRecordMd5(metadata: any): string {
+    const selected = metadata?.selected;
+    if (!selected || typeof selected !== 'object') {
+        throw new Error('上游未返回补丁元数据');
+    }
+
+    // 补丁图每次渲染会随机更换地图背景，不能直接对图片字节取 MD5。
+    // 这里对稳定的补丁内容字段取 MD5，保证同一补丁只存一份。
+    const identity = [
+        String(metadata.requested_kind ?? ''),
+        String(metadata.selected_kind ?? ''),
+        String(selected.source ?? ''),
+        String(selected.source_name ?? ''),
+        String(selected.url ?? ''),
+        String(selected.date ?? ''),
+        String(selected.date_text ?? ''),
+        String(selected.title ?? ''),
+        String(selected.text ?? ''),
+        JSON.stringify(selected.sections ?? []),
+        JSON.stringify(selected.hero_updates ?? [])
+    ].join('\n');
+    return crypto.createHash('md5').update(identity, 'utf8').digest('hex');
+}
+
+async function ensurePatchSidecar(dir: string, kind: string, md5: string, metadata: any) {
+    if (!metadata?.selected || typeof metadata.selected !== 'object') return;
+    const sidecarPath = path.join(dir, `${md5}.json`);
+    try {
+        await fs.access(sidecarPath);
+        return;
+    } catch {
+        // 首次保存时写入
+    }
+
+    const selected = metadata.selected;
+    const sidecar = {
+        patch_kind: kind,
+        md5,
+        patchDate: typeof selected.date === 'string' ? selected.date : null,
+        dateText: selected.date_text || '',
+        title: selected.title || '',
+        source: selected.source || '',
+        sourceName: selected.source_name || '',
+        savedAt: new Date().toISOString()
+    };
+    await fs.writeFile(sidecarPath, JSON.stringify(sidecar, null, 2), 'utf8');
+}
+
+async function fetchAndStorePatchNotes(req: AuthRequest, res: any) {
+    if (req.user?.role !== 'ADMIN') {
+        return res.status(403).json({ error: '只有管理员可以获取版本更新' });
+    }
+
+    const kind = normalizeKind(req.body?.patch_kind);
+    if (!kind) {
+        return res.status(400).json({ error: 'patch_kind 必须是 small 或 big' });
+    }
+
+    const dir = path.join(PATCH_ROOT, kind);
+    await fs.mkdir(dir, { recursive: true });
+
+    let metadata: any = null;
+    let md5: string | null = null;
+    try {
+        const metadataResponse = await axios.post(
+            `${DaShenURL}/patch-notes`,
+            { patch_kind: kind },
+            {
+                responseType: 'json',
+                timeout: 30000,
+                headers: { 'Content-Type': 'application/json' }
+            }
+        );
+        metadata = metadataResponse.data;
+        if (metadata?.ok === false) {
+            throw new Error(metadata?.message || metadata?.error || '上游元数据失败');
+        }
+        md5 = buildPatchRecordMd5(metadata);
+    } catch (error: any) {
+        console.warn('[patch-notes] 元数据获取失败，回退图片 MD5:', error.message);
+    }
+
+    if (md5) {
+        let existing: Buffer | null = null;
+        try {
+            existing = await fs.readFile(path.join(dir, `${md5}.png`));
+        } catch (error: any) {
+            if (error.code !== 'ENOENT') throw error;
+        }
+        if (existing) {
+            try {
+                await ensurePatchSidecar(dir, kind, md5, metadata);
+            } catch (error) {
+                console.error('[patch-notes] 元数据侧车写入失败:', error);
+            }
+            res.set('Content-Type', 'image/png');
+            res.set('X-Patch-Kind', kind);
+            res.set('X-Patch-MD5', md5);
+            res.set('X-Patch-Added', '0');
+            return res.send(existing);
+        }
+    }
+
+    try {
+        const response = await axios.post(
+            `${DaShenURL}/patch-notes/image`,
+            { patch_kind: kind },
+            {
+                responseType: 'arraybuffer',
+                timeout: 90000,
+                headers: { 'Content-Type': 'application/json' }
+            }
+        );
+
+        const contentType = String(response.headers['content-type'] || 'image/png');
+        if (!contentType.startsWith('image/')) {
+            return res.status(502).json({ error: '上游未返回图片' });
+        }
+
+        const buffer = Buffer.from(response.data);
+        if (buffer.length > 25 * 1024 * 1024) {
+            return res.status(502).json({ error: '补丁图超过 25MB' });
+        }
+
+        if (!md5) {
+            md5 = crypto.createHash('md5').update(buffer).digest('hex');
+        }
+
+        let added = false;
+        try {
+            await fs.writeFile(path.join(dir, `${md5}.png`), buffer, { flag: 'wx' });
+            added = true;
+        } catch (error: any) {
+            if (error.code !== 'EEXIST') throw error;
+        }
+
+        try {
+            await ensurePatchSidecar(dir, kind, md5, metadata);
+        } catch (error) {
+            console.error('[patch-notes] 元数据侧车写入失败:', error);
+        }
+        userEventLogger.logEvent({
+            userId: req.user.userId,
+            eventType: 'dashen-patch-notes',
+            eventData: { patch_kind: kind, md5, added },
+            ipAddress: req.ip
+        }).catch(error => console.error('[patch-notes] 记录事件失败:', error));
+
+        res.set('Content-Type', contentType);
+        res.set('X-Patch-Kind', kind);
+        res.set('X-Patch-MD5', md5);
+        res.set('X-Patch-Added', added ? '1' : '0');
+        res.send(buffer);
+    } catch (error: any) {
+        console.error('[patch-notes] 获取失败:', error.message);
+        if (error.response) {
+            return res.status(error.response.status).json({ error: '上游获取版本更新失败' });
+        }
+        res.status(502).json({ error: '获取版本更新失败' });
+    }
+}
+
 // 注册路由
+router.post('/patch-notes/image', authenticateToken, fetchAndStorePatchNotes);
 router.post('/dashen-profile', proxyAndCache);
 router.post('/dashen-profile/image', proxyAndCache);
 router.post('/dashen-summary/today', proxyAndCache);

@@ -16,6 +16,7 @@ export type EventType =
   | 'dashen-quick-strength'
   | 'dashen-competitive-strength'
   | 'dashen-hero-treemap'
+  | 'dashen-patch-notes'
   | 'SMS_REQUEST'
   // file operations
   | 'file_upload'

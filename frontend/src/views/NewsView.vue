@@ -5,15 +5,45 @@
       <div class="top-tip-text">黑爪情报局</div>
 
       <div v-if="loading" class="state-card"><div class="spinner"></div><p class="state-text">加载中…</p></div>
-      <div v-else-if="pages.length === 0" class="empty-state"><p>暂无内容</p></div>
       <div v-else class="page-list-wrap">
         <div class="page-list-section">
           <div class="filter-tabs">
-            <button :class="['filter-tab', { active: activeTab === 'all' }]" @click="activeTab = 'all'">黑爪动态</button>
-            <button :class="['filter-tab', { active: activeTab === 'mine' }]" @click="activeTab = 'mine'">我的作品</button>
+            <button :class="['filter-tab', { active: activeTab === 'all' }]" @click="selectTab('all')">黑爪动态</button>
+            <button :class="['filter-tab', { active: activeTab === 'mine' }]" @click="selectTab('mine')">我的作品</button>
+            <button :class="['filter-tab', { active: activeTab === 'patch' }]" @click="selectTab('patch')">版本补丁</button>
             <button v-if="isAdmin && activeTab === 'all'" :class="['admin-toggle', { active: showAdmin }]" @click="showAdmin = !showAdmin">⚙️ 管理</button>
           </div>
-          <div class="page-grid">
+
+          <div v-if="activeTab === 'patch'" class="patch-panel">
+            <div class="patch-subtabs">
+              <button :class="['patch-subtab', { active: activePatchKind === 'small' }]" @click="selectPatchKind('small')">小版本</button>
+              <button :class="['patch-subtab', { active: activePatchKind === 'big' }]" @click="selectPatchKind('big')">大版本</button>
+              <button v-if="isAdmin" class="patch-refresh-btn" :disabled="patchFetching" @click="refreshPatchNotes">
+                {{ patchFetching ? '获取中…' : '获取更新' }}
+              </button>
+            </div>
+            <div v-if="patchLoading" class="state-card"><div class="spinner"></div><p class="state-text">加载中…</p></div>
+            <div v-else-if="patchItems.length === 0" class="empty-state"><p>暂无版本更新记录</p></div>
+            <div v-else class="patch-list">
+              <div v-for="item in patchItems" :key="item.md5" class="patch-item">
+                <div class="patch-time">
+                  {{ formatPatchDate(item.patchDate || item.fetchedAt) }}
+                  <span v-if="item.sourceName" class="patch-source">· {{ item.sourceName }}</span>
+                </div>
+                <img
+                  :src="item.url"
+                  class="patch-image"
+                  loading="lazy"
+                  :alt="activePatchKind === 'small' ? '小版本更新' : '大版本更新'"
+                  :title="item.title || '版本更新'"
+                  @click="openAlbumImageViewer(item.url)"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="page-grid">
+            <div v-if="filteredPages.length === 0" class="empty-state"><p>暂无内容</p></div>
             <div v-for="page in filteredPages" :key="page.id" class="page-card" :class="{ 'video-card': page.type === 2 }" @click="page.type === 1 ? $router.push('/pages/' + page.id) : null">
               <!-- 视频类型：渲染视频预览 + 简介 -->
               <template v-if="page.type === 2">
@@ -134,7 +164,7 @@
   <FooterBar />
 
   <!-- FAB 浮动按钮 -->
-  <div :class="['fab-area', { hidden: !fabVisible }]">
+  <div v-if="activeTab !== 'patch'" :class="['fab-area', { hidden: !fabVisible }]">
     <Transition name="fan">
       <div v-if="showFabMenu" class="fab-items">
         <button class="fab-item" @click.stop="createNewArticle">文章</button>
@@ -184,6 +214,19 @@ interface P {
   _showComments: boolean; _newComment: string;
   _replyingToId: number | null; _replyingToName: string; _replyContent: string; _comment_count: number;
 }
+
+interface PatchItem {
+  kind: 'small' | 'big'
+  md5: string
+  url: string
+  fetchedAt: string
+  bytes: number
+  patchDate: string | null
+  dateText: string
+  title: string
+  sourceName: string
+}
+
 const loading = ref(true)
 const pages = ref<P[]>([])
 const isAdmin = ref(false)
@@ -195,9 +238,14 @@ const albumViewerVisible = ref(false)
 const albumViewerSrc = ref('')
 const fabVisible = ref(true)
 const lastScrollY = ref(0)
-const activeTab = ref<'all' | 'mine'>('all')
+const activeTab = ref<'all' | 'mine' | 'patch'>('all')
 const currentUserId = ref<number | null>(null)
 const showAdmin = ref(false)
+const activePatchKind = ref<'small' | 'big'>('small')
+const patchItems = ref<PatchItem[]>([])
+const patchLoading = ref(false)
+const patchFetching = ref(false)
+let patchRequestSeq = 0
 
 // 从 content_preview 中提取第一个视频 URL
 function extractVideoUrl(content: string): string {
@@ -267,6 +315,12 @@ async function fetchPages() {
 const getAvatarUrl = (n: string) => n ? `/api/users/${encodeURIComponent(n)}/avatar` : ''
 function handleAvatarError(e: Event) { const img = e.target as HTMLImageElement; img.src = '/res/imge/default-avatar.png'; img.onerror = null }
 const formatDate = (d: string) => { if (!d) return ''; const dt = new Date(d); const pad = (n: number) => String(n).padStart(2, '0'); return `${dt.getFullYear()}.${pad(dt.getMonth() + 1)}.${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}` }
+const formatPatchDate = (d?: string | null) => {
+  if (!d) return ''
+  const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(d)
+  if (matched) return `${matched[1]}.${matched[2]}.${matched[3]}`
+  return formatDate(d)
+}
 
 const filteredPages = computed(() => {
   let list = pages.value
@@ -278,6 +332,65 @@ const filteredPages = computed(() => {
   }
   return list.filter(p => p.status !== 0)
 })
+
+function selectTab(tab: 'all' | 'mine' | 'patch') {
+  activeTab.value = tab
+  showAdmin.value = false
+  if (tab === 'patch') fetchPatchNotes()
+}
+
+function selectPatchKind(kind: 'small' | 'big') {
+  if (activePatchKind.value === kind) return
+  activePatchKind.value = kind
+  fetchPatchNotes()
+}
+
+async function fetchPatchNotes() {
+  const seq = ++patchRequestSeq
+  const kind = activePatchKind.value
+  patchLoading.value = true
+  try {
+    const res = await authFetch(`/api/patch-notes/list?patch_kind=${kind}`)
+    if (!res.ok) throw new Error('加载版本更新失败')
+    const data = await res.json()
+    if (seq !== patchRequestSeq) return
+    patchItems.value = Array.isArray(data.items) ? data.items : []
+  } catch (error) {
+    if (seq === patchRequestSeq) patchItems.value = []
+  } finally {
+    if (seq === patchRequestSeq) patchLoading.value = false
+  }
+}
+
+async function refreshPatchNotes() {
+  if (!isAdmin.value || patchFetching.value) return
+  patchFetching.value = true
+  const kind = activePatchKind.value
+  const label = kind === 'small' ? '小版本' : '大版本'
+  try {
+    const res = await authFetch('/api/v2/patch-notes/image', {
+      method: 'POST',
+      body: JSON.stringify({ patch_kind: kind })
+    })
+    if (!res.ok) {
+      let message = '获取版本更新失败'
+      try {
+        const data = await res.json()
+        message = data.error || data.message || message
+      } catch {}
+      throw new Error(message)
+    }
+
+    const added = res.headers.get('X-Patch-Added') === '1'
+    await res.arrayBuffer()
+    if (kind === activePatchKind.value) await fetchPatchNotes()
+    alert(added ? `已添加最新${label}更新图` : `${label}更新图已是最新`)
+  } catch (error: any) {
+    alert(error.message || '获取版本更新失败')
+  } finally {
+    patchFetching.value = false
+  }
+}
 
 // 视频 FAB
 function openVideoDialog() {
@@ -492,6 +605,88 @@ async function toggleInlineReplyLike(p: P, r: any) {
 .admin-toggle.active {
   background: #f0f0f0;
   border-color: var(--accent);
+}
+
+.patch-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.patch-subtabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.patch-subtab {
+  flex: 1;
+  padding: 8px 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.patch-subtab.active {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.14);
+  color: #3b82f6;
+}
+
+.patch-refresh-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.patch-refresh-btn:hover:not(:disabled) {
+  background: var(--accent-bg);
+}
+
+.patch-refresh-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.patch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.patch-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.patch-time {
+  padding-left: 2px;
+  color: var(--text-primary);
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.patch-image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  cursor: zoom-in;
 }
 
 .page-card {
