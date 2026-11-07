@@ -418,8 +418,7 @@ const close = () => {
   cursor: default;
   border-radius: 8px;
   transform-origin: center center;
-  transition: transform 0.16s ease-out;
-  will-change: transform;
+  image-rendering: auto;
   user-select: none;
   -webkit-user-drag: none;
   touch-action: none;
@@ -431,6 +430,7 @@ const close = () => {
 
 .image-viewer-img.zoomable {
   cursor: grab;
+  image-rendering: -webkit-optimize-contrast;
 }
 
 .image-viewer-img.panning {
