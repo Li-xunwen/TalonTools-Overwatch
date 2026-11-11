@@ -16,7 +16,7 @@ router.get('/:battletag/evaluations', async (req: AuthRequest, res) => {
         if (userRows.length === 0) return res.status(404).json({ error: '用户不存在' });
         const targetUserId = userRows[0].id;
         const [ratingRows] = await pool.query<any[]>(
-            `SELECT u.battletag AS ID, r.content AS evaluation
+            `SELECT u.battletag AS ID, r.content AS evaluation, r.updated_at AS updatedAt
                  FROM ratings r JOIN users u ON r.from_user_id = u.id
                  WHERE r.to_user_id = ? ORDER BY r.created_at ASC`,
             [targetUserId]

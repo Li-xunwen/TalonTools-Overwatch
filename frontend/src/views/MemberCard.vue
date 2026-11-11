@@ -140,6 +140,13 @@
             <span class="evaluation-item-evaluation" :id="`eval-${user.username}-${item.ID}`">
               {{ item.evaluation }}
             </span>
+            <span
+              v-if="getEvaluationTime(item.updatedAt).label"
+              class="evaluation-time-label"
+              :class="getEvaluationTime(item.updatedAt).key"
+            >
+              {{ getEvaluationTime(item.updatedAt).label }}
+            </span>
           </div>
           <div class="evaluation-actions">
             <button v-if="item.ID === selfTag" class="evaluation-edit-btn" @click="startEdit(item)">修改</button>
@@ -527,6 +534,36 @@ function likeTimeLabelForDate(value: string | Date): string {
   if (dayDiff === 2) return '前天'
   if (age <= 7 * 24 * 60 * 60 * 1000) return '本周'
   return ''
+}
+
+function getEvaluationTime(value?: string | Date): { label: string; key: string } {
+  if (!value) return { label: '', key: '' }
+  const date = value instanceof Date ? value : new Date(value)
+  if (!Number.isFinite(date.getTime())) return { label: '', key: '' }
+
+  const now = new Date()
+  const age = now.getTime() - date.getTime()
+  if (age <= 60 * 60 * 1000) return { label: '刚刚', key: 'just-now' }
+
+  const startOfDay = (input: Date) =>
+    new Date(input.getFullYear(), input.getMonth(), input.getDate()).getTime()
+  const dayDiff = Math.round((startOfDay(now) - startOfDay(date)) / (24 * 60 * 60 * 1000))
+  if (dayDiff <= 0) return { label: '今天', key: 'today' }
+  if (dayDiff === 1) return { label: '昨天', key: 'yesterday' }
+  if (dayDiff === 2) return { label: '前天', key: 'before-yesterday' }
+
+  const startOfWeek = (input: Date) => {
+    const monday = new Date(input.getFullYear(), input.getMonth(), input.getDate())
+    const offset = (monday.getDay() + 6) % 7
+    monday.setDate(monday.getDate() - offset)
+    return monday.getTime()
+  }
+  const thisWeek = startOfWeek(now)
+  if (date.getTime() >= thisWeek) return { label: '本周', key: 'this-week' }
+  if (date.getTime() >= thisWeek - 7 * 24 * 60 * 60 * 1000) {
+    return { label: '上周', key: 'last-week' }
+  }
+  return { label: '', key: '' }
 }
 
 // 处理点赞列表（近七天活跃点赞置顶，其余按总赞数降序）
@@ -1657,6 +1694,42 @@ onUnmounted(() => {
 .evaluation-item-content {
   margin-bottom: 0px;
   width: 100%;
+}
+
+.evaluation-time-label {
+  display: inline-block;
+  margin-left: 6px;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.85;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.evaluation-time-label.just-now {
+  color: #22c55e;
+}
+
+.evaluation-time-label.today {
+  color: #3b82f6;
+}
+
+.evaluation-time-label.yesterday {
+  color: #f59e0b;
+}
+
+.evaluation-time-label.before-yesterday {
+  color: #f97316;
+}
+
+.evaluation-time-label.this-week {
+  color: #a855f7;
+}
+
+.evaluation-time-label.last-week {
+  color: #94a3b8;
 }
 
 .like-item,
