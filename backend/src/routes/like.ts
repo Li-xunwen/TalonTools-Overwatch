@@ -42,6 +42,11 @@ router.post('/:battletag/like', async (req: AuthRequest, res) => {
     if (!targetTag) return res.status(400).json({ error: '缺少 battletag 参数' });
     if (targetTag === currentUserTag) return res.status(400).json({ error: '不能给自己点赞' });
 
+    const requestedCount = Number(req.body?.count ?? 1);
+    if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > 20) {
+        return res.status(400).json({ error: '单次点赞数量必须是 1~20 的整数' });
+    }
+
     // 获取目标用户 ID
     const [targetRows] = await pool.query<any[]>('SELECT id FROM users WHERE battletag = ?', [targetTag]);
     if (targetRows.length === 0) return res.status(404).json({ error: '目标用户不存在' });
@@ -90,7 +95,8 @@ router.post('/:battletag/like', async (req: AuthRequest, res) => {
         const todayCount = isToday ? currentUpdatedAt.getSeconds() : 0;
 
         // 3. 检查上限
-        if (todayCount >= 20) {
+        const remainingToday = Math.max(0, 20 - todayCount);
+        if (remainingToday === 0) {
             await connection.rollback();
             connection.release();
             return res.status(429).json({ 
@@ -98,25 +104,23 @@ router.post('/:battletag/like', async (req: AuthRequest, res) => {
             });
         }
 
+        const addedCount = Math.min(requestedCount, remainingToday);
+        const nextTodayCount = (isToday ? todayCount : 0) + addedCount;
+
         const updateSql = `
             UPDATE likes 
             SET 
-                like_count = like_count + 1,
+                like_count = like_count + ?,
                 updated_at = STR_TO_DATE(
                     CONCAT(
                         DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:'), 
-                        LPAD(
-                            CASE 
-                                WHEN DATE(updated_at) = CURDATE() THEN SECOND(updated_at) + 1 
-                                ELSE 1 
-                            END, 
-                        2, '0')
+                        LPAD(?, 2, '0')
                     ), 
                 '%Y-%m-%d %H:%i:%s')
             WHERE id = ?
         `;
         
-        await connection.query(updateSql, [recordId]);
+        await connection.query(updateSql, [addedCount, nextTodayCount, recordId]);
 
         // 5. 获取更新后的最终状态用于返回
         const [finalRows]: [any, any] = await connection.query(
@@ -142,6 +146,8 @@ router.post('/:battletag/like', async (req: AuthRequest, res) => {
         // 7. 返回结果
         res.json({ 
             message: '点赞成功', 
+            addedCount,
+            limited: addedCount < requestedCount,
             totalLikes: finalTotalCount,      // 历史总赞数
             todayLikes: finalTodayCount,      // 今日赞数
             newUpdatedAt: finalUpdatedAt      // 更新时间对象

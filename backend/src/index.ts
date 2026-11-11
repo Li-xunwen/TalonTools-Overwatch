@@ -29,6 +29,7 @@ import { initUndercoverWs } from './ws/undercoverWs';
 import voiceRouter, { voiceWebhookRouter } from './routes/voice';
 import infoRouter from './routes/info';
 import patchNotesRouter from './routes/patchNotes';
+import activityRouter from './routes/activity';
 import { initVoiceChannel } from './services/voiceChannel';
 import { registerVoiceRoomChangeHook } from './services/undercoverRooms';
 
@@ -159,6 +160,7 @@ app.use('/api', likeRouter);
 app.use('/api', evaluationRouter);
 app.use('/api/user', rankRouter);
 app.use('/api/user', heroesRouter);
+app.use('/api/activity', activityRouter);
 app.use('/api/v2', dashenProfileRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/quiz', quizRouter);

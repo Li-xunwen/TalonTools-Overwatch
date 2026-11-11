@@ -1,5 +1,5 @@
 <template>
-  <div class="member-card" :data-is-self="user.username === selfTag">
+  <div class="member-card" :class="{ 'unread-card': unread }" :data-is-self="user.username === selfTag" :data-username="user.username">
     <!-- 内部容器：包裹主要内容 -->
     <div class="card-content">
       <!-- 头部：头像 + 名字 -->
@@ -69,12 +69,48 @@
 
     </div>
 
+    <span v-if="likedMeLabel" class="liked-me-label">{{ likedMeLabel }} 赞我</span>
+
+    <div v-if="unread" class="unread-side">
+      <div v-if="isFirstUnread" class="unread-start-label">未读：</div>
+      <div v-if="unreadEvaluation" class="unread-eval">
+        <span class="unread-eval-actor">{{ unreadEvaluationShortActor }}</span>：{{ unreadEvaluation }}
+      </div>
+      <div v-if="unreadLike" class="unread-like">{{ likedMeLabel || '未读' }} 赞我</div>
+    </div>
+
 
 
     <!-- 点赞区域（右上角） -->
-    <div class="like-button-container" @click.stop="onLikeClick">
-      <span class="like-count">{{ displayLikeCount }}</span>
-      <span class="heart">❤️</span>
+    <div class="like-button-container" :class="{ submitting: likeSubmitting, success: likeSuccess }" @click.stop="onLikeClick">
+      <span class="like-count">{{ likeCountText }}</span>
+      <span class="like-heart-wrap" :class="{ success: likeSuccess }">
+        <span class="heart">❤️</span>
+        <svg
+          v-if="likeCountdownActive && !likeSuccess"
+          :key="likeCountdownSeq"
+          class="like-ring"
+          viewBox="0 0 32 32"
+          aria-hidden="true"
+        >
+          <circle class="like-ring-track" cx="16" cy="16" r="14" />
+          <circle class="like-ring-progress" cx="16" cy="16" r="14" />
+        </svg>
+        <span v-if="likeSuccess" class="like-check" aria-hidden="true">✓</span>
+      </span>
+    </div>
+    <div class="like-emoji-layer" aria-hidden="true">
+      <span
+        v-for="item in floatingEmojis"
+        :key="item.id"
+        class="like-float-emoji"
+        :style="{
+          '--like-x': item.x + 'px',
+          '--like-drift': item.drift + 'px',
+          '--like-rot': item.rot + 'deg',
+          '--like-delay': item.delay + 'ms'
+        }"
+      >{{ item.emoji }}</span>
     </div>
 
     <!-- 点赞列表浮层 -->
@@ -307,6 +343,17 @@ const props = defineProps<{
   evalCache: Map<string, any[]>
   fetchEvaluations: (username: string) => Promise<any[]>
   selfRole: string | null   // 新增
+  pendingLikeCount?: number
+  likeCountdownActive?: boolean
+  likeCountdownSeq?: number
+  likeSubmitting?: boolean
+  likeSuccess?: boolean
+  likedMeLabel?: string
+  unread?: boolean
+  unreadLike?: boolean
+  unreadEvaluation?: string
+  unreadEvaluationActor?: string
+  isFirstUnread?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -334,6 +381,7 @@ const editingEval = ref<{ item: any; original: string } | null>(null)
 
 // 擅长英雄（最多5个）
 const topHeroes = computed(() => (props.user.hero || []).slice(0, 5))
+const unreadEvaluationShortActor = computed(() => (props.unreadEvaluationActor || '').split('#')[0])
 
 // 生涯相关状态
 const expandCareer = computed(() => props.currentExpandId === `career-${props.user.username}`)
@@ -429,6 +477,11 @@ const displayLikeCount = computed(() => {
   return likes.reduce((sum, item) => sum + (item.Like || 0), 0);
 });
 
+const likeCountText = computed(() => {
+  const pending = props.pendingLikeCount || 0
+  return pending > 0 ? `${displayLikeCount.value}+${pending}` : String(displayLikeCount.value)
+})
+
 // 点赞列表（供浮层使用）
 
 const evalList = ref<any[]>([])
@@ -460,13 +513,26 @@ watch(expandLike, (newVal) => {
   }
 })
 
-// 处理点赞列表（置顶今日活跃点赞，其余按总赞数降序）
+function likeTimeLabelForDate(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value)
+  if (!Number.isFinite(date.getTime())) return ''
+  const now = new Date()
+  const age = now.getTime() - date.getTime()
+  if (age <= 60 * 60 * 1000) return '刚刚'
+
+  const startOfDay = (input: Date) => new Date(input.getFullYear(), input.getMonth(), input.getDate()).getTime()
+  const dayDiff = Math.round((startOfDay(now) - startOfDay(date)) / (24 * 60 * 60 * 1000))
+  if (dayDiff <= 0) return '今天'
+  if (dayDiff === 1) return '昨天'
+  if (dayDiff === 2) return '前天'
+  if (age <= 7 * 24 * 60 * 60 * 1000) return '本周'
+  return ''
+}
+
+// 处理点赞列表（近七天活跃点赞置顶，其余按总赞数降序）
 const processedLikeList = computed(() => {
   const raw = props.likeCache[props.user.username] || [];
   if (!raw.length) return [];
-
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const specials: any[] = [];
   const normals: any[] = [];
@@ -475,22 +541,8 @@ const processedLikeList = computed(() => {
     const updatedAt = new Date(item.updated_at);
     const todayCount = updatedAt.getSeconds();        // 秒数 = 当天已点赞次数
     const totalCount = item.Like;                     // 累计总点赞数
-
-    // 判断是否属于“今天”且今天有点赞记录
-    const isToday = updatedAt >= todayStart;
-    let isSpecial = false;
-    let timeLabel = '';
-
-    if (isToday && todayCount > 0) {
-      const diffHours = (now.getTime() - updatedAt.getTime()) / (1000 * 3600);
-      if (diffHours < 2) {
-        isSpecial = true;
-        timeLabel = '刚刚';
-      } else {
-        isSpecial = true;
-        timeLabel = '今天';
-      }
-    }
+    const timeLabel = likeTimeLabelForDate(updatedAt);
+    const isSpecial = Boolean(timeLabel);
 
     const newItem = {
       ...item,
@@ -522,8 +574,45 @@ function handleAvatarError(e: Event) {
   img.onerror = null
 }
 
+const floatingEmojis = ref<Array<{
+  id: number
+  emoji: string
+  x: number
+  drift: number
+  rot: number
+  delay: number
+}>>([])
+const emojiTimers = new Set<ReturnType<typeof setTimeout>>()
+const LIKE_EMOJIS = ['❤️', '💖', '🌹', '🎁', '💐', '✨']
+let emojiSeq = 0
+
+function spawnLikeEmojis() {
+  const ids: number[] = []
+  for (let index = 0; index < 4; index += 1) {
+    const id = ++emojiSeq
+    ids.push(id)
+    floatingEmojis.value.push({
+      id,
+      emoji: LIKE_EMOJIS[Math.floor(Math.random() * LIKE_EMOJIS.length)],
+      x: (Math.random() - 0.5) * 28,
+      drift: (Math.random() - 0.5) * 34,
+      rot: (Math.random() - 0.5) * 36,
+      delay: Math.floor(Math.random() * 70)
+    })
+  }
+  if (floatingEmojis.value.length > 24) {
+    floatingEmojis.value = floatingEmojis.value.slice(-24)
+  }
+  const timer = setTimeout(() => {
+    floatingEmojis.value = floatingEmojis.value.filter(item => !ids.includes(item.id))
+    emojiTimers.delete(timer)
+  }, 1650)
+  emojiTimers.add(timer)
+}
+
 // 点赞按钮：只打开浮层（如果已打开则保持不变），并发送点赞请求
 function onLikeClick() {
+  spawnLikeEmojis()
   emit('like-click', props.user.username)
   if (!expandLike.value) {
     emit('expand-like', props.user.username)
@@ -1133,6 +1222,9 @@ onUnmounted(() => {
     URL.revokeObjectURL(treemapImageUrl.value)
   }
   if (autoCloseTimer) clearTimeout(autoCloseTimer)
+  for (const timer of emojiTimers) clearTimeout(timer)
+  emojiTimers.clear()
+  floatingEmojis.value = []
 })
 </script>
 
@@ -1323,11 +1415,223 @@ onUnmounted(() => {
   color: var(--text-primary);
   font-size: 14px;
   font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.liked-me-label {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  z-index: 11;
+  transform: translateX(-50%);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 10px;
+  line-height: 1.2;
+  opacity: 0.45;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.unread-side {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .unread-side {
+    position: absolute;
+    top: 2px;
+    left: calc(100% + 8px);
+    display: block;
+    width: 68px;
+    z-index: 13;
+    pointer-events: none;
+    font-size: 9px;
+    line-height: 1.25;
+  }
+
+  .unread-start-label {
+    margin-bottom: 4px;
+    color: #4dabf7;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .unread-eval {
+    display: -webkit-box;
+    overflow: hidden;
+    color: #f59e0b;
+    word-break: break-all;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .unread-eval-actor {
+    font-weight: 700;
+    color: #d97706;
+  }
+
+  .unread-like {
+    overflow: hidden;
+    margin-top: 4px;
+    color: var(--text-primary);
+    opacity: 0.55;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.like-heart-wrap {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .heart {
   color: #ff4d6d;
   font-size: 14px;
+}
+
+.like-heart-wrap.success .heart {
+  visibility: hidden;
+}
+
+.like-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  pointer-events: none;
+}
+
+.like-ring-track {
+  fill: none;
+  stroke: rgba(255, 77, 109, 0.2);
+  stroke-width: 2;
+}
+
+.like-ring-progress {
+  fill: none;
+  stroke: #ff4d6d;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 88;
+  stroke-dashoffset: 0;
+  animation: like-ring-drain 1s linear forwards;
+}
+
+.like-check {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ff2d2d;
+  font-size: 16px;
+  font-weight: 900;
+  text-shadow: 0 0 4px rgba(255, 45, 45, 0.35);
+  animation: like-check-pop 0.5s ease-out;
+}
+
+.like-button-container.submitting .heart {
+  animation: like-heart-pulse 0.32s ease-in-out infinite alternate;
+}
+
+.like-button-container.success .like-count {
+  color: #ff2d2d;
+}
+
+.like-emoji-layer {
+  position: absolute;
+  top: 12px;
+  right: 10px;
+  width: 1px;
+  height: 1px;
+  z-index: 12;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.like-float-emoji {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 14px;
+  opacity: 0;
+  animation: like-float 1.5s ease-out var(--like-delay) forwards;
+}
+
+.rank-rise-clone {
+  pointer-events: auto;
+  animation: rank-clone-in 0.2s ease-out;
+}
+
+.rank-rise-clone.rank-clone-pulse .heart {
+  animation: like-heart-pulse 0.3s ease-in-out;
+}
+
+@keyframes like-ring-drain {
+  to {
+    stroke-dashoffset: 88;
+  }
+}
+
+@keyframes like-check-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotate(-20deg);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes like-heart-pulse {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.18);
+  }
+}
+
+@keyframes like-float {
+  0% {
+    opacity: 0;
+    transform: translate(var(--like-x), 0) scale(0.6) rotate(var(--like-rot));
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(var(--like-x) + var(--like-drift)), -48px) scale(1.15) rotate(calc(var(--like-rot) + 20deg));
+  }
+}
+
+@keyframes rank-clone-in {
+  from {
+    opacity: 0.82;
+    filter: brightness(1.12);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
 }
 
 /* 浮层样式 */
