@@ -29,8 +29,7 @@ router.get('/:battletag/likelist', async (req: AuthRequest, res) => {
 
 router.post('/:battletag/like', async (req: AuthRequest, res) => {
     const currentUserId = req.user?.userId;
-    const currentUserTag = req.user?.battletag;
-    if (!currentUserId || !currentUserTag) return res.status(401).json({ error: '未授权' });
+    if (!currentUserId) return res.status(401).json({ error: '未授权' });
 
     const rawBattleTag = req.params.battletag;
     if (Array.isArray(rawBattleTag)) {
@@ -40,7 +39,6 @@ router.post('/:battletag/like', async (req: AuthRequest, res) => {
     let targetTag = decodeURIComponent(rawBattleTag);
 
     if (!targetTag) return res.status(400).json({ error: '缺少 battletag 参数' });
-    if (targetTag === currentUserTag) return res.status(400).json({ error: '不能给自己点赞' });
 
     const requestedCount = Number(req.body?.count ?? 1);
     if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > 20) {
@@ -50,7 +48,10 @@ router.post('/:battletag/like', async (req: AuthRequest, res) => {
     // 获取目标用户 ID
     const [targetRows] = await pool.query<any[]>('SELECT id FROM users WHERE battletag = ?', [targetTag]);
     if (targetRows.length === 0) return res.status(404).json({ error: '目标用户不存在' });
-    const targetUserId = targetRows[0].id;
+    const targetUserId = Number(targetRows[0].id);
+    if (targetUserId === currentUserId) {
+        return res.status(400).json({ error: '不能给自己点赞' });
+    }
 
     const connection = await pool.getConnection();
     await connection.beginTransaction();

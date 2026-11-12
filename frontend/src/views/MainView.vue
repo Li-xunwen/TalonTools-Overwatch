@@ -295,7 +295,7 @@ function scheduleLikeFlush(targetUser: string) {
 }
 
 function enqueueLike(targetUser: string) {
-  if (!selfTag.value) return
+  if (!selfTag.value || targetUser === selfTag.value) return
 
   const remaining = Math.max(0, 20 - getTodayLikeCount(targetUser))
   const currentPending = pendingLikes[targetUser] || 0
@@ -584,6 +584,7 @@ function handleExpandEval(username: string) {
 }
 
 function handleLikeClick(targetUser: string) {
+  if (targetUser === selfTag.value) return
   enqueueLike(targetUser)
 }
 

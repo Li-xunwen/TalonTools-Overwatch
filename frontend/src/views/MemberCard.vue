@@ -481,7 +481,7 @@ const displayLikeCount = computed(() => {
 });
 
 const likeCountText = computed(() => {
-  const pending = props.pendingLikeCount || 0
+  const pending = props.user.username === props.selfTag ? 0 : (props.pendingLikeCount || 0)
   return pending > 0 ? `${displayLikeCount.value}+${pending}` : String(displayLikeCount.value)
 })
 
@@ -645,6 +645,12 @@ function spawnLikeEmojis() {
 
 // 点赞按钮：只打开浮层（如果已打开则保持不变），并发送点赞请求
 function onLikeClick() {
+  if (props.user.username === props.selfTag) {
+    if (!expandLike.value) {
+      emit('expand-like', props.user.username)
+    }
+    return
+  }
   spawnLikeEmojis()
   emit('like-click', props.user.username)
   if (!expandLike.value) {
