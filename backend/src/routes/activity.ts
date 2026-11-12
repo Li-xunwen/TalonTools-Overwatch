@@ -24,33 +24,45 @@ router.get('/', async (req: AuthRequest, res) => {
     if (!userId) return res.status(401).json({ error: '未授权' });
 
     try {
-        const [cursorRows] = await pool.query<any[]>(
-            `SELECT last_like_event_id AS likeCursor,
-                    last_evaluation_event_id AS evaluationCursor
-             FROM user_activity_cursors WHERE user_id = ? LIMIT 1`,
-            [userId]
-        );
+        const [cursorResult, likesResult, myLikesResult, evaluationsResult] = await Promise.all([
+            pool.query<any[]>(
+                `SELECT last_like_event_id AS likeCursor,
+                        last_evaluation_event_id AS evaluationCursor
+                 FROM user_activity_cursors WHERE user_id = ? LIMIT 1`,
+                [userId]
+            ),
+            pool.query<any[]>(
+                `SELECT u.battletag AS actor, l.like_count AS likeCount, l.updated_at AS updatedAt
+                 FROM likes l JOIN users u ON l.from_user_id = u.id
+                 WHERE l.to_user_id = ? ORDER BY l.updated_at DESC`,
+                [userId]
+            ),
+            pool.query<any[]>(
+                `SELECT target.battletag AS target,
+                        l.like_count AS likeCount, l.updated_at AS updatedAt
+                 FROM likes l JOIN users target ON l.to_user_id = target.id
+                 WHERE l.from_user_id = ?
+                 ORDER BY l.updated_at DESC`,
+                [userId]
+            ),
+            pool.query<any[]>(
+                `SELECT target.battletag AS target, actor.battletag AS actor,
+                        r.content, r.updated_at AS updatedAt
+                 FROM ratings r
+                 JOIN users target ON r.to_user_id = target.id
+                 JOIN users actor ON r.from_user_id = actor.id
+                 WHERE r.from_user_id <> ? AND r.content <> ''
+                 ORDER BY r.updated_at DESC
+                 LIMIT 500`,
+                [userId]
+            )
+        ]);
+        const [cursorRows] = cursorResult;
+        const [likes] = likesResult;
+        const [myLikes] = myLikesResult;
+        const [evaluations] = evaluationsResult;
         const likeCursor = Number(cursorRows[0]?.likeCursor || 0);
         const evaluationCursor = Number(cursorRows[0]?.evaluationCursor || 0);
-
-        const [likes] = await pool.query<any[]>(
-            `SELECT u.battletag AS actor, l.like_count AS likeCount, l.updated_at AS updatedAt
-             FROM likes l JOIN users u ON l.from_user_id = u.id
-             WHERE l.to_user_id = ? ORDER BY l.updated_at DESC`,
-            [userId]
-        );
-
-        const [evaluations] = await pool.query<any[]>(
-            `SELECT target.battletag AS target, actor.battletag AS actor,
-                    r.content, r.updated_at AS updatedAt
-             FROM ratings r
-             JOIN users target ON r.to_user_id = target.id
-             JOIN users actor ON r.from_user_id = actor.id
-             WHERE r.from_user_id <> ? AND r.content <> ''
-             ORDER BY r.updated_at DESC
-             LIMIT 500`,
-            [userId]
-        );
 
         const [eventRows] = await pool.query<any[]>(
             `SELECT e.id, e.event_type AS eventType, e.event_time AS eventTime,
@@ -122,6 +134,7 @@ router.get('/', async (req: AuthRequest, res) => {
                 evaluation: evaluationCursor
             },
             likes,
+            myLikes,
             evaluations,
             unread: [...unreadMap.values()]
         });

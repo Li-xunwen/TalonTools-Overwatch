@@ -100,6 +100,12 @@ interface ActivityEvaluation {
   updatedAt: string
 }
 
+interface ActivityMyLike {
+  target: string
+  likeCount: number
+  updatedAt: string
+}
+
 interface ActivityUnread {
   card: string
   latestEventId: number
@@ -114,6 +120,7 @@ interface ActivityUnread {
 interface ActivityState {
   cursor: { like: number; evaluation: number }
   likes: ActivityLike[]
+  myLikes: ActivityMyLike[]
   evaluations: ActivityEvaluation[]
   unread: ActivityUnread[]
 }
@@ -122,11 +129,15 @@ interface ActivityState {
 const token = localStorage.getItem('authToken')
 const selfTag = ref<string | null>(null)
 const members = ref<UserData[]>([])
+const allUsernames = ref<string[]>([])
+const loadedUsernames = new Set<string>()
+const loadingMoreMembers = ref(false)
 const likeCache = reactive<Record<string, LikeItem[]>>({})
 const evalCache = new Map<string, EvalItem[]>()
 const activityState = ref<ActivityState>({
   cursor: { like: 0, evaluation: 0 },
   likes: [],
+  myLikes: [],
   evaluations: [],
   unread: []
 })
@@ -235,6 +246,7 @@ async function fetchActivity() {
         evaluation: Number(data.cursor?.evaluation || 0)
       },
       likes: Array.isArray(data.likes) ? data.likes : [],
+      myLikes: Array.isArray(data.myLikes) ? data.myLikes : [],
       evaluations: Array.isArray(data.evaluations) ? data.evaluations : [],
       unread: Array.isArray(data.unread) ? data.unread : []
     }
@@ -323,7 +335,7 @@ interface CardSnapshot {
 }
 
 function captureCardSnapshot(username: string): CardSnapshot | null {
-  const index = filteredMembers.value.findIndex(member => member.username === username)
+  const index = filteredUsernames.value.indexOf(username)
   const el = findCardElement(username)
   if (index < 0 || !el) return null
   return { index, rect: el.getBoundingClientRect() }
@@ -363,7 +375,7 @@ function spawnCloneEmojis(clone: HTMLElement) {
 async function animateRankRise(targetUser: string, before: CardSnapshot) {
   if (rankAnimating.has(targetUser)) return
 
-  const newIndex = filteredMembers.value.findIndex(member => member.username === targetUser)
+  const newIndex = filteredUsernames.value.indexOf(targetUser)
   if (newIndex < 0 || newIndex >= before.index) return
 
   const card = findCardElement(targetUser)
@@ -597,24 +609,36 @@ import pLimit from 'p-limit';
 
 const MAX_CONCURRENT = 10; // 并发数
 
+async function loadMemberNames(names: string[]) {
+  const missing = names.filter(name => !loadedUsernames.has(name))
+  if (missing.length === 0) return
+  const limit = pLimit(MAX_CONCURRENT)
+  await Promise.all(missing.map(username =>
+    limit(async () => {
+      const [userData] = await Promise.all([
+        fetchUserData(username),
+        fetchLikes(username)
+      ])
+      if (!userData.username) return
+      if (loadedUsernames.has(username)) return
+      loadedUsernames.add(username)
+      members.value.push(userData)
+      await nextTick()
+    })
+  ))
+}
+
 async function loadMembers() {
-  const usernames = await fetchUserList();
+  const [usernames] = await Promise.all([fetchUserList(), fetchActivity()])
+  allUsernames.value = usernames
   members.value = [];
+  loadedUsernames.clear()
   visibleMemberCount.value = PAGE_SIZE;
 
-  const limit = pLimit(MAX_CONCURRENT);
-  const tasks = usernames.map(username =>
-    limit(async () => {
-      const userData = await fetchUserData(username);
-      if (!userData.username) return; // 无效用户跳过
-      await fetchLikes(username);
-      members.value.push(userData);
-      await nextTick();
-    })
-  );
-  await Promise.all(tasks);
-  if (selfTag.value) await fetchLikes(selfTag.value);
-  await fetchActivity();
+  await loadMemberNames(orderedUsernames.value.slice(0, PAGE_SIZE));
+  await nextTick();
+  updateUnreadGuide();
+  checkUnreadScrollEnd();
 }
 
 // ---------- 排序 ----------
@@ -694,39 +718,61 @@ function getLikedMeLabel(username: string): string {
   return timestamp ? getLikeTimeLabel(timestamp) : ''
 }
 
-const sortedMembers = computed(() => {
+const myLikeCounts = computed<Record<string, number>>(() => {
+  const result: Record<string, number> = {}
+  for (const item of activityState.value.myLikes) {
+    if (item.target) result[item.target] = item.likeCount || 0
+  }
   const self = selfTag.value
-  if (!self) return members.value
+  for (const member of members.value) {
+    const count = (likeCache[member.username] || []).find(item => item.ID === self)?.Like
+    if (typeof count === 'number') result[member.username] = count
+  }
+  return result
+})
+
+const orderedUsernames = computed(() => {
+  const names = allUsernames.value
+  const self = selfTag.value
   const recentCutoff = nowTick.value - 7 * DAY_MS
-  return [...members.value].sort((a, b) => {
-    if (a.username === self && b.username !== self) return -1
-    if (a.username !== self && b.username === self) return 1
-    if (a.username !== self && b.username !== self) {
-      const unreadA = unreadUsernames.value.has(a.username)
-      const unreadB = unreadUsernames.value.has(b.username)
-      if (unreadA !== unreadB) return unreadA ? -1 : 1
-      if (unreadA && unreadB) {
-        const unreadTimeA = Date.parse(unreadByCard.value[a.username]?.latestEventAt || '') || 0
-        const unreadTimeB = Date.parse(unreadByCard.value[b.username]?.latestEventAt || '') || 0
-        if (unreadTimeA !== unreadTimeB) return unreadTimeB - unreadTimeA
-      }
+  const result: string[] = []
+  const seen = new Set<string>()
+  const originalOrder = new Map(names.map((name, index) => [name, index]))
 
-      const activityA = latestActivityAt.value[a.username] || 0
-      const activityB = latestActivityAt.value[b.username] || 0
-      const recentA = activityA >= recentCutoff
-      const recentB = activityB >= recentCutoff
-      if (recentA !== recentB) return recentA ? -1 : 1
-      if (recentA && recentB && activityA !== activityB) return activityB - activityA
+  if (self && names.includes(self)) {
+    result.push(self)
+    seen.add(self)
+  }
 
-      const likesA = likeCache[a.username] || []
-      const likesB = likeCache[b.username] || []
-      const countA = likesA.find(item => item.ID === self)?.Like || 0
-      const countB = likesB.find(item => item.ID === self)?.Like || 0
-      if (countA !== countB) return countB - countA
-      return a.username.localeCompare(b.username, 'zh-CN')
-    }
-    return 0
-  })
+  const unread = names
+    .filter(name => !seen.has(name) && unreadUsernames.value.has(name))
+    .sort((a, b) => {
+      const timeA = Date.parse(unreadByCard.value[a]?.latestEventAt || '') || 0
+      const timeB = Date.parse(unreadByCard.value[b]?.latestEventAt || '') || 0
+      return timeB - timeA
+    })
+  for (const name of unread) {
+    result.push(name)
+    seen.add(name)
+  }
+
+  const recent = names
+    .filter(name => !seen.has(name) && (latestActivityAt.value[name] || 0) >= recentCutoff)
+    .sort((a, b) => (latestActivityAt.value[b] || 0) - (latestActivityAt.value[a] || 0))
+  for (const name of recent) {
+    result.push(name)
+    seen.add(name)
+  }
+
+  const rest = names
+    .filter(name => !seen.has(name))
+    .sort((a, b) => {
+      const byLikes = (myLikeCounts.value[b] || 0) - (myLikeCounts.value[a] || 0)
+      if (byLikes !== 0) return byLikes
+      return (originalOrder.get(a) || 0) - (originalOrder.get(b) || 0)
+    })
+  result.push(...rest)
+  return result
 })
 
 function generateUniqueBattletag(): string {
@@ -876,19 +922,21 @@ function handleExpandAdmin(username: string) {
   const id = `admin-${username}`
   currentExpandId.value = currentExpandId.value === id ? '' : id
 }
-// 过滤后的成员列表（基于 sortedMembers 并按战网ID匹配）
-const filteredMembers = computed(() => {
-  if (!searchKeyword.value.trim()) {
-    return sortedMembers.value
-  }
+const memberMap = computed(() => new Map(members.value.map(member => [member.username, member])))
+
+const filteredUsernames = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase()
-  return sortedMembers.value.filter(member =>
-    member.username.toLowerCase().includes(keyword)
-  )
+  if (!keyword) return orderedUsernames.value
+  return orderedUsernames.value.filter(name => name.toLowerCase().includes(keyword))
 })
 
-const visibleMembers = computed(() => filteredMembers.value.slice(0, visibleMemberCount.value))
-const hasMoreMembers = computed(() => visibleMemberCount.value < filteredMembers.value.length)
+const visibleMembers = computed(() =>
+  filteredUsernames.value
+    .slice(0, visibleMemberCount.value)
+    .map(name => memberMap.value.get(name))
+    .filter((member): member is UserData => Boolean(member))
+)
+const hasMoreMembers = computed(() => visibleMemberCount.value < filteredUsernames.value.length)
 const firstUnreadUsername = computed(() => {
   for (const member of visibleMembers.value) {
     if (unreadUsernames.value.has(member.username)) return member.username
@@ -989,26 +1037,38 @@ function handleWindowResize() {
   updateUnreadGuide()
 }
 
-function loadMoreMembers() {
-  if (!hasMoreMembers.value) return
-  visibleMemberCount.value = Math.min(
-    visibleMemberCount.value + PAGE_SIZE,
-    filteredMembers.value.length
-  )
-  void nextTick(updateUnreadGuide)
+async function loadMoreMembers() {
+  if (!hasMoreMembers.value || loadingMoreMembers.value) return
+  loadingMoreMembers.value = true
+  const previousCount = visibleMemberCount.value
+  const nextCount = Math.min(previousCount + PAGE_SIZE, filteredUsernames.value.length)
+  const names = filteredUsernames.value.slice(previousCount, nextCount)
+  visibleMemberCount.value = nextCount
+  try {
+    await loadMemberNames(names)
+    await nextTick()
+    updateUnreadGuide()
+  } finally {
+    loadingMoreMembers.value = false
+  }
 }
 
 function setupMemberObserver() {
   if (!('IntersectionObserver' in window) || !loadMoreSentinel.value) return
   memberObserver = new IntersectionObserver((entries) => {
-    if (entries.some(entry => entry.isIntersecting)) loadMoreMembers()
-  }, { rootMargin: '200px 0px' })
+    if (entries.some(entry => entry.isIntersecting)) void loadMoreMembers()
+  }, { rootMargin: '0px', threshold: 1.0 })
   memberObserver.observe(loadMoreSentinel.value)
 }
 
-watch(searchKeyword, () => {
+watch(searchKeyword, async () => {
   visibleMemberCount.value = PAGE_SIZE
-  void nextTick(updateUnreadGuide)
+  const names = searchKeyword.value.trim()
+    ? filteredUsernames.value
+    : filteredUsernames.value.slice(0, PAGE_SIZE)
+  await loadMemberNames(names)
+  await nextTick()
+  updateUnreadGuide()
 })
 
 // 处理搜索输入（可选，防抖优化）

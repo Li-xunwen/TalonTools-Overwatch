@@ -1442,6 +1442,8 @@ onUnmounted(() => {
   gap: 4px;
   z-index: 10;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .like-button-container,
@@ -1558,6 +1560,8 @@ onUnmounted(() => {
   pointer-events: auto;
   cursor: pointer;
   z-index: 20;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   animation: like-ring-shrink 1.5s cubic-bezier(0.18, 0.7, 0.25, 1) forwards;
 }
 
