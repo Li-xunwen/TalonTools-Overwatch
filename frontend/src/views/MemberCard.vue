@@ -86,16 +86,12 @@
       <span class="like-count">{{ likeCountText }}</span>
       <span class="like-heart-wrap" :class="{ success: likeSuccess }">
         <span class="heart">❤️</span>
-        <svg
+        <span
           v-if="likeCountdownActive && !likeSuccess"
           :key="likeCountdownSeq"
           class="like-ring"
-          viewBox="0 0 32 32"
-          aria-hidden="true"
-        >
-          <circle class="like-ring-track" cx="16" cy="16" r="14" />
-          <circle class="like-ring-progress" cx="16" cy="16" r="14" />
-        </svg>
+          @click.stop="onLikeClick"
+        ></span>
         <span v-if="likeSuccess" class="like-check" aria-hidden="true">✓</span>
       </span>
     </div>
@@ -1448,6 +1444,13 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
+.like-button-container,
+.like-button-container * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 .like-count {
   color: var(--text-primary);
   font-size: 14px;
@@ -1544,26 +1547,18 @@ onUnmounted(() => {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 28px;
-  height: 28px;
-  transform: translate(-50%, -50%) rotate(-90deg);
-  pointer-events: none;
-}
-
-.like-ring-track {
-  fill: none;
-  stroke: rgba(255, 77, 109, 0.2);
-  stroke-width: 2;
-}
-
-.like-ring-progress {
-  fill: none;
-  stroke: #ff4d6d;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-dasharray: 88;
-  stroke-dashoffset: 0;
-  animation: like-ring-drain 1s linear forwards;
+  width: 64px;
+  height: 64px;
+  border: 2px solid #ff4d6d;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 77, 109, 0.14), rgba(255, 77, 109, 0) 68%);
+  box-shadow: 0 0 0 1px rgba(255, 77, 109, 0.12), 0 0 18px rgba(255, 77, 109, 0.18);
+  transform: translate(-50%, -50%) scale(0.3);
+  transform-origin: center;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 20;
+  animation: like-ring-shrink 1.5s cubic-bezier(0.18, 0.7, 0.25, 1) forwards;
 }
 
 .like-check {
@@ -1616,9 +1611,22 @@ onUnmounted(() => {
   animation: like-heart-pulse 0.3s ease-in-out;
 }
 
-@keyframes like-ring-drain {
-  to {
-    stroke-dashoffset: 88;
+@keyframes like-ring-shrink {
+  0% {
+    opacity: 0.35;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.18);
+  }
+  22% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.28);
   }
 }
 

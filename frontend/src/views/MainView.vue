@@ -150,7 +150,7 @@ const selfRole = ref<string | null>(null)
 const searchKeyword = ref('')
 const isAdmin = computed(() => selfRole.value === 'ADMIN' || selfRole.value === 'MODERATOR')
 const MAX_LIKE_BATCH = 20
-const LIKE_IDLE_MS = 1000
+const LIKE_IDLE_MS = 1500
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
 const PAGE_SIZE = 20
@@ -271,36 +271,42 @@ function showLikeToast(message: string) {
   setTimeout(() => { toastMessage.value = message }, 0)
 }
 
-function enqueueLike(targetUser: string) {
-  if (!selfTag.value) return
-
-  const remaining = Math.max(0, 20 - getTodayLikeCount(targetUser))
-  if (pendingLikeCount(targetUser) >= remaining) {
-    // 已达今日上限：卡片自身已经播放 4 个上浮 emoji，不再进入倒计时/提交
-    showLikeToast('每日最多给他20个赞哦')
-    return
-  }
-
-  pendingLikes[targetUser] = (pendingLikes[targetUser] || 0) + 1
-  likeCountdownSeq[targetUser] = (likeCountdownSeq[targetUser] || 0) + 1
-  likeCountdownActive[targetUser] = true
-
+function scheduleLikeFlush(targetUser: string) {
   const oldTimer = likeIdleTimers.get(targetUser)
   if (oldTimer) clearTimeout(oldTimer)
-
-  if ((pendingLikes[targetUser] || 0) >= MAX_LIKE_BATCH) {
-    likeIdleTimers.delete(targetUser)
-    likeCountdownActive[targetUser] = false
-    void flushLikes(targetUser)
-    return
-  }
-
   const timer = setTimeout(() => {
     likeIdleTimers.delete(targetUser)
     likeCountdownActive[targetUser] = false
     void flushLikes(targetUser)
   }, LIKE_IDLE_MS)
   likeIdleTimers.set(targetUser, timer)
+}
+
+function enqueueLike(targetUser: string) {
+  if (!selfTag.value) return
+
+  const remaining = Math.max(0, 20 - getTodayLikeCount(targetUser))
+  const currentPending = pendingLikes[targetUser] || 0
+  const currentInFlight = inFlightLikes[targetUser] || 0
+
+  // 已满 20 次后继续点击只延长“停手”计时，不再增加数量或立即提交。
+  if (currentPending >= MAX_LIKE_BATCH) {
+    likeCountdownSeq[targetUser] = (likeCountdownSeq[targetUser] || 0) + 1
+    likeCountdownActive[targetUser] = true
+    scheduleLikeFlush(targetUser)
+    return
+  }
+
+  if (currentInFlight + currentPending >= remaining) {
+    // 已达今日上限：卡片自身已经播放 4 个上浮 emoji，不再进入倒计时/提交
+    showLikeToast('每日最多给他20个赞哦')
+    return
+  }
+
+  pendingLikes[targetUser] = currentPending + 1
+  likeCountdownSeq[targetUser] = (likeCountdownSeq[targetUser] || 0) + 1
+  likeCountdownActive[targetUser] = true
+  scheduleLikeFlush(targetUser)
 }
 
 function findCardElement(username: string): HTMLElement | null {
@@ -490,7 +496,12 @@ async function flushLikes(targetUser: string) {
     updateRankCloneCount(rankCloneMap.get(targetUser), targetUser)
     likeSuccess[targetUser] = true
     setTimeout(() => { likeSuccess[targetUser] = false }, 500)
-    if (snapshot) void animateRankRise(targetUser, snapshot)
+    if (snapshot) {
+      setTimeout(() => {
+        if ((pendingLikes[targetUser] || 0) > 0 || inFlightLikes[targetUser]) return
+        void animateRankRise(targetUser, snapshot)
+      }, 1000)
+    }
   } catch (err) {
     if (!limitReached) {
       pendingLikes[targetUser] = (pendingLikes[targetUser] || 0) + submitCount
