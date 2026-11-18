@@ -199,8 +199,9 @@ import DOMPurify from 'dompurify';
 import ThemeToggle from '@/components/ThemeToggle.vue';
 import FileLibrary from '@/components/FileLibrary.vue';
 import { authFetch } from '@/utils/request';
+import type { PageSection } from '@/utils/pageEditor';
 import {
-    PageSection, parseSections, mergeSections,
+    parseSections, mergeSections,
     insertSection, removeSection as removeSectionUtil,
     undoSection,
     loadEditCache, saveEditCache, clearEditCache, isCacheStale,

@@ -8,6 +8,7 @@ dotenv.config()
 
 const apiProxyTarget = process.env.API_PROXY_TARGET
 const serverPort = parseInt(process.env.VITE_SERVER_PORT || '5173', 10)
+const serverHost = process.env.VITE_SERVER_HOST || '127.0.0.1'
 const enableHttps = process.env.VITE_ENABLE_HTTPS === 'true'
 const sslKeyPath = process.env.SSL_KEY_PATH
 const sslCertPath = process.env.SSL_CERT_PATH
@@ -35,7 +36,7 @@ export default defineConfig({
     }
   },
   server: {
-    host: '0.0.0.0',
+    host: serverHost,
     port: serverPort,
     https: httpsConfig,
     proxy: {
@@ -65,5 +66,9 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/resource/, ''),
       }
     }
+  },
+  preview: {
+    host: serverHost,
+    port: serverPort,
   }
 })

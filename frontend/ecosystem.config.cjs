@@ -3,7 +3,7 @@ module.exports = {
     name: 'frontend-https',
     cwd: './',
     script: 'npm',
-    args: 'run dev -- --https --cert /ssl/cert.pem --key /ssl/cert.key',
+    args: 'run dev -- --host 127.0.0.1 --https --cert /ssl/cert.pem --key /ssl/cert.key',
     instances: 1,
     autorestart: true,
     watch: false,

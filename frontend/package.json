@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "build:static": "vite build",
     "preview": "vite preview",
     "gen:maps": "node scripts/generate-map-manifest.mjs"
   },
